@@ -1,32 +1,78 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# ── Go ────────────────────────────────────────────────────────────────────────
+bin/
+dist/
 *.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
 *.test
-
-# Code coverage profiles and other test artifacts
 *.out
-coverage.*
-*.coverprofile
-profile.cov
+coverage.txt
+coverage.html
+/vendor/
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
-
-# Go workspace file
-go.work
+# go workspace sum — generated, not committed
 go.work.sum
 
-# env file
+# ── Environment ───────────────────────────────────────────────────────────────
 .env
+.env.*
+!.env.example
+*.local
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# ── Secrets ───────────────────────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+secrets/
+kave.yaml.local
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
+server/server
+cli/kave
+build/
+
+# ── Database / storage ────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+data/
+pgdata/
+clickhouse-data/
+
+# ── Node / Dashboard ──────────────────────────────────────────────────────────
+node_modules/
+dashboard/.nuxt/
+dashboard/.output/
+dashboard/dist/
+.pnpm-store/
+
+# ── Python SDK ────────────────────────────────────────────────────────────────
+sdk/python/__pycache__/
+sdk/python/*.egg-info/
+sdk/python/dist/
+sdk/python/.venv/
+sdk/python/venv/
+
+# ── TypeScript SDK ────────────────────────────────────────────────────────────
+sdk/typescript/node_modules/
+sdk/typescript/dist/
+
+# ── Docs ──────────────────────────────────────────────────────────────────────
+docs/.mintlify/
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Test / CI artifacts ───────────────────────────────────────────────────────
+testdata/generated/
+*.coverprofile
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+deploy/.env
+
+# ── Kave local dev ────────────────────────────────────────────────────────────
+.kave/
+kave-data/
