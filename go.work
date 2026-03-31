@@ -1,9 +1,9 @@
 go 1.26.1
 
 use (
-  ./core
-  ./connectors
-  ./server
-  ./sdk/go
-  ./cli
+	./cli
+	./connectors
+	./core
+	./sdk/go
+	./server
 )
