@@ -13,5 +13,5 @@ import (
 //
 // This is the single pipeline used by all connectors and the HTTP proxy.
 func NewPipeline(interceptors ...intercept.Interceptor) *intercept.Pipeline {
-	return intercept.NewPipeline().Chain(interceptors...)
+	return intercept.New(interceptors...)
 }

@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,94 +80,66 @@ func (p *Proxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse request body to extract input
-	var input map[string]interface{}
+	// Read body as raw bytes; stored as Action.Input and forwarded upstream
+	var body []byte
 	if r.Body != nil {
-		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &input)
+		body, _ = io.ReadAll(r.Body)
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 	}
 
-	// Create Action for the pipeline
 	action := &intercept.Action{
-		ID:        uuid.New().String(),
-		RunID:     agentID, // Use agent ID as run ID for now; proper runs created elsewhere
-		Type:      intercept.ActionTypeLLMCall,
-		Connector: connector,
-		Method:    method,
-		Input:     input,
-		Metadata: map[string]interface{}{
-			"http_method": r.Method,
-			"path":        path,
+		Unit: intercept.Unit{
+			ID:        uuid.New().String(),
+			RunID:     agentID,
+			Type:      intercept.TypeLLM,
+			Connector: connector,
+			Method:    method,
+			Input:     body,
 		},
+		Status: intercept.StatusPending,
 	}
 
-	// Execute pipeline with upstream as the handler
 	handler := func(ctx context.Context, action *intercept.Action) (*intercept.Result, error) {
-		// Forward to upstream
 		resp, err := p.upstream.Forward(r, connector, cred)
 		if err != nil {
-			return &intercept.Result{
-				ActionID: action.ID,
-				Error:    err,
-			}, nil
+			return nil, err
 		}
 		defer resp.Body.Close()
 
-		// Read response body
 		respBody, _ := io.ReadAll(resp.Body)
 
-		// Extract token usage
 		tokenData := ExtractTokenUsage(respBody, connector)
-
-		var tokens *intercept.TokenUsage
-		if tokenData != nil && len(tokenData) > 0 {
-			tokens = &intercept.TokenUsage{}
+		var tokenUsage *intercept.TokenUsage
+		if len(tokenData) > 0 {
+			tokenUsage = &intercept.TokenUsage{}
 			if v, ok := tokenData["InputTokens"]; ok {
-				tokens.InputTokens = v.(int)
+				tokenUsage.InputTokens = v.(int)
 			}
 			if v, ok := tokenData["OutputTokens"]; ok {
-				tokens.OutputTokens = v.(int)
+				tokenUsage.OutputTokens = v.(int)
 			}
 			if v, ok := tokenData["CacheRead"]; ok {
-				tokens.CacheRead = v.(int)
+				tokenUsage.CacheRead = v.(int)
 			}
 			if v, ok := tokenData["CacheWrite"]; ok {
-				tokens.CacheWrite = v.(int)
+				tokenUsage.CacheWrite = v.(int)
 			}
 			if v, ok := tokenData["Model"]; ok {
-				tokens.Model = v.(string)
+				tokenUsage.Model = v.(string)
 			}
 		}
 
-		output := map[string]interface{}{
-			"status_code": resp.StatusCode,
-		}
-		json.Unmarshal(respBody, &output)
-
-		return &intercept.Result{
-			ActionID: action.ID,
-			Output:   output,
-			Tokens:   tokens,
-		}, nil
+		return &intercept.Result{Body: respBody, TokenUsage: tokenUsage}, nil
 	}
 
 	result, err := p.pipeline.Execute(ctx, action, handler)
-
-	// Write response back to client
 	if err != nil {
 		http.Error(w, fmt.Sprintf("pipeline error: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	if result.Error != nil {
-		http.Error(w, result.Error.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Return the output as JSON (same as upstream)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result.Output)
+	w.Write(result.Body)
 }
 
 // CredentialManager handles encrypted credential storage and retrieval.

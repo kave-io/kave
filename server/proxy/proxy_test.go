@@ -13,9 +13,27 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kave-io/kave/core/intercept"
+	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/cost"
 	"github.com/kave-io/kave/server/trace"
 )
+
+// mockSpanStore is a no-op SpanStore for tests.
+type mockSpanStore struct{}
+
+func (m *mockSpanStore) WriteSpan(_ context.Context, _ *store.SpanRow) error  { return nil }
+func (m *mockSpanStore) UpdateSpan(_ context.Context, _ *store.SpanRow) error { return nil }
+func (m *mockSpanStore) GetSpan(_ context.Context, _ string) (*store.SpanRow, error) {
+	return nil, nil
+}
+func (m *mockSpanStore) QuerySpans(_ context.Context, _ *store.SpanFilter) ([]*store.SpanRow, error) {
+	return nil, nil
+}
+func (m *mockSpanStore) SpendByDimension(_ context.Context, _ string, _ *store.SpanFilter) (map[string]float64, error) {
+	return nil, nil
+}
+func (m *mockSpanStore) Migrate(_ context.Context) error { return nil }
+func (m *mockSpanStore) Close() error                    { return nil }
 
 // TestProxyWithUpstream tests the proxy with a mock upstream server.
 func TestProxyWithUpstream(t *testing.T) {
@@ -81,9 +99,9 @@ func TestProxyWithUpstream(t *testing.T) {
 	}
 
 	// Create pipeline with mock implementations
-	tracer := trace.New(pool)
+	tracer := trace.New(&mockSpanStore{})
 	meter := cost.New(pool)
-	pipeline := intercept.NewPipeline().Chain(tracer, meter)
+	pipeline := intercept.New(tracer, meter)
 
 	// Create proxy
 	proxy := New(pool, pipeline)

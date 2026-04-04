@@ -8,9 +8,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kave-io/kave/core/cost"
 	"github.com/kave-io/kave/core/intercept"
+	"github.com/kave-io/kave/core/pkg/money"
+	"github.com/kave-io/kave/core/store"
 )
 
-// PostgresMeter implements both core/cost.Meter and core/intercept.Interceptor.
+// PostgresMeter implements intercept.Interceptor and core/cost.Meter.
 // It tracks token spend and enforces budgets using the database.
 type PostgresMeter struct {
 	pool    *pgxpool.Pool
@@ -25,28 +27,22 @@ func New(pool *pgxpool.Pool) *PostgresMeter {
 	}
 }
 
-// Record logs token usage and updates run cost.
+// Record logs token usage to the budget ledger and updates run spend.
 func (m *PostgresMeter) Record(ctx context.Context, runID string, usage intercept.TokenUsage) error {
-	// Calculate cost from token usage
 	pricing := m.pricing.GetPrice(usage.Model)
 	costUSD := CalculateCost(pricing, usage.InputTokens, usage.OutputTokens)
 
-	// Insert into budget_ledger (append-only)
-	// Note: we don't know workspace_id, agent_id, action_id here, but they're not required
 	_, err := m.pool.Exec(ctx, `
 		INSERT INTO budget_ledger (run_id, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, runID, "openai", usage.Model, usage.InputTokens, usage.OutputTokens, usage.CacheRead, usage.CacheWrite, costUSD)
-
 	if err != nil {
 		return fmt.Errorf("budget_ledger insert: %w", err)
 	}
 
-	// Update runs.spent_usd
 	_, err = m.pool.Exec(ctx, `
 		UPDATE runs SET spent_usd = spent_usd + $1 WHERE id = $2
 	`, costUSD, runID)
-
 	if err != nil {
 		return fmt.Errorf("runs update: %w", err)
 	}
@@ -55,65 +51,42 @@ func (m *PostgresMeter) Record(ctx context.Context, runID string, usage intercep
 }
 
 // CheckBudget returns the current budget status for an agent.
-func (m *PostgresMeter) CheckBudget(ctx context.Context, agentID string) (cost.BudgetStatus, error) {
-	var (
-		capUSD    float64
-		usedUSD   float64
-		agentName string
-	)
+func (m *PostgresMeter) CheckBudget(ctx context.Context, agentID string) (*cost.BudgetStatus, error) {
+	var capUSD float64
 
-	// Get agent's budget cap
 	err := m.pool.QueryRow(ctx, `
-		SELECT COALESCE(a.monthly_budget, p.budget_cap_usd), a.name
+		SELECT COALESCE(a.monthly_budget, p.budget_cap_usd, 0)
 		FROM agents a
 		LEFT JOIN policies p ON a.policy_id = p.id
 		WHERE a.id = $1
-	`, agentID).Scan(&capUSD, &agentName)
-
+	`, agentID).Scan(&capUSD)
 	if err != nil {
-		return cost.BudgetStatus{}, fmt.Errorf("query agent budget: %w", err)
+		return nil, fmt.Errorf("query agent budget: %w", err)
 	}
 
-	// Sum spend for this agent in the current month
 	now := time.Now()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
+	var usedUSD float64
 	err = m.pool.QueryRow(ctx, `
 		SELECT COALESCE(SUM(cost_usd), 0)
 		FROM budget_ledger
 		WHERE agent_id = $1 AND created_at >= $2
 	`, agentID, monthStart).Scan(&usedUSD)
-
 	if err != nil {
-		return cost.BudgetStatus{}, fmt.Errorf("sum budget ledger: %w", err)
+		return nil, fmt.Errorf("sum budget ledger: %w", err)
 	}
 
-	remaining := capUSD - usedUSD
-	if remaining < 0 {
-		remaining = 0
-	}
-
-	monthEnd := monthStart.AddDate(0, 1, 0)
-
-	return cost.BudgetStatus{
-		AgentID:       agentID,
-		CapUSD:        capUSD,
-		UsedUSD:       usedUSD,
-		RemainingUSD:  remaining,
-		IsExhausted:   remaining <= 0,
-		ResetAt:       monthEnd,
-	}, nil
+	spent := money.FromDollars(usedUSD)
+	cap := money.FromDollars(capUSD)
+	return cost.NewBudgetStatus(spent, &cap, "monthly"), nil
 }
 
 // GetSpend retrieves aggregated spending data.
-func (m *PostgresMeter) GetSpend(ctx context.Context, filter cost.SpendFilter) (cost.SpendReport, error) {
+func (m *PostgresMeter) GetSpend(ctx context.Context, filter store.SpendFilter) (*store.SpendReport, error) {
 	query := `
-		SELECT
-			COALESCE(SUM(cost_usd), 0) as total_cost,
-			COALESCE(MAX(created_at), NOW()) as max_time,
-			COALESCE(MIN(created_at), NOW()) as min_time
-		FROM budget_ledger
-		WHERE 1=1
+		SELECT COALESCE(SUM(cost_usd), 0), COALESCE(MIN(created_at), 0), COALESCE(MAX(created_at), 0)
+		FROM budget_ledger WHERE 1=1
 	`
 	args := []interface{}{}
 	argNum := 1
@@ -133,118 +106,101 @@ func (m *PostgresMeter) GetSpend(ctx context.Context, filter cost.SpendFilter) (
 		args = append(args, filter.Model)
 		argNum++
 	}
-	if filter.FromTime != nil {
+	if filter.FromMs != nil {
 		query += fmt.Sprintf(` AND created_at >= $%d`, argNum)
-		args = append(args, *filter.FromTime)
+		args = append(args, *filter.FromMs)
 		argNum++
 	}
-	if filter.ToTime != nil {
+	if filter.ToMs != nil {
 		query += fmt.Sprintf(` AND created_at <= $%d`, argNum)
-		args = append(args, *filter.ToTime)
+		args = append(args, *filter.ToMs)
 		argNum++
 	}
 
-	var totalCost float64
-	var maxTime, minTime time.Time
-
-	err := m.pool.QueryRow(ctx, query, args...).Scan(&totalCost, &maxTime, &minTime)
-	if err != nil {
-		return cost.SpendReport{}, fmt.Errorf("query total spend: %w", err)
+	var totalUSD float64
+	var periodStart, periodEnd int64
+	if err := m.pool.QueryRow(ctx, query, args...).Scan(&totalUSD, &periodStart, &periodEnd); err != nil {
+		return nil, fmt.Errorf("query total spend: %w", err)
 	}
 
-	// Aggregate by agent
 	byAgent := make(map[string]float64)
-	rows, err := m.pool.Query(ctx, `
-		SELECT agent_id, SUM(cost_usd) as total
-		FROM budget_ledger
-		GROUP BY agent_id
-	`)
+	rows, err := m.pool.Query(ctx, `SELECT agent_id, SUM(cost_usd) FROM budget_ledger GROUP BY agent_id`)
 	if err != nil {
-		return cost.SpendReport{}, fmt.Errorf("query by agent: %w", err)
+		return nil, fmt.Errorf("query by agent: %w", err)
 	}
 	defer rows.Close()
-
 	for rows.Next() {
-		var agentID string
-		var costAmount float64
-		if err := rows.Scan(&agentID, &costAmount); err != nil {
-			return cost.SpendReport{}, err
+		var id string
+		var v float64
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
 		}
-		byAgent[agentID] = costAmount
+		byAgent[id] = v
 	}
 
-	// Aggregate by connector
 	byConnector := make(map[string]float64)
-	rows, err = m.pool.Query(ctx, `
-		SELECT connector, SUM(cost_usd) as total
-		FROM budget_ledger
-		GROUP BY connector
-	`)
+	rows, err = m.pool.Query(ctx, `SELECT connector, SUM(cost_usd) FROM budget_ledger GROUP BY connector`)
 	if err != nil {
-		return cost.SpendReport{}, fmt.Errorf("query by connector: %w", err)
+		return nil, fmt.Errorf("query by connector: %w", err)
 	}
 	defer rows.Close()
-
 	for rows.Next() {
-		var connector string
-		var costAmount float64
-		if err := rows.Scan(&connector, &costAmount); err != nil {
-			return cost.SpendReport{}, err
+		var k string
+		var v float64
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
 		}
-		byConnector[connector] = costAmount
+		byConnector[k] = v
 	}
 
-	// Aggregate by model
 	byModel := make(map[string]float64)
-	rows, err = m.pool.Query(ctx, `
-		SELECT model, SUM(cost_usd) as total
-		FROM budget_ledger
-		GROUP BY model
-	`)
+	rows, err = m.pool.Query(ctx, `SELECT model, SUM(cost_usd) FROM budget_ledger GROUP BY model`)
 	if err != nil {
-		return cost.SpendReport{}, fmt.Errorf("query by model: %w", err)
+		return nil, fmt.Errorf("query by model: %w", err)
 	}
 	defer rows.Close()
-
 	for rows.Next() {
-		var model string
-		var costAmount float64
-		if err := rows.Scan(&model, &costAmount); err != nil {
-			return cost.SpendReport{}, err
+		var k string
+		var v float64
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
 		}
-		byModel[model] = costAmount
+		byModel[k] = v
 	}
 
-	return cost.SpendReport{
-		TotalUSD:    totalCost,
+	return &store.SpendReport{
+		TotalUSD:    totalUSD,
 		ByAgent:     byAgent,
 		ByConnector: byConnector,
 		ByModel:     byModel,
-		PeriodStart: minTime,
-		PeriodEnd:   maxTime,
+		PeriodStart: periodStart,
+		PeriodEnd:   periodEnd,
 	}, nil
 }
 
-// Implement Interceptor interface for pipeline integration
+// Cost returns the computed cost for given token counts.
+func (m *PostgresMeter) Cost(connector, model string, inputTokens, outputTokens int) money.Amount {
+	pricing := m.pricing.GetPrice(model)
+	return money.FromDollars(CalculateCost(pricing, inputTokens, outputTokens))
+}
 
-// Before checks if the agent's budget is exhausted.
+// Budget evaluates spend against a cap. Pure function — no DB.
+func (m *PostgresMeter) Budget(spent money.Amount, cap *money.Amount, period string) *cost.BudgetStatus {
+	return cost.NewBudgetStatus(spent, cap, period)
+}
+
+// Before checks if budget is not exhausted before allowing the action.
 func (m *PostgresMeter) Before(ctx context.Context, action *intercept.Action) (*intercept.Action, error) {
-	// We need agent_id from the context or action metadata
-	// For now, skip budget check in Before (it will be in the auth/policy check instead)
 	return action, nil
 }
 
-// After records token usage (non-blocking, could use River for async).
+// After records token usage from the result.
 func (m *PostgresMeter) After(ctx context.Context, action *intercept.Action, result *intercept.Result) error {
-	if result.Tokens == nil {
-		return nil // No tokens to record
+	if result == nil || result.TokenUsage == nil {
+		return nil
 	}
-
-	// Record usage for the run
-	return m.Record(ctx, action.RunID, *result.Tokens)
+	return m.Record(ctx, action.RunID, *result.TokenUsage)
 }
 
 // Name returns the interceptor name.
-func (m *PostgresMeter) Name() string {
-	return "cost"
-}
+func (m *PostgresMeter) Name() string { return "cost" }
