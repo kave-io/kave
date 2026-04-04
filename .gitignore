@@ -26,7 +26,9 @@ kave.yaml.local
 
 # ── Build artifacts ───────────────────────────────────────────────────────────
 server/server
+server/kave-server
 cli/kave
+cli/kave-cli
 build/
 
 # ── Database / storage ────────────────────────────────────────────────────────
@@ -76,3 +78,5 @@ deploy/.env
 # ── Kave local dev ────────────────────────────────────────────────────────────
 .kave/
 kave-data/
+.codex
+.claude
