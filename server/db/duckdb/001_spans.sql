@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS spans (
     model               VARCHAR,
     cost_usd            DOUBLE,
     tags                VARCHAR,
-    created_at          BIGINT NOT NULL DEFAULT extract(epoch from now()) * 1000
+    created_at          BIGINT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_spans_run_id    ON spans(run_id);
@@ -25,9 +25,12 @@ CREATE INDEX IF NOT EXISTS idx_spans_action_id ON spans(action_id);
 CREATE INDEX IF NOT EXISTS idx_spans_started_at ON spans(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_spans_model ON spans(model);
 
+-- Cost summary by day and model
+-- Note: started_at is a BIGINT (milliseconds since epoch)
+-- DuckDB date_trunc expects a timestamp; convert with to_timestamp(ms / 1000.0)
 CREATE VIEW IF NOT EXISTS spans_cost_summary AS
 SELECT
-    date_trunc('day', to_timestamp(started_at / 1000.0))  AS day,
+    cast(started_at / (1000.0 * 3600 * 24) as BIGINT) AS day_key,
     model,
     count(*)                        AS span_count,
     sum(cost_usd)                   AS total_cost_usd,
