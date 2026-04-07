@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -53,29 +54,45 @@ func (u *UpstreamClient) Forward(ctx context.Context, orig *http.Request, connec
 		return nil, fmt.Errorf("build upstream request: %w", err)
 	}
 
-	// Copy safe headers, skip hop-by-hop and Kave's own Authorization
+	// Copy safe headers. Skip hop-by-hop, auth (replaced below), and
+	// Accept-Encoding so Go's transport handles compression transparently
+	// (otherwise it forwards gzip but doesn't decompress, giving us binary).
 	for key, vals := range orig.Header {
 		switch key {
-		case "Authorization", "X-Api-Key", "Connection", "Transfer-Encoding":
-			// replaced below
+		case "Authorization", "X-Api-Key", "Connection", "Transfer-Encoding", "Accept-Encoding":
+			// handled separately or stripped intentionally
 		default:
 			req.Header[key] = vals
 		}
 	}
 
-	// Inject the real API key in the provider's expected format
-	switch connector {
-	case "anthropic":
-		req.Header.Set("X-API-Key", apiKey)
+	// Inject API key. If no stored credential, pass through the client's own
+	// auth headers so users can keep their own keys without storing them in Kave.
+	if apiKey != "" {
+		switch connector {
+		case "anthropic":
+			req.Header.Set("X-API-Key", apiKey)
+		case "gemini":
+			q := req.URL.Query()
+			q.Set("key", apiKey)
+			req.URL.RawQuery = q.Encode()
+		default:
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+	} else {
+		// Passthrough: restore the client's original auth headers
+		if v := orig.Header.Get("X-Api-Key"); v != "" {
+			req.Header.Set("X-API-Key", v)
+		} else if v := orig.Header.Get("Authorization"); v != "" {
+			// Strip "Bearer <agent-id>" — pass the real key the client sent
+			// Only passthrough if it looks like a real API key (not our agent ID)
+			req.Header.Set("Authorization", v)
+		}
+	}
+
+	// Anthropic always needs this version header
+	if connector == "anthropic" {
 		req.Header.Set("Anthropic-Version", "2023-06-01")
-	case "gemini":
-		// Gemini uses ?key= query param
-		q := req.URL.Query()
-		q.Set("key", apiKey)
-		req.URL.RawQuery = q.Encode()
-	default:
-		// OpenAI-compatible: Bearer token
-		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
 	return u.client.Do(req)
@@ -116,6 +133,77 @@ func (u *UpstreamClient) StreamForward(ctx context.Context, orig *http.Request, 
 		}
 	}
 	return nil
+}
+
+// ExtractStreamingTokenUsage scans SSE event lines for token usage data.
+// Anthropic: message_start has input tokens, message_delta has output tokens.
+// OpenAI: final data chunk may include usage object.
+func ExtractStreamingTokenUsage(body []byte, connector string) map[string]any {
+	usage := map[string]any{}
+
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "[DONE]" || data == "" {
+			continue
+		}
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(data), &obj); err != nil {
+			continue
+		}
+
+		switch connector {
+		case "anthropic":
+			// message_start: input tokens
+			if obj["type"] == "message_start" {
+				if msg, ok := obj["message"].(map[string]any); ok {
+					if u, ok := msg["usage"].(map[string]any); ok {
+						if v, ok := u["input_tokens"].(float64); ok {
+							usage["InputTokens"] = int(v)
+						}
+						if v, ok := u["cache_read_input_tokens"].(float64); ok {
+							usage["CacheRead"] = int(v)
+						}
+						if v, ok := u["cache_creation_input_tokens"].(float64); ok {
+							usage["CacheWrite"] = int(v)
+						}
+					}
+					if m, ok := msg["model"].(string); ok {
+						usage["Model"] = m
+					}
+				}
+			}
+			// message_delta: output tokens
+			if obj["type"] == "message_delta" {
+				if u, ok := obj["usage"].(map[string]any); ok {
+					if v, ok := u["output_tokens"].(float64); ok {
+						usage["OutputTokens"] = int(v)
+					}
+				}
+			}
+
+		default: // OpenAI-compatible streaming
+			if u, ok := obj["usage"].(map[string]any); ok {
+				if v, ok := u["prompt_tokens"].(float64); ok {
+					usage["InputTokens"] = int(v)
+				}
+				if v, ok := u["completion_tokens"].(float64); ok {
+					usage["OutputTokens"] = int(v)
+				}
+			}
+			if m, ok := obj["model"].(string); ok && usage["Model"] == nil {
+				usage["Model"] = m
+			}
+		}
+	}
+
+	if len(usage) == 0 {
+		return nil
+	}
+	return usage
 }
 
 // ExtractTokenUsage parses token usage from a non-streaming response body.
