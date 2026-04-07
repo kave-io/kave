@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
+import LiveStatusBadge from '../components/LiveStatusBadge.vue'
 import StatCard from '../components/dashboard/StatCard.vue'
 import AlertsPanel from '../components/dashboard/AlertsPanel.vue'
 import ConnectorList from '../components/dashboard/ConnectorList.vue'
@@ -56,17 +57,7 @@ const alerts = computed(() => {
 <template>
   <div class="space-y-6 p-4 lg:p-6">
     <PageHeader :title="t('pages.overview.title')" :subtitle="t('pages.overview.subtitle')" show-kave-logo>
-      <span v-if="isLive" class="flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-500">
-        <span class="relative flex h-1.5 w-1.5">
-          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-          <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-        </span>
-        {{ t('pages.overview.live_indicator') }}
-      </span>
-      <span v-else class="flex items-center gap-1.5 rounded-full bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted">
-        <span class="h-1.5 w-1.5 rounded-full bg-muted" />
-        {{ t('pages.overview.offline_indicator') }}
-      </span>
+      <LiveStatusBadge :is-live="isLive" />
     </PageHeader>
 
     <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -89,17 +80,7 @@ const alerts = computed(() => {
               <h3 class="text-base font-semibold">{{ t('pages.overview.live_activity') }}</h3>
               <p class="text-sm text-muted">{{ t('pages.overview.live_activity_hint') }}</p>
             </div>
-            <span v-if="isLive" class="flex items-center gap-1.5 text-xs font-medium text-green-500">
-              <span class="relative flex h-1.5 w-1.5">
-                <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-              </span>
-              {{ t('pages.overview.live_indicator') }}
-            </span>
-            <span v-else class="flex items-center gap-1.5 text-xs font-medium text-muted">
-              <span class="h-1.5 w-1.5 rounded-full bg-muted" />
-              {{ t('pages.overview.offline_indicator') }}
-            </span>
+            <LiveStatusBadge :is-live="isLive" />
           </div>
         </template>
 

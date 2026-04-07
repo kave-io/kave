@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
+import RunStatusBadge from '../components/RunStatusBadge.vue'
+import DetailRow from '../components/DetailRow.vue'
 import type { Run } from '@/types/api'
 import { useRuns, useRunSpans } from '@/lib/queries'
 import { workspaceId } from '@/stores/workspace'
@@ -82,13 +84,7 @@ const { data: runSpans } = useRunSpans(computed(() => selectedRun.value?.run_id 
           >
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2.5 mb-1">
-                <UBadge
-                  :color="run.status === 'failed' ? 'error' : run.status === 'completed' ? 'success' : 'info'"
-                  variant="soft"
-                  size="xs"
-                >
-                  {{ run.status }}
-                </UBadge>
+                <RunStatusBadge :status="run.status" />
                 <span class="text-sm font-mono">{{ run.id }}</span>
                 <span class="text-xs text-muted">{{ run.agent_id }}</span>
               </div>
@@ -109,13 +105,7 @@ const { data: runSpans } = useRunSpans(computed(() => selectedRun.value?.run_id 
         <div class="space-y-1">
           <div class="flex items-center gap-2">
             <h2 class="text-base font-semibold">Run</h2>
-            <UBadge
-              :color="selectedRun.status === 'failed' ? 'error' : selectedRun.status === 'completed' ? 'success' : 'info'"
-              variant="soft"
-              size="xs"
-            >
-              {{ selectedRun.status }}
-            </UBadge>
+            <RunStatusBadge :status="selectedRun.status" />
           </div>
           <p class="text-xs text-muted font-mono">{{ selectedRun.run_id }}</p>
         </div>
@@ -125,17 +115,10 @@ const { data: runSpans } = useRunSpans(computed(() => selectedRun.value?.run_id 
         <section class="space-y-3">
           <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Execution</h3>
           <div class="grid grid-cols-2 gap-3">
-            <div class="border border-default/60 rounded-lg px-3 py-2.5">
-              <p class="text-xs text-muted">Agent</p>
-              <p class="text-sm font-mono mt-1 truncate">{{ selectedRun.agent_full_id }}</p>
-            </div>
-            <div class="border border-default/60 rounded-lg px-3 py-2.5">
-              <p class="text-xs text-muted">Duration</p>
-              <p class="text-sm font-semibold mt-1">{{ selectedRun.duration }}</p>
-            </div>
-            <div class="border border-default/60 rounded-lg px-3 py-2.5 col-span-2">
-              <p class="text-xs text-muted">Started</p>
-              <p class="text-xs text-muted mt-1">{{ selectedRun.started }}</p>
+            <DetailRow label="Agent" :value="selectedRun.agent_full_id" mono />
+            <DetailRow label="Duration" :value="selectedRun.duration" />
+            <div class="col-span-2">
+              <DetailRow label="Started" :value="selectedRun.started" />
             </div>
           </div>
         </section>
@@ -144,14 +127,8 @@ const { data: runSpans } = useRunSpans(computed(() => selectedRun.value?.run_id 
         <section class="space-y-3 border-t border-default pt-4">
           <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Cost</h3>
           <div class="grid grid-cols-2 gap-3">
-            <div class="border border-default/60 rounded-lg px-3 py-2.5">
-              <p class="text-xs text-muted">Total Spend</p>
-              <p class="text-lg font-semibold tabular-nums mt-1">{{ selectedRun.cost }}</p>
-            </div>
-            <div class="border border-default/60 rounded-lg px-3 py-2.5">
-              <p class="text-xs text-muted">Budget Cap</p>
-              <p class="text-sm font-semibold mt-1">${{ selectedRun.budget.toFixed(2) }}</p>
-            </div>
+            <DetailRow label="Total Spend" :value="selectedRun.cost" large />
+            <DetailRow label="Budget Cap" :value="`$${selectedRun.budget.toFixed(2)}`" />
           </div>
         </section>
 

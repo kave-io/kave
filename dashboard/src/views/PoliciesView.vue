@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
+import DetailRow from '../components/DetailRow.vue'
 import type { Policy } from '@/types/api'
 import { useAgents, usePolicy } from '@/lib/queries'
 import { workspaceId } from '@/stores/workspace'
@@ -82,10 +83,12 @@ const policiesWithUsage = computed(() => {
         <section v-if="selectedPolicy" class="space-y-3">
           <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Restrictions</h3>
           <div class="space-y-3">
-            <div v-if="selectedPolicy.budget_cap_usd" class="border border-default/60 rounded-lg px-3 py-2.5">
-              <p class="text-xs text-muted">Budget Cap</p>
-              <p class="text-lg font-semibold tabular-nums mt-1">${{ selectedPolicy.budget_cap_usd.toFixed(2) }}</p>
-            </div>
+            <DetailRow
+              v-if="selectedPolicy.budget_cap_usd"
+              label="Budget Cap"
+              :value="`$${selectedPolicy.budget_cap_usd.toFixed(2)}`"
+              large
+            />
             <div v-if="selectedPolicy.allowed_connectors?.length" class="border border-default/60 rounded-lg px-3 py-2.5">
               <p class="text-xs text-muted mb-2">Allowed Connectors</p>
               <div class="flex flex-wrap gap-1.5">

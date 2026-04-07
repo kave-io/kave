@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import LocaleSelector from '../components/LocaleSelector.vue'
@@ -8,7 +7,6 @@ import CurrencySelector from '../components/CurrencySelector.vue'
 import { RTL_CODES } from '@/stores/locale'
 
 const { locale, t } = useI18n()
-const route = useRoute()
 const open = ref(true)
 
 const isRtl = computed(() => RTL_CODES.includes(locale.value))
@@ -166,7 +164,7 @@ const externalLinks = [
       class="flex-1 flex flex-col overflow-hidden peer-data-[variant=inset]:m-4 lg:peer-data-[variant=inset]:not-peer-data-[collapsible=offcanvas]:ms-0 peer-data-[variant=inset]:rounded-xl peer-data-[variant=inset]:shadow-sm peer-data-[variant=inset]:ring peer-data-[variant=inset]:ring-default bg-default"
     >
       <header
-        class="h-(--ui-header-height) shrink-0 flex items-center justify-between border-b border-default px-4 lg:px-6"
+        class="h-(--ui-header-height) shrink-0 flex items-center border-b border-default px-4 lg:px-6"
       >
         <UButton
           :icon="toggleIcon"
@@ -175,10 +173,6 @@ const externalLinks = [
           aria-label="Toggle sidebar"
           @click="open = !open"
         />
-        <div class="flex items-center gap-2">
-          <UInput icon="i-lucide-search" placeholder="Search..." class="w-64" />
-          <UButton icon="i-lucide-plus">New agent</UButton>
-        </div>
       </header>
 
       <div class="flex-1 overflow-auto scrollbar-hide">

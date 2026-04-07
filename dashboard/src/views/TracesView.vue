@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
 import type { Span } from '@/types/api'
+import { useSpans } from '@/lib/queries'
+import { useSpanStream } from '@/composables/useSpanStream'
 
 const { t } = useI18n()
 
@@ -14,8 +16,6 @@ function formatTokens(s: Span): string {
   const cacheHit = (s.cache_read_tokens ?? 0) > 0
   return `${totalIn}${cacheHit ? t('pages.traces.cache_hit') : ''}→${s.output_tokens ?? 0}`
 }
-import { useSpans } from '@/lib/queries'
-import { useSpanStream } from '@/composables/useSpanStream'
 
 const limit = ref(50)
 
@@ -76,14 +76,7 @@ const columns = computed(() => [
 
     <UCard class="rounded-xl">
       <template #header>
-        <div class="flex items-center justify-between gap-3">
-          <UInput
-            v-model="limit"
-            type="hidden"
-            class="hidden"
-          />
-          <p class="text-xs text-muted">{{ rows.length }} {{ t('pages.traces.count_loaded') }}</p>
-        </div>
+        <p class="text-xs text-muted">{{ rows.length }} {{ t('pages.traces.count_loaded') }}</p>
       </template>
 
       <div v-if="isLoading && rows.length === 0" class="grid h-32 place-items-center">

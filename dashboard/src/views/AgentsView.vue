@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
+import RunStatusBadge from '../components/RunStatusBadge.vue'
+import DetailRow from '../components/DetailRow.vue'
 import type { Agent } from '@/types/api'
 import { useAgents, useRuns } from '@/lib/queries'
 import { workspaceId } from '@/stores/workspace'
@@ -97,14 +99,17 @@ const recentActivity = computed(() => {
         <section class="space-y-3">
           <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Policy & Budget</h3>
           <div class="space-y-3">
-            <div class="border border-default/60 rounded-lg px-3 py-2.5">
-              <p class="text-xs text-muted">Policy ID</p>
-              <p class="text-sm font-mono mt-1">{{ selectedAgent.policy_id || '—' }}</p>
-            </div>
-            <div v-if="selectedAgent.monthly_budget" class="border border-default/60 rounded-lg px-3 py-2.5">
-              <p class="text-xs text-muted">Monthly Budget</p>
-              <p class="text-lg font-semibold tabular-nums mt-1">${{ selectedAgent.monthly_budget.toFixed(2) }}</p>
-            </div>
+            <DetailRow
+              label="Policy ID"
+              :value="selectedAgent.policy_id || '—'"
+              mono
+            />
+            <DetailRow
+              v-if="selectedAgent.monthly_budget"
+              label="Monthly Budget"
+              :value="`$${selectedAgent.monthly_budget.toFixed(2)}`"
+              large
+            />
           </div>
         </section>
 
@@ -118,13 +123,7 @@ const recentActivity = computed(() => {
               class="flex items-center justify-between text-xs py-2 px-2.5 rounded hover:bg-muted/30 transition"
             >
               <div class="flex items-center gap-2 min-w-0">
-                <UBadge
-                  :color="run.status === 'failed' ? 'error' : run.status === 'completed' ? 'success' : 'info'"
-                  variant="soft"
-                  size="xs"
-                >
-                  {{ run.status }}
-                </UBadge>
+                <RunStatusBadge :status="run.status" />
                 <span class="text-muted truncate">{{ run.time }}</span>
               </div>
               <span class="font-mono font-semibold tabular-nums shrink-0">{{ run.cost }}</span>

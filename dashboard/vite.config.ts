@@ -27,6 +27,15 @@ export default defineConfig({
   build: {
     outDir: '../server/ui/dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router', '@vueuse/core'],
+          'vendor-query': ['@tanstack/vue-query'],
+          'vendor-i18n': ['vue-i18n'],
+        },
+      },
+    },
   },
   server: {
     port: 5173,
