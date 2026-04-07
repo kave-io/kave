@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
+	Security SecurityConfig `mapstructure:"security"`
 	Postgres PostgresConfig `mapstructure:"postgres"`
 	Storage  StorageConfig  `mapstructure:"storage"`
 	Ollama   OllamaConfig   `mapstructure:"ollama"`
@@ -15,6 +16,16 @@ type Config struct {
 	Prompt   PromptConfig   `mapstructure:"prompt"`
 	Email    EmailConfig    `mapstructure:"email"`
 	Pools    PoolsConfig    `mapstructure:"pools"`
+}
+
+// ── Security ──────────────────────────────────────────────────────────────────
+
+// SecurityConfig holds encryption keys and security settings.
+type SecurityConfig struct {
+	// EncryptionKey is a 64-char hex string (32 bytes) used for AES-256-GCM
+	// encryption of stored credentials. Set via KAVE_SECURITY_ENCRYPTION_KEY
+	// env var. If empty, credentials are stored/retrieved as plaintext (dev only).
+	EncryptionKey string `mapstructure:"encryption_key"`
 }
 
 // ── Server ────────────────────────────────────────────────────────────────────
@@ -80,10 +91,10 @@ type DBLoggingConfig struct {
 // ── Storage ────────────────────────────────────────────────────────────────────
 
 type StorageConfig struct {
-	Backend     string `mapstructure:"backend"`       // "sqlite" | "postgres" (default: sqlite)
-	SQLitePath  string `mapstructure:"sqlite_path"`   // path to SQLite DB file (default: kave.db)
-	SpanBackend string `mapstructure:"span_backend"`  // "duckdb" | "postgres" (default: duckdb)
-	DuckDBPath  string `mapstructure:"duckdb_path"`   // path to DuckDB file (default: kave-spans.duckdb)
+	Backend     string `mapstructure:"backend"`      // "sqlite" | "postgres" (default: sqlite)
+	SQLitePath  string `mapstructure:"sqlite_path"`  // path to SQLite DB file (default: kave.db)
+	SpanBackend string `mapstructure:"span_backend"` // "duckdb" | "postgres" (default: duckdb)
+	DuckDBPath  string `mapstructure:"duckdb_path"`  // path to DuckDB file (default: kave-spans.duckdb)
 }
 
 // ── Ollama ────────────────────────────────────────────────────────────────────
@@ -240,12 +251,12 @@ type SMTPConfig struct {
 // TaskPoolConfig defines fine-grained behavior for a single pond pool.
 // Each pool can have different concurrency, queue sizing, blocking behavior, etc.
 type TaskPoolConfig struct {
-	MaxConcurrency  int    `mapstructure:"max_concurrency"`   // Number of concurrent workers
-	QueueSize       int    `mapstructure:"queue_size"`        // 0=no queue, -1=unbounded, >0=bounded
-	NonBlocking     bool   `mapstructure:"non_blocking"`      // true=reject if queue full; false=block
-	PanicRecovery   bool   `mapstructure:"panic_recovery"`    // true=recover from panics (default)
-	ResultMode      string `mapstructure:"result_mode"`       // "fire-and-forget" or "result-returning"
-	Description     string `mapstructure:"description"`       // Human-readable pool purpose
+	MaxConcurrency int    `mapstructure:"max_concurrency"` // Number of concurrent workers
+	QueueSize      int    `mapstructure:"queue_size"`      // 0=no queue, -1=unbounded, >0=bounded
+	NonBlocking    bool   `mapstructure:"non_blocking"`    // true=reject if queue full; false=block
+	PanicRecovery  bool   `mapstructure:"panic_recovery"`  // true=recover from panics (default)
+	ResultMode     string `mapstructure:"result_mode"`     // "fire-and-forget" or "result-returning"
+	Description    string `mapstructure:"description"`     // Human-readable pool purpose
 }
 
 // PoolsConfig groups all pond pool configurations.

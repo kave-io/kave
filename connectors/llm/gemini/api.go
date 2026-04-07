@@ -3,9 +3,9 @@ package gemini
 // ── Generate ──────────────────────────────────────────────────────────────────
 
 type GenerateRequest struct {
-	Contents         []Content         `json:"contents"`
-	SystemInstruction *Content         `json:"systemInstruction,omitempty"`
-	GenerationConfig *GenerationConfig `json:"generationConfig,omitempty"`
+	Contents          []Content         `json:"contents"`
+	SystemInstruction *Content          `json:"systemInstruction,omitempty"`
+	GenerationConfig  *GenerationConfig `json:"generationConfig,omitempty"`
 }
 
 type Content struct {

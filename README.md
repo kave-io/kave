@@ -95,6 +95,10 @@ kave/
 └── deploy/        # docker-compose · helm · fly.io
 ```
 
+## Draft concepts
+
+- [Counterfactual Runs (shadow execute, replay, and drift branching)](IDEAS.md)
+
 ## Self-hosting
 
 ```bash

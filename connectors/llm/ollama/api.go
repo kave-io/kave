@@ -21,8 +21,8 @@ type GenerateRequest struct {
 	KeepAlive   any           `json:"keep_alive,omitempty"` // Duration string (e.g., "5m") or seconds int
 	Images      []string      `json:"images,omitempty"`     // Base64 encoded images (Vision)
 	Options     *ModelOptions `json:"options,omitempty"`
-	Think       any           `json:"think,omitempty"` // bool or string ("high", "medium", "low") for reasoning models
-	Logprobs    bool          `json:"logprobs,omitempty"`   // Return token log probabilities
+	Think       any           `json:"think,omitempty"`        // bool or string ("high", "medium", "low") for reasoning models
+	Logprobs    bool          `json:"logprobs,omitempty"`     // Return token log probabilities
 	TopLogprobs int           `json:"top_logprobs,omitempty"` // Top tokens to return probabilities for
 }
 
@@ -39,8 +39,8 @@ type GenerateResponse struct {
 	PromptEvalDuration int64     `json:"prompt_eval_duration,omitempty"` // Nanoseconds
 	EvalCount          int       `json:"eval_count,omitempty"`
 	EvalDuration       int64     `json:"eval_duration,omitempty"` // Nanoseconds
-	Thinking           string    `json:"thinking,omitempty"`     // Thinking output from reasoning models
-	Logprobs           []any     `json:"logprobs,omitempty"`    // Token probability information
+	Thinking           string    `json:"thinking,omitempty"`      // Thinking output from reasoning models
+	Logprobs           []any     `json:"logprobs,omitempty"`      // Token probability information
 }
 
 // ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ type ChatRequest struct {
 	KeepAlive   any           `json:"keep_alive,omitempty"`
 	Options     *ModelOptions `json:"options,omitempty"`
 	Think       any           `json:"think,omitempty"`
-	Logprobs    bool          `json:"logprobs,omitempty"`   // Return token log probabilities
+	Logprobs    bool          `json:"logprobs,omitempty"`     // Return token log probabilities
 	TopLogprobs int           `json:"top_logprobs,omitempty"` // Top tokens to return probabilities for
 }
 

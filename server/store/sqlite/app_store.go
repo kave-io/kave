@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/db/sqlite"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // SQLiteAppStore implements store.AppStore using SQLite with WAL mode.

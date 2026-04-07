@@ -1,0 +1,34 @@
+{
+  "app": {
+    "title": "Panel Kave",
+    "welcome": "Bienvenido"
+  },
+  "nav": {
+    "overview": "Resumen",
+    "traces": "Trazas",
+    "agents": "Agentes",
+    "policies": "Políticas",
+    "budgets": "Presupuestos",
+    "connectors": "Conectores",
+    "settings": "Configuración",
+    "settings_general": "General",
+    "settings_team": "Equipo",
+    "settings_api_keys": "Claves API",
+    "settings_billing": "Facturación"
+  },
+  "workspace": {
+    "production": "Producción",
+    "staging": "Preproducción",
+    "development": "Desarrollo",
+    "add": "Agregar espacio"
+  },
+  "common": {
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar"
+  }
+}

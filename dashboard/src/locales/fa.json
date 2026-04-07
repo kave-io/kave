@@ -1,0 +1,34 @@
+{
+  "app": {
+    "title": "داشبورد کاوه",
+    "welcome": "خوش آمدید"
+  },
+  "nav": {
+    "overview": "نمای کلی",
+    "traces": "ردیابی‌ها",
+    "agents": "عاملان",
+    "policies": "سیاست‌ها",
+    "budgets": "بودجه‌ها",
+    "connectors": "اتصال‌دهنده‌ها",
+    "settings": "تنظیمات",
+    "settings_general": "عمومی",
+    "settings_team": "تیم",
+    "settings_api_keys": "کلیدهای API",
+    "settings_billing": "صورتحساب"
+  },
+  "workspace": {
+    "production": "تولید",
+    "staging": "آزمایشی",
+    "development": "توسعه",
+    "add": "افزودن فضای کاری"
+  },
+  "common": {
+    "loading": "در حال بارگذاری...",
+    "error": "خطا",
+    "success": "موفق",
+    "cancel": "لغو",
+    "save": "ذخیره",
+    "delete": "حذف",
+    "edit": "ویرایش"
+  }
+}

@@ -19,18 +19,18 @@ const (
 type Span struct {
 	ID           string
 	RunID        string
-	ActionID     string            // references Action.ID or Event.ID
+	ActionID     string // references Action.ID or Event.ID
 	Connector    string
-	Model        *string           // "gpt-4o", nil for non-llm
+	Model        *string // "gpt-4o", nil for non-llm
 	StartedAt    timex.MS
 	EndedAt      timex.MS
-	DurationMS   int64    // elapsed time, not a timestamp
+	DurationMS   int64 // elapsed time, not a timestamp
 	InputTokens  *int
 	OutputTokens *int
 	Cost         *money.Amount
 	Error        *string
 	Tags         map[string]string
-	Source       string            // "intercept" | "report" | "otel_import"
+	Source       string // "intercept" | "report" | "otel_import"
 }
 
 // ComputeDuration returns EndedAt - StartedAt in milliseconds.

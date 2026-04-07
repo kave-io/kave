@@ -80,3 +80,6 @@ deploy/.env
 kave-data/
 .codex
 .claude
+*.duckdb
+*.duckdb.wal
+server/tmp/

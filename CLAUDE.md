@@ -275,16 +275,65 @@ Interceptors enforce policy, trace, validate, and cost on every action.
 
 ---
 
-## What's Not Here Yet
+## Current State (as of 2026-04-06)
 
-- HTTP API handlers (`server/api/`)
-- gRPC endpoints (`server/grpc/`)
-- HTTP proxy for LLM calls (`server/proxy/`)
-- Connector implementations beyond OpenAI stub
-- Dashboard/UI (`dashboard/`)
-- Public SDK bindings (`sdk/`)
+### Done
+- `core/` — full intercept pipeline: Action, Result, Pipeline, Interceptor, Run, Policy, context helpers
+- `connectors/` — interfaces + stubs for all LLM providers (OpenAI, Anthropic, Gemini, Groq, Ollama), frameworks (LangChain, CrewAI, OpenAI Agents, AutoGen, OpenClaw), tools (GitHub, Stripe, Slack, Gmail, Postgres, S3, Zarinpal), protocols (MCP, OTel, A2A)
+- `server/infra/` — Postgres, Casbin (RBAC), PASETO tokens, AES crypto, connection pools, RiverQ job queue
+- `server/auth/` — CasbinPolicyEngine wired to core auth interface
+- `server/cost/` — PostgresMeter + pricing tables
+- `server/trace/` — PostgresTracer wired to core trace interface
+- `server/store/` — app store (SQLite + Postgres) + span store (DuckDB + Postgres) with factory
+- `server/proxy/` — HTTP proxy skeleton (proxy.go + upstream.go)
+- `server/pipeline.go` — server-side pipeline assembly
+- `server/config/` — YAML config with type-safe structs
+- `server/db/` — migration runners for SQLite and DuckDB
+- `cli/cmd/` — root, start, stop, status, socket, trace commands
 
-These come in later stages. Focus now is on the core pipeline and data model.
+### v1 Build Remaining
+
+**server/api/ — REST API handlers (highest priority, nothing exists yet)**
+- `POST /agents` — register agent (name, policy_id, metadata/persona)
+- `GET /agents/:id` — get agent details
+- `GET /runs` — list runs with filters
+- `GET /runs/:id/spans` — full trace tree for a run
+- `GET /spans` — span search/explorer
+- `GET /cost/summary` — spend breakdown by agent/model/period
+- `POST /policies` — create policy (budget cap, permissions, guardrails)
+- `GET /health` — liveness probe
+
+**server/proxy/ — Complete the LLM proxy**
+- Route by provider prefix (`/proxy/openai`, `/proxy/anthropic`, etc.)
+- Strip/inject auth headers (zero shared API keys)
+- Run intercept pipeline on every proxied request
+- Record span to store
+
+**CLI — finish operational commands**
+- `kave watch --agent <id>` — live tail spans via server socket
+- `kave trace <run-id>` — print span tree for a run
+
+**Agent persona — what's in scope for v1**
+- Name, tag, description
+- System-level policy prompt injection ("never return PII")
+- `policies` tab: attach guardrail rules
+- `budget` tab: token limit per agent
+- `permissions` tab: allowed connectors/methods
+- **Not in scope**: any flow builder, tool chaining, or agent workflow editor
+
+### Post-v1 Roadmap (do not build now)
+
+In priority order based on product strategy:
+
+1. **Team/workspace features** — invite by email, role seats (admin/dev/viewer/billing), per-team budgets, activity feed. This is what converts free → paid.
+2. **Cost intelligence** — monthly forecasting, model swap recommendations ("switch X to Sonnet, save 40%"), per-client attribution for freelancer invoicing.
+3. **Replay & simulation sandbox** — replay any trace with different model/guardrails/prompt. Makes Kave part of the dev loop. Very sticky.
+4. **Alerts & anomaly detection** — cost spikes, latency degradation, guardrail violations. Configurable thresholds, webhook+email+Slack delivery.
+5. **Audit log & compliance export** — every action/policy change exportable as CSV/JSON. Required for SOC 2 and enterprise deals.
+6. **Connector marketplace** — browse/enable community connectors from dashboard. Scales without building everything in-house.
+7. **Dashboard/UI** — Nuxt 4 web app with trace explorer, cost breakdown, agent registry fleet view, agent persona pages.
+
+**The line we don't cross**: Kave never gives users a canvas to define agent behavior, tools, or workflows. No flow builders, no drag-and-drop steps. Agent registration (name, policy, persona prompt) is governance metadata, not runtime definition. If a feature only works with a Kave-native runtime, it's out of scope.
 
 ---
 

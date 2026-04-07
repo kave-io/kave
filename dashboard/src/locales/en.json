@@ -1,0 +1,34 @@
+{
+  "app": {
+    "title": "Kave Dashboard",
+    "welcome": "Welcome"
+  },
+  "nav": {
+    "overview": "Overview",
+    "traces": "Traces",
+    "agents": "Agents",
+    "policies": "Policies",
+    "budgets": "Budgets",
+    "connectors": "Connectors",
+    "settings": "Settings",
+    "settings_general": "General",
+    "settings_team": "Team",
+    "settings_api_keys": "API Keys",
+    "settings_billing": "Billing"
+  },
+  "workspace": {
+    "production": "Production",
+    "staging": "Staging",
+    "development": "Development",
+    "add": "Add workspace"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit"
+  }
+}

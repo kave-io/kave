@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/marcboeker/go-duckdb"
 	"github.com/kave-io/kave/core/store"
 	dbduckdb "github.com/kave-io/kave/server/db/duckdb"
+	_ "github.com/marcboeker/go-duckdb"
 )
 
 const (
-	defaultBufferSize     = 100
-	defaultFlushInterval  = 2 * time.Second
+	defaultBufferSize    = 100
+	defaultFlushInterval = 2 * time.Second
 )
 
 // DuckDBSpanStore implements store.SpanStore using DuckDB with a buffered channel writer.

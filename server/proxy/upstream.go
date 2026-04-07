@@ -2,131 +2,185 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
-// UpstreamClient handles forwarding requests to upstream LLM providers.
-type UpstreamClient struct {
-	baseURLs map[string]string // "openai" -> "https://api.openai.com"
-	clients  map[string]*http.Client
+// baseURLs maps connector names to upstream API base URLs.
+var baseURLs = map[string]string{
+	"openai":    "https://api.openai.com",
+	"anthropic": "https://api.anthropic.com",
+	"gemini":    "https://generativelanguage.googleapis.com",
+	"groq":      "https://api.groq.com/openai",
+	"mistral":   "https://api.mistral.ai",
+	"deepseek":  "https://api.deepseek.com",
+	"ollama":    "http://localhost:11434",
 }
 
-// NewUpstreamClient creates a new upstream client with default LLM provider URLs.
+// UpstreamClient forwards proxied requests to LLM providers.
+type UpstreamClient struct {
+	client *http.Client
+}
+
 func NewUpstreamClient() *UpstreamClient {
 	return &UpstreamClient{
-		baseURLs: map[string]string{
-			"openai":    "https://api.openai.com",
-			"anthropic": "https://api.anthropic.com",
-			"ollama":    "http://localhost:11434",
-		},
-		clients: map[string]*http.Client{
-			"openai":    &http.Client{},
-			"anthropic": &http.Client{},
-			"ollama":    &http.Client{},
-		},
+		client: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
-// Forward sends a request to the upstream provider and returns the response.
-// It injects the real API key from credentials and extracts token usage.
-func (u *UpstreamClient) Forward(req *http.Request, connector string, apiKey string) (*http.Response, error) {
-	baseURL, ok := u.baseURLs[connector]
+// Forward sends the request to the upstream provider and returns the response.
+// upstreamPath is the path after the connector prefix (e.g. "/v1/chat/completions").
+// body is the already-read request body.
+// apiKey is the decrypted credential.
+func (u *UpstreamClient) Forward(ctx context.Context, orig *http.Request, connector, upstreamPath string, body []byte, apiKey string) (*http.Response, error) {
+	base, ok := baseURLs[connector]
 	if !ok {
-		return nil, fmt.Errorf("unknown connector: %s", connector)
+		return nil, fmt.Errorf("unknown connector: %q", connector)
 	}
 
-	client, ok := u.clients[connector]
-	if !ok {
-		client = &http.Client{}
+	// Build upstream URL: base + upstreamPath + query string
+	upstreamURL := base + upstreamPath
+	if orig.URL.RawQuery != "" {
+		upstreamURL += "?" + orig.URL.RawQuery
 	}
 
-	// Build upstream URL from path
-	upstreamURL := baseURL + req.RequestURI
-
-	// Create upstream request with same body
-	var body []byte
-	if req.Body != nil {
-		body, _ = io.ReadAll(req.Body)
-		req.Body = io.NopCloser(bytes.NewReader(body))
-	}
-
-	upstreamReq, err := http.NewRequest(req.Method, upstreamURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, orig.Method, upstreamURL, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create upstream request: %w", err)
+		return nil, fmt.Errorf("build upstream request: %w", err)
 	}
 
-	// Copy headers
-	upstreamReq.Header = req.Header.Clone()
+	// Copy safe headers, skip hop-by-hop and Kave's own Authorization
+	for key, vals := range orig.Header {
+		switch key {
+		case "Authorization", "X-Api-Key", "Connection", "Transfer-Encoding":
+			// replaced below
+		default:
+			req.Header[key] = vals
+		}
+	}
 
-	// Inject real API key, remove Kave token
-	upstreamReq.Header.Del("Authorization")
+	// Inject the real API key in the provider's expected format
 	switch connector {
-	case "openai":
-		upstreamReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	case "anthropic":
-		upstreamReq.Header.Set("X-API-Key", apiKey)
-		upstreamReq.Header.Set("Anthropic-Version", "2023-06-01")
+		req.Header.Set("X-API-Key", apiKey)
+		req.Header.Set("Anthropic-Version", "2023-06-01")
+	case "gemini":
+		// Gemini uses ?key= query param
+		q := req.URL.Query()
+		q.Set("key", apiKey)
+		req.URL.RawQuery = q.Encode()
+	default:
+		// OpenAI-compatible: Bearer token
+		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
 
-	// Forward request
-	resp, err := client.Do(upstreamReq)
-	if err != nil {
-		return nil, fmt.Errorf("upstream request failed: %w", err)
-	}
-
-	return resp, nil
+	return u.client.Do(req)
 }
 
-// ExtractTokenUsage parses token usage from the response body.
-// Returns a pointer that can be converted to *intercept.TokenUsage
-func ExtractTokenUsage(body []byte, connector string) map[string]interface{} {
-	var data map[string]interface{}
+// StreamForward forwards a streaming request and pipes the response body to w,
+// flushing each chunk so the client receives it in real time.
+func (u *UpstreamClient) StreamForward(ctx context.Context, orig *http.Request, connector, upstreamPath string, body []byte, apiKey string, w http.ResponseWriter) error {
+	resp, err := u.Forward(ctx, orig, connector, upstreamPath, body, apiKey)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Copy response headers
+	for key, vals := range resp.Header {
+		for _, v := range vals {
+			w.Header().Add(key, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+
+	flusher, canFlush := w.(http.Flusher)
+	buf := make([]byte, 4096)
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			w.Write(buf[:n])
+			if canFlush {
+				flusher.Flush()
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("stream upstream: %w", err)
+		}
+	}
+	return nil
+}
+
+// ExtractTokenUsage parses token usage from a non-streaming response body.
+func ExtractTokenUsage(body []byte, connector string) map[string]any {
+	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil
 	}
 
-	usage := map[string]interface{}{}
+	usage := map[string]any{}
 
 	switch connector {
-	case "openai":
-		if u, ok := data["usage"].(map[string]interface{}); ok {
-			if pt, ok := u["prompt_tokens"].(float64); ok {
-				usage["InputTokens"] = int(pt)
+	case "openai", "groq", "deepseek", "mistral":
+		if u, ok := data["usage"].(map[string]any); ok {
+			if v, ok := u["prompt_tokens"].(float64); ok {
+				usage["InputTokens"] = int(v)
 			}
-			if ct, ok := u["completion_tokens"].(float64); ok {
-				usage["OutputTokens"] = int(ct)
+			if v, ok := u["completion_tokens"].(float64); ok {
+				usage["OutputTokens"] = int(v)
 			}
 		}
-		if model, ok := data["model"].(string); ok {
-			usage["Model"] = model
+		if m, ok := data["model"].(string); ok {
+			usage["Model"] = m
 		}
 
 	case "anthropic":
-		if u, ok := data["usage"].(map[string]interface{}); ok {
-			if it, ok := u["input_tokens"].(float64); ok {
-				usage["InputTokens"] = int(it)
+		if u, ok := data["usage"].(map[string]any); ok {
+			if v, ok := u["input_tokens"].(float64); ok {
+				usage["InputTokens"] = int(v)
 			}
-			if ot, ok := u["output_tokens"].(float64); ok {
-				usage["OutputTokens"] = int(ot)
+			if v, ok := u["output_tokens"].(float64); ok {
+				usage["OutputTokens"] = int(v)
+			}
+			if v, ok := u["cache_read_input_tokens"].(float64); ok {
+				usage["CacheRead"] = int(v)
+			}
+			if v, ok := u["cache_creation_input_tokens"].(float64); ok {
+				usage["CacheWrite"] = int(v)
 			}
 		}
-		if model, ok := data["model"].(string); ok {
-			usage["Model"] = model
+		if m, ok := data["model"].(string); ok {
+			usage["Model"] = m
 		}
 
 	case "ollama":
-		if it, ok := data["prompt_eval_count"].(float64); ok {
-			usage["InputTokens"] = int(it)
+		if v, ok := data["prompt_eval_count"].(float64); ok {
+			usage["InputTokens"] = int(v)
 		}
-		if ot, ok := data["eval_count"].(float64); ok {
-			usage["OutputTokens"] = int(ot)
+		if v, ok := data["eval_count"].(float64); ok {
+			usage["OutputTokens"] = int(v)
 		}
-		if model, ok := data["model"].(string); ok {
-			usage["Model"] = model
+		if m, ok := data["model"].(string); ok {
+			usage["Model"] = m
 		}
+
+	case "gemini":
+		if meta, ok := data["usageMetadata"].(map[string]any); ok {
+			if v, ok := meta["promptTokenCount"].(float64); ok {
+				usage["InputTokens"] = int(v)
+			}
+			if v, ok := meta["candidatesTokenCount"].(float64); ok {
+				usage["OutputTokens"] = int(v)
+			}
+		}
+		// model is in the request, not response for Gemini
 	}
 
 	return usage

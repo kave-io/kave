@@ -11,8 +11,8 @@ type Unit struct {
 	Type      ActionType
 	Connector string
 	Method    string
-	Input     []byte  // raw JSON
-	Output    []byte  // raw JSON
+	Input     []byte // raw JSON
+	Output    []byte // raw JSON
 	Error     *string
 	StartedAt timex.MS // zero = not set
 	EndedAt   timex.MS // zero = not ended yet

@@ -1,3 +1,7 @@
+// Package proxy implements an HTTP proxy for LLM API calls.
+// Requests arrive as /proxy/{connector}/... with a Kave agent token.
+// The proxy: looks up the agent, retrieves the real API key from credentials,
+// runs the intercept pipeline, and forwards to the upstream provider.
 package proxy
 
 import (
@@ -8,88 +12,85 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kave-io/kave/core/intercept"
+	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/infra/crypto"
 )
 
 // Proxy intercepts LLM API calls and runs them through Kave's pipeline.
 type Proxy struct {
-	pool           *pgxpool.Pool
-	upstream       *UpstreamClient
-	pipeline       *intercept.Pipeline
-	credentialMgr  *CredentialManager
+	app      store.AppStore
+	encKey   []byte // 32-byte AES-256 key for credential decryption
+	upstream *UpstreamClient
+	pipeline *intercept.Pipeline
 }
 
 // New creates a new proxy.
-func New(pool *pgxpool.Pool, pipeline *intercept.Pipeline) *Proxy {
+// encKey must be 32 bytes (AES-256). If nil, credentials are assumed plaintext.
+func New(app store.AppStore, encKey []byte, pipeline *intercept.Pipeline) *Proxy {
 	return &Proxy{
-		pool:          pool,
-		upstream:      NewUpstreamClient(),
-		pipeline:      pipeline,
-		credentialMgr: NewCredentialManager(pool),
+		app:      app,
+		encKey:   encKey,
+		upstream: NewUpstreamClient(),
+		pipeline: pipeline,
 	}
 }
 
-// RegisterRoutes registers proxy handlers with a standard HTTP mux.
-// Expects routes like /proxy/openai/v1/chat/completions
+// RegisterRoutes registers proxy handlers on mux.
 func (p *Proxy) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/proxy/", p.handleProxy)
 }
 
-// handleProxy is the main proxy handler.
 func (p *Proxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Parse path: /proxy/{connector}/{path...}
-	path := r.URL.Path
-	parts := strings.Split(strings.TrimPrefix(path, "/proxy/"), "/")
-	if len(parts) < 2 {
-		http.Error(w, "invalid proxy path", http.StatusBadRequest)
+	// Path: /proxy/{connector}/{upstream-path...}
+	// e.g. /proxy/openai/v1/chat/completions
+	trimmed := strings.TrimPrefix(r.URL.Path, "/proxy/")
+	slash := strings.Index(trimmed, "/")
+	if slash < 0 {
+		http.Error(w, "invalid proxy path: missing upstream path", http.StatusBadRequest)
 		return
 	}
+	connector := trimmed[:slash]
+	upstreamPath := trimmed[slash:] // includes leading /
 
-	connector := parts[0]
-	method := parts[len(parts)-1] // Last segment is usually the method (e.g., "completions")
-
-	// Extract agent from Authorization header
+	// Agent token from Authorization header
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		http.Error(w, "missing authorization", http.StatusUnauthorized)
 		return
 	}
-
 	agentID := strings.TrimPrefix(authHeader, "Bearer ")
 	if agentID == authHeader {
-		http.Error(w, "invalid authorization format", http.StatusUnauthorized)
+		http.Error(w, "invalid authorization format: expected Bearer token", http.StatusUnauthorized)
 		return
 	}
 
-	// Get workspace_id from agent (for credential lookup)
-	var workspaceID string
-	err := p.pool.QueryRow(ctx, `SELECT workspace_id FROM agents WHERE id = $1`, agentID).Scan(&workspaceID)
-	if err != nil {
+	// Look up agent
+	agent, err := p.app.GetAgentByID(ctx, agentID)
+	if err != nil || agent == nil {
 		http.Error(w, "agent not found", http.StatusUnauthorized)
 		return
 	}
 
-	// Get credentials for this connector
-	cred, err := p.credentialMgr.GetCredential(ctx, workspaceID, connector)
-	if err != nil {
-		http.Error(w, "credential not found", http.StatusForbidden)
-		return
-	}
+	// Retrieve API key for this connector.
+	// Missing credentials are allowed for local/keyless connectors (e.g. ollama).
+	apiKey, _ := p.resolveCredential(ctx, agent.WorkspaceID, connector)
 
-	// Read body as raw bytes; stored as Action.Input and forwarded upstream
+	// Buffer body so pipeline can record it as action input
 	var body []byte
 	if r.Body != nil {
 		body, _ = io.ReadAll(r.Body)
-		r.Body = io.NopCloser(strings.NewReader(string(body)))
 	}
+
+	// Method is the last path segment (e.g. "completions", "embeddings")
+	segments := strings.Split(strings.Trim(upstreamPath, "/"), "/")
+	method := segments[len(segments)-1]
 
 	action := &intercept.Action{
 		Unit: intercept.Unit{
-			ID:        uuid.New().String(),
+			ID:        uuid.NewString(),
 			RunID:     agentID,
 			Type:      intercept.TypeLLM,
 			Connector: connector,
@@ -99,42 +100,48 @@ func (p *Proxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 		Status: intercept.StatusPending,
 	}
 
+	// The pipeline handler does the actual upstream call
 	handler := func(ctx context.Context, action *intercept.Action) (*intercept.Result, error) {
-		resp, err := p.upstream.Forward(r, connector, cred)
+		resp, err := p.upstream.Forward(ctx, r, connector, upstreamPath, body, apiKey)
 		if err != nil {
 			return nil, err
 		}
 		defer resp.Body.Close()
 
-		respBody, _ := io.ReadAll(resp.Body)
-
-		tokenData := ExtractTokenUsage(respBody, connector)
-		var tokenUsage *intercept.TokenUsage
-		if len(tokenData) > 0 {
-			tokenUsage = &intercept.TokenUsage{}
-			if v, ok := tokenData["InputTokens"]; ok {
-				tokenUsage.InputTokens = v.(int)
-			}
-			if v, ok := tokenData["OutputTokens"]; ok {
-				tokenUsage.OutputTokens = v.(int)
-			}
-			if v, ok := tokenData["CacheRead"]; ok {
-				tokenUsage.CacheRead = v.(int)
-			}
-			if v, ok := tokenData["CacheWrite"]; ok {
-				tokenUsage.CacheWrite = v.(int)
-			}
-			if v, ok := tokenData["Model"]; ok {
-				tokenUsage.Model = v.(string)
-			}
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read upstream response: %w", err)
 		}
 
-		return &intercept.Result{Body: respBody, TokenUsage: tokenUsage}, nil
+		result := &intercept.Result{Body: respBody}
+
+		usage := ExtractTokenUsage(respBody, connector)
+		if len(usage) > 0 {
+			tu := &intercept.TokenUsage{}
+			if v, ok := usage["InputTokens"].(int); ok {
+				tu.InputTokens = v
+			}
+			if v, ok := usage["OutputTokens"].(int); ok {
+				tu.OutputTokens = v
+			}
+			if v, ok := usage["CacheRead"].(int); ok {
+				tu.CacheRead = v
+			}
+			if v, ok := usage["CacheWrite"].(int); ok {
+				tu.CacheWrite = v
+			}
+			if v, ok := usage["Model"].(string); ok {
+				tu.Model = v
+			}
+			result.TokenUsage = tu
+		}
+
+		return result, nil
 	}
 
 	result, err := p.pipeline.Execute(ctx, action, handler)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("pipeline error: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("pipeline error: %v", err), http.StatusBadGateway)
 		return
 	}
 
@@ -142,73 +149,25 @@ func (p *Proxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 	w.Write(result.Body)
 }
 
-// CredentialManager handles encrypted credential storage and retrieval.
-type CredentialManager struct {
-	pool *pgxpool.Pool
-}
-
-// NewCredentialManager creates a new credential manager.
-func NewCredentialManager(pool *pgxpool.Pool) *CredentialManager {
-	return &CredentialManager{pool: pool}
-}
-
-// GetCredential retrieves and decrypts a credential.
-func (cm *CredentialManager) GetCredential(ctx context.Context, workspaceID, connector string) (string, error) {
-	var encrypted []byte
-	err := cm.pool.QueryRow(ctx, `
-		SELECT encrypted FROM credentials
-		WHERE workspace_id = $1 AND connector = $2
-		LIMIT 1
-	`, workspaceID, connector).Scan(&encrypted)
-
-	if err != nil {
-		return "", fmt.Errorf("credential not found: %w", err)
+// resolveCredential retrieves and decrypts the API key for a connector.
+func (p *Proxy) resolveCredential(ctx context.Context, workspaceID, connector string) (string, error) {
+	cred, err := p.app.GetCredential(ctx, workspaceID, connector)
+	if err != nil || cred == nil {
+		return "", fmt.Errorf("no credential for %s/%s", workspaceID, connector)
 	}
 
-	// Decrypt using workspace ID as AAD
-	aesKey, err := crypto.KeyFromHex(workspaceID) // In production, use proper key derivation
-	if err != nil {
-		return "", fmt.Errorf("derive key: %w", err)
+	// If no encryption key configured, treat stored bytes as plaintext
+	if len(p.encKey) == 0 {
+		return string(cred.Encrypted), nil
 	}
 
-	aes, err := crypto.NewAES(aesKey)
+	aes, err := crypto.NewAES(p.encKey)
 	if err != nil {
 		return "", fmt.Errorf("create cipher: %w", err)
 	}
-
-	decrypted, err := aes.Decrypt(encrypted, []byte(workspaceID))
+	decrypted, err := aes.Decrypt(cred.Encrypted, []byte(workspaceID))
 	if err != nil {
-		return "", fmt.Errorf("decrypt: %w", err)
+		return "", fmt.Errorf("decrypt credential: %w", err)
 	}
-
 	return string(decrypted), nil
-}
-
-// StoreCredential encrypts and stores a credential.
-func (cm *CredentialManager) StoreCredential(ctx context.Context, workspaceID, connector, label, apiKey string) error {
-	keyHash := crypto.Hash(apiKey)
-
-	// Encrypt using workspace ID as AAD
-	aesKey, err := crypto.KeyFromHex(workspaceID)
-	if err != nil {
-		return fmt.Errorf("derive key: %w", err)
-	}
-
-	aes, err := crypto.NewAES(aesKey)
-	if err != nil {
-		return fmt.Errorf("create cipher: %w", err)
-	}
-
-	encrypted, err := aes.Encrypt([]byte(apiKey), []byte(workspaceID))
-	if err != nil {
-		return fmt.Errorf("encrypt: %w", err)
-	}
-
-	_, err = cm.pool.Exec(ctx, `
-		INSERT INTO credentials (workspace_id, connector, label, key_hash, encrypted)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (workspace_id, connector, key_hash) DO NOTHING
-	`, workspaceID, connector, label, keyHash, encrypted)
-
-	return err
 }

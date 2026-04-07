@@ -1,0 +1,157 @@
+@import '@fontsource/fira-code/index.css';
+@import '@fontsource/fira-sans/index.css';
+
+@font-face {
+  font-family: 'Shabnam';
+  src: url('./fonts/Shabnam.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Shabnam';
+  src: url('./fonts/Shabnam-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Shabnam';
+  src: url('./fonts/Shabnam-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
+@import 'tailwindcss';
+@import '@nuxt/ui';
+
+@theme {
+  --font-sans: 'Fira Sans', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Fira Code', Consolas, Menlo, monospace;
+  --font-farsi: 'Shabnam', 'Segoe UI', Arial, sans-serif;
+}
+
+@theme static {
+  /* Teal palette — #44a87d is the 500 anchor (from the logo) */
+  --color-teal-50: #f3fcf8;
+  --color-teal-100: #dff6ec;
+  --color-teal-200: #bee9d6;
+  --color-teal-300: #88d3b3;
+  --color-teal-400: #62c198;
+  --color-teal-500: #44a87d;
+  --color-teal-600: #358864;
+  --color-teal-700: #296a4e;
+  --color-teal-800: #1e4d39;
+  --color-teal-900: #163628;
+  --color-teal-950: #0e2018;
+
+  /* Purple palette — H shifted toward blue (252°), calmer than vivid violet */
+  --color-purple-50: #f4f2ff;
+  --color-purple-100: #e7e2fc;
+  --color-purple-200: #c8bcf4;
+  --color-purple-300: #9f8eeb;
+  --color-purple-400: #775fe0;
+  --color-purple-500: #6a4eda;
+  --color-purple-600: #492ac7;
+  --color-purple-700: #3a1daf;
+  --color-purple-800: #251565;
+  --color-purple-900: #190e43;
+  --color-purple-950: #10092a;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
+}
+
+html[lang|='fa'],
+html[lang|='fa'] body {
+  --font-sans: 'Shabnam', 'Segoe UI', Arial, sans-serif;
+  font-family: var(--font-sans);
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 35% at 50% -10%, var(--page-glow-top), transparent), var(--page-bg);
+  color: var(--page-text);
+}
+
+:root {
+  /* warm stone — same base as landing */
+  --page-bg: #d9d5cc;
+  --page-glow-top: rgba(106, 78, 218, 0.07);
+  --page-text: #0f0d0a;
+  --page-text-muted: rgba(15, 13, 10, 0.92);
+  --page-text-soft: rgba(15, 13, 10, 0.72);
+  --page-text-faint: rgba(15, 13, 10, 0.52);
+  --page-surface: rgba(242, 239, 233, 0.9);
+  --page-surface-strong: rgba(250, 247, 243, 0.96);
+  --page-surface-muted: rgba(237, 234, 228, 0.75);
+  --page-border: rgba(20, 15, 8, 0.09);
+  --page-border-soft: rgba(20, 15, 8, 0.06);
+  --page-accent-surface: rgba(73, 42, 199, 0.07);
+  --page-accent-border: rgba(73, 42, 199, 0.16);
+
+  /* Nuxt UI text tokens — override stone defaults which are too light on #d9d5cc */
+  --ui-text: #0f0d0a;
+  --ui-text-muted: #3d3830;
+  --ui-text-dimmed: #5c5549;
+  --ui-text-toned: #4a4439;
+  --ui-text-highlighted: #0f0d0a;
+
+  /* Nuxt UI surface tokens — warm stone cards */
+  --ui-bg: #f4f1eb;
+  --ui-bg-muted: #ece8e1;
+  --ui-bg-elevated: #f8f5f0;
+  --ui-bg-accented: #e6e2da;
+
+  --ui-radius: 0.375rem;
+}
+
+.dark {
+  color-scheme: dark;
+  /* warm espresso — no blue cast */
+  --page-bg: #050403;
+  --page-glow-top: rgba(106, 78, 218, 0.1);
+  --page-text: #e8e4df;
+  --page-text-muted: rgba(232, 228, 223, 0.6);
+  --page-text-soft: rgba(232, 228, 223, 0.45);
+  --page-text-faint: rgba(232, 228, 223, 0.24);
+  --page-surface: rgba(255, 246, 230, 0.04);
+  --page-surface-strong: rgba(255, 246, 230, 0.055);
+  --page-surface-muted: rgba(255, 246, 230, 0.025);
+  --page-border: rgba(255, 238, 210, 0.09);
+  --page-border-soft: rgba(255, 238, 210, 0.065);
+  --page-accent-surface: rgba(106, 78, 218, 0.08);
+  --page-accent-border: rgba(106, 78, 218, 0.2);
+  /* Nuxt UI text tokens — warm light values for dark mode */
+  --ui-text: #e8e4df;
+  --ui-text-muted: #a89f94;
+  --ui-text-dimmed: #7a7068;
+  --ui-text-toned: #8f8880;
+  --ui-text-highlighted: #f0ece7;
+
+  /* warm dark card surfaces */
+  --ui-bg: #131110;
+  --ui-bg-muted: #0d0b09;
+  --ui-bg-elevated: #1b1714;
+  --ui-bg-accented: #231e18;
+}
+
+/* Ensure full viewport height */
+html,
+body {
+  height: 100%;
+}
+
+#app {
+  height: 100%;
+}
+
+/* Hide scrollbars while keeping scroll functionality */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
