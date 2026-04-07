@@ -114,11 +114,12 @@ func main() {
 	printBanner(addr)
 
 	server := &http.Server{
-		Addr:         addr,
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:        addr,
+		Handler:     mux,
+		ReadTimeout: 30 * time.Second,
+		// WriteTimeout is intentionally 0 (no timeout) to support streaming
+		// responses from the LLM proxy which can run for minutes.
+		IdleTimeout: 120 * time.Second,
 	}
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/dashboard/StatCard.vue'
 import AlertsPanel from '../components/dashboard/AlertsPanel.vue'
 import ConnectorList from '../components/dashboard/ConnectorList.vue'
@@ -7,6 +9,7 @@ import { useAgents, useRuns, useCostSummary } from '@/lib/queries'
 import { useSpanStream } from '@/composables/useSpanStream'
 import { workspaceId } from '@/stores/workspace'
 
+const { t } = useI18n()
 const { data: agents } = useAgents(workspaceId)
 const { data: runs } = useRuns({ workspaceId, limit: 20 })
 const { data: cost } = useCostSummary()
@@ -21,10 +24,10 @@ const stats = computed(() => {
   const errorRuns = runs.value?.filter(r => r.status === 'failed').length ?? 0
 
   return [
-    { label: 'Active Agents', value: String(activeAgents), hint: 'registered in workspace', icon: 'i-lucide-bot' },
-    { label: 'Runs Today', value: String(todayRuns), hint: `${successRate}% success`, icon: 'i-lucide-activity' },
-    { label: 'Spend This Month', value: `$${totalSpend.toFixed(2)}`, hint: 'from budget ledger', icon: 'i-lucide-wallet' },
-    { label: 'Failed Runs', value: String(errorRuns), hint: errorRuns > 0 ? 'check traces' : 'all clear', icon: 'i-lucide-shield-alert' },
+    { label: t('pages.overview.stat_active_agents'), value: String(activeAgents), hint: t('pages.overview.stat_active_agents_hint'), icon: 'i-lucide-bot' },
+    { label: t('pages.overview.stat_runs_today'), value: String(todayRuns), hint: `${successRate}% success`, icon: 'i-lucide-activity' },
+    { label: t('pages.overview.stat_spend_month'), value: `$${totalSpend.toFixed(2)}`, hint: t('pages.overview.stat_spend_hint'), icon: 'i-lucide-wallet' },
+    { label: t('pages.overview.stat_failed_runs'), value: String(errorRuns), hint: errorRuns > 0 ? t('pages.overview.stat_failed_runs_hint_error') : t('pages.overview.stat_failed_runs_hint_ok'), icon: 'i-lucide-shield-alert' },
   ]
 })
 
@@ -35,19 +38,16 @@ const connectors = [
   { name: 'Ollama', status: 'Healthy', latency: '—' },
 ]
 
-// Alerts derived from data
+// Alerts derived from data — only show real alerts
 const alerts = computed(() => {
   const items = []
   const failedRuns = runs.value?.filter(r => r.status === 'failed') ?? []
   if (failedRuns.length > 0) {
-    items.push({ title: `${failedRuns.length} failed runs`, description: 'Check traces for error details.', tone: 'error' as const })
+    items.push({ title: `${failedRuns.length} ${failedRuns.length === 1 ? t('pages.overview.failed_runs_alert') : t('pages.overview.failed_runs_plural')}`, description: t('pages.overview.check_traces'), tone: 'error' as const })
   }
   const totalSpend = cost.value?.total_usd ?? 0
   if (totalSpend > 10) {
-    items.push({ title: 'Spend accumulating', description: `$${totalSpend.toFixed(2)} recorded this period.`, tone: 'warning' as const })
-  }
-  if (items.length === 0) {
-    items.push({ title: 'All systems nominal', description: 'No active alerts.', tone: 'success' as const })
+    items.push({ title: t('pages.overview.spend_alert'), description: `$${totalSpend.toFixed(2)} ${t('pages.overview.spend_details')}`, tone: 'warning' as const })
   }
   return items
 })
@@ -55,19 +55,19 @@ const alerts = computed(() => {
 
 <template>
   <div class="space-y-6 p-4 lg:p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-xl font-semibold tracking-tight">Overview</h1>
-        <p class="text-sm text-muted mt-0.5">Production workspace</p>
-      </div>
+    <PageHeader :title="t('pages.overview.title')" :subtitle="t('pages.overview.subtitle')" show-kave-logo>
       <span v-if="isLive" class="flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-500">
         <span class="relative flex h-1.5 w-1.5">
           <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
           <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
         </span>
-        LIVE
+        {{ t('pages.overview.live_indicator') }}
       </span>
-    </div>
+      <span v-else class="flex items-center gap-1.5 rounded-full bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted">
+        <span class="h-1.5 w-1.5 rounded-full bg-muted" />
+        {{ t('pages.overview.offline_indicator') }}
+      </span>
+    </PageHeader>
 
     <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <StatCard
@@ -86,21 +86,25 @@ const alerts = computed(() => {
         <template #header>
           <div class="flex items-center justify-between">
             <div>
-              <h3 class="text-base font-semibold">Live Activity</h3>
-              <p class="text-sm text-muted">Spans streaming in real time.</p>
+              <h3 class="text-base font-semibold">{{ t('pages.overview.live_activity') }}</h3>
+              <p class="text-sm text-muted">{{ t('pages.overview.live_activity_hint') }}</p>
             </div>
             <span v-if="isLive" class="flex items-center gap-1.5 text-xs font-medium text-green-500">
               <span class="relative flex h-1.5 w-1.5">
                 <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                 <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
               </span>
-              LIVE
+              {{ t('pages.overview.live_indicator') }}
+            </span>
+            <span v-else class="flex items-center gap-1.5 text-xs font-medium text-muted">
+              <span class="h-1.5 w-1.5 rounded-full bg-muted" />
+              {{ t('pages.overview.offline_indicator') }}
             </span>
           </div>
         </template>
 
         <div v-if="liveSpans.length === 0" class="grid h-32 place-items-center text-sm text-muted">
-          Waiting for the first trace…
+          {{ t('pages.overview.waiting_traces') }}
         </div>
         <div v-else class="divide-y divide-border">
           <div
@@ -133,18 +137,18 @@ const alerts = computed(() => {
       <UCard class="rounded-xl">
         <template #header>
           <div>
-            <h3 class="text-base font-semibold">Spend by model</h3>
-            <p class="text-sm text-muted">From the budget ledger.</p>
+            <h3 class="text-base font-semibold">{{ t('pages.overview.spend_by_model') }}</h3>
+            <p class="text-sm text-muted">{{ t('pages.overview.spend_by_model_hint') }}</p>
           </div>
         </template>
-        <div v-if="cost?.by_model && Object.keys(cost.by_model).length" class="space-y-2">
-          <div v-for="(usd, model) in cost.by_model" :key="model" class="flex items-center justify-between text-sm">
-            <span class="font-mono text-muted">{{ model }}</span>
-            <span class="font-semibold">${{ usd.toFixed(4) }}</span>
+        <div v-if="cost?.by_model && Object.keys(cost.by_model).length" class="space-y-1">
+          <div v-for="(usd, model) in cost.by_model" :key="model" class="flex items-center justify-between text-sm py-1.5">
+            <span class="font-mono text-xs text-muted truncate">{{ model }}</span>
+            <span class="font-semibold tabular-nums">{{ usd > 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(6)}` }}</span>
           </div>
         </div>
-        <div v-else class="grid h-32 place-items-center text-sm text-muted">
-          No spend data yet.
+        <div v-else class="grid h-24 place-items-center text-sm text-muted">
+          {{ t('pages.overview.no_spend') }}
         </div>
       </UCard>
 

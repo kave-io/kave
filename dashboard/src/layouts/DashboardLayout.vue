@@ -39,25 +39,22 @@ const selectedWorkspace = computed(() => ({
   icon: workspaceIcons[selectedWorkspaceKey.value],
 }))
 
-const navItems = computed<NavigationMenuItem[]>(() => [
-  { label: t('nav.overview'), icon: 'i-lucide-layout-dashboard', to: '/' },
-  { label: t('nav.traces'), icon: 'i-lucide-waypoints', to: '/traces' },
-  { label: t('nav.agents'), icon: 'i-lucide-bot', to: '/agents' },
-  { label: t('nav.policies'), icon: 'i-lucide-shield', to: '/policies' },
-  { label: t('nav.budgets'), icon: 'i-lucide-wallet-cards', to: '/budgets' },
-  { label: t('nav.connectors'), icon: 'i-lucide-plug-zap', to: '/connectors' },
-  {
-    label: t('nav.settings'),
-    icon: 'i-lucide-settings',
-    defaultOpen: route.path.startsWith('/settings'),
-    children: [
-      { label: t('nav.settings_general'), icon: 'i-lucide-house', to: '/settings' },
-      { label: t('nav.settings_team'), icon: 'i-lucide-users', to: '/settings/team' },
-      { label: t('nav.settings_api_keys'), icon: 'i-lucide-key', to: '/settings/api-keys' },
-      { label: t('nav.settings_billing'), icon: 'i-lucide-credit-card', to: '/settings/billing' },
-    ],
-  },
+const navItems = computed<NavigationMenuItem[][]>(() => [
+  [
+    { label: t('nav.overview'), icon: 'i-lucide-layout-dashboard', to: '/', exact: true },
+    { label: t('nav.traces'), icon: 'i-lucide-waypoints', to: '/traces' },
+    { label: t('nav.agents'), icon: 'i-lucide-bot', to: '/agents' },
+    { label: t('nav.policies'), icon: 'i-lucide-shield', to: '/policies' },
+    { label: t('nav.runs'), icon: 'i-lucide-activity', to: '/runs' },
+    { label: t('nav.settings'), icon: 'i-lucide-settings', to: '/settings' },
+  ],
 ])
+
+const externalLinks = [
+  { label: 'Docs', icon: 'i-lucide-book-open', url: 'https://docs.kave.io' },
+  { label: 'GitHub', icon: 'i-lucide-github', url: 'https://github.com/kave-io/kave' },
+  { label: 'Discord', icon: 'i-lucide-send', url: 'https://discord.gg/kave' },
+]
 </script>
 
 <template>
@@ -70,22 +67,10 @@ const navItems = computed<NavigationMenuItem[]>(() => [
       :ui="{ container: 'h-full' }"
     >
       <template #header>
-        <UDropdownMenu
-          :items="workspaceItems"
-          :content="{ align: 'start', collisionPadding: 12 }"
-          :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width) min-w-48' }"
-        >
-          <UButton
-            :icon="selectedWorkspace.icon"
-            :label="selectedWorkspace.label"
-            trailing-icon="i-lucide-chevrons-up-down"
-            color="neutral"
-            variant="ghost"
-            square
-            class="w-full data-[state=open]:bg-elevated overflow-hidden"
-            :ui="{ trailingIcon: 'text-dimmed ms-auto' }"
-          />
-        </UDropdownMenu>
+        <div class="flex items-center gap-2 w-full px-1.5 py-1.5">
+          <img src="/icon-128.png" alt="Kave" class="size-6 rounded" />
+          <span class="text-sm font-semibold truncate">Kave</span>
+        </div>
         <UButton
           icon="i-lucide-x"
           color="neutral"
@@ -106,11 +91,68 @@ const navItems = computed<NavigationMenuItem[]>(() => [
             orientation="vertical"
             :ui="{ link: 'p-1.5 overflow-hidden' }"
           />
-          <div class="mt-auto flex flex-col gap-2 border-t border-default p-3">
-            <div v-if="state === 'expanded'" class="flex flex-col gap-2">
-              <UColorModeSelect variant="ghost" />
-              <LocaleSelector />
-              <CurrencySelector />
+
+          <!-- External Links Section -->
+          <div v-if="state === 'expanded'" class="mt-auto border-t border-default p-3 space-y-2">
+            <p class="text-xs font-semibold text-muted uppercase tracking-wide px-1">Resources</p>
+            <div class="flex flex-col gap-1.5">
+              <a
+                v-for="link in externalLinks"
+                :key="link.url"
+                :href="link.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm hover:bg-default/60 transition group"
+              >
+                <UIcon :name="link.icon" class="size-4 shrink-0 text-muted group-hover:text-foreground" />
+                <span class="text-muted group-hover:text-foreground">{{ link.label }}</span>
+                <UIcon name="i-lucide-arrow-up-right" class="size-3 ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition" />
+              </a>
+            </div>
+          </div>
+
+          <!-- Collapsed External Links -->
+          <div v-else class="mt-auto border-t border-default p-2 flex flex-col gap-1.5 items-center">
+            <a
+              v-for="link in externalLinks"
+              :key="link.url"
+              :href="link.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="p-2 rounded-lg hover:bg-default/60 transition text-muted hover:text-foreground"
+              :title="link.label"
+            >
+              <UIcon :name="link.icon" class="size-4" />
+            </a>
+          </div>
+
+          <!-- Settings Section -->
+          <div class="border-t border-default p-3">
+            <div v-if="state === 'expanded'" class="space-y-3">
+              <p class="text-xs font-semibold text-muted uppercase tracking-wide px-1">Preferences</p>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between px-2.5 py-2 rounded-lg bg-default/40 hover:bg-default/60 transition">
+                  <span class="text-xs text-muted flex items-center gap-2">
+                    <UIcon name="i-lucide-palette" class="size-4" />
+                    Theme
+                  </span>
+                  <UColorModeSelect variant="ghost" size="sm" />
+                </div>
+                <div class="flex items-center justify-between px-2.5 py-2 rounded-lg bg-default/40 hover:bg-default/60 transition">
+                  <span class="text-xs text-muted flex items-center gap-2">
+                    <UIcon name="i-lucide-globe" class="size-4" />
+                    Language
+                  </span>
+                  <LocaleSelector />
+                </div>
+                <div class="flex items-center justify-between px-2.5 py-2 rounded-lg bg-default/40 hover:bg-default/60 transition">
+                  <span class="text-xs text-muted flex items-center gap-2">
+                    <UIcon name="i-lucide-dollar-sign" class="size-4" />
+                    Currency
+                  </span>
+                  <CurrencySelector />
+                </div>
+              </div>
             </div>
             <div v-else class="flex flex-col gap-2 items-center">
               <UColorModeButton variant="ghost" />

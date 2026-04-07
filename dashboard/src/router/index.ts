@@ -12,6 +12,7 @@ const router = createRouter({
         { path: 'agents', name: 'agents', component: () => import('../views/AgentsView.vue') },
         { path: 'traces', name: 'traces', component: () => import('../views/TracesView.vue') },
         { path: 'policies', name: 'policies', component: () => import('../views/PoliciesView.vue') },
+        { path: 'runs', name: 'runs', component: () => import('../views/RunsView.vue') },
         { path: 'settings', name: 'settings', component: () => import('../views/SettingsView.vue') },
       ],
     },

@@ -1,23 +1,127 @@
 <script setup lang="ts">
-// Policies are fetched by ID only (no list endpoint yet).
-// This view is a placeholder until list is added post-v1.
+import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import PageHeader from '../components/PageHeader.vue'
+import type { Policy } from '@/types/api'
+import { useAgents, usePolicy } from '@/lib/queries'
+import { workspaceId } from '@/stores/workspace'
+
+const { t } = useI18n()
+
+const { data: agents, isLoading } = useAgents(workspaceId)
+const selectedPolicyId = ref<string | null>(null)
+
+// Collect unique policy IDs from agents
+const policyIds = computed(() => {
+  const ids = new Set<string>()
+  agents.value?.forEach(a => {
+    if (a.policy_id) ids.add(a.policy_id)
+  })
+  return Array.from(ids)
+})
+
+// Fetch selected policy if available
+const policyId = computed(() => selectedPolicyId.value || '')
+const { data: selectedPolicy } = usePolicy(policyId)
+
+// Count which agents use each policy
+const policiesWithUsage = computed(() => {
+  return policyIds.value.map(policyId => {
+    const agentCount = (agents.value ?? []).filter(a => a.policy_id === policyId).length
+    return { policyId, agentCount }
+  })
+})
+
 </script>
 
 <template>
   <div class="space-y-6 p-4 lg:p-6">
-    <div>
-      <h1 class="text-xl font-semibold tracking-tight">Policies</h1>
-      <p class="text-sm text-muted mt-0.5">Budget caps, allowed connectors, and guardrail rules.</p>
-    </div>
+    <PageHeader :title="t('pages.policies.title')" :subtitle="t('pages.policies.subtitle')" icon="i-lucide-shield" />
 
     <UCard class="rounded-xl">
-      <div class="grid h-48 place-items-center text-center">
-        <div>
-          <UIcon name="i-lucide-shield" class="mx-auto size-10 text-muted" />
-          <p class="mt-3 font-medium">Policy list coming in v1.1</p>
-          <p class="text-sm text-muted mt-1">Use the API to create and attach policies to agents.</p>
+      <div v-if="isLoading" class="grid h-32 place-items-center">
+        <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
+      </div>
+
+      <div v-else-if="policyIds.length === 0" class="grid h-32 place-items-center text-center">
+        <div class="space-y-2">
+          <UIcon name="i-lucide-shield" class="mx-auto size-8 text-muted" />
+          <p class="text-sm font-medium">No policies in use</p>
+          <p class="text-xs text-muted">Create and attach policies to agents via the API.</p>
+        </div>
+      </div>
+
+      <div v-else>
+        <div class="divide-y divide-border/50">
+          <div
+            v-for="item in policiesWithUsage"
+            :key="item.policyId"
+            class="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-muted/40 transition"
+            @click="selectedPolicyId = item.policyId"
+          >
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-mono truncate">{{ item.policyId }}</p>
+            </div>
+            <div class="ml-4 text-xs text-muted shrink-0 tabular-nums">
+              {{ item.agentCount }} {{ item.agentCount === 1 ? 'agent' : 'agents' }}
+            </div>
+          </div>
         </div>
       </div>
     </UCard>
+
+    <!-- Policy detail drawer -->
+    <USlideover v-model="selectedPolicyId" title="">
+      <template v-if="selectedPolicyId" #header>
+        <div class="space-y-1">
+          <h2 class="text-base font-semibold">Policy</h2>
+          <p class="text-xs text-muted font-mono">{{ selectedPolicyId }}</p>
+        </div>
+      </template>
+      <div v-if="selectedPolicyId" class="space-y-6">
+        <section v-if="selectedPolicy" class="space-y-3">
+          <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Restrictions</h3>
+          <div class="space-y-3">
+            <div v-if="selectedPolicy.budget_cap_usd" class="border border-default/60 rounded-lg px-3 py-2.5">
+              <p class="text-xs text-muted">Budget Cap</p>
+              <p class="text-lg font-semibold tabular-nums mt-1">${{ selectedPolicy.budget_cap_usd.toFixed(2) }}</p>
+            </div>
+            <div v-if="selectedPolicy.allowed_connectors?.length" class="border border-default/60 rounded-lg px-3 py-2.5">
+              <p class="text-xs text-muted mb-2">Allowed Connectors</p>
+              <div class="flex flex-wrap gap-1.5">
+                <UBadge v-for="c in selectedPolicy.allowed_connectors" :key="c" variant="soft" size="sm">
+                  {{ c }}
+                </UBadge>
+              </div>
+            </div>
+            <div v-if="selectedPolicy.allowed_methods?.length" class="border border-default/60 rounded-lg px-3 py-2.5">
+              <p class="text-xs text-muted mb-2">Allowed Methods</p>
+              <div class="flex flex-wrap gap-1.5">
+                <UBadge v-for="m in selectedPolicy.allowed_methods" :key="m" variant="soft" size="sm">
+                  {{ m }}
+                </UBadge>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="border-t border-default pt-4">
+          <h3 class="text-xs font-medium uppercase tracking-wide text-muted mb-3">Attached Agents</h3>
+          <div v-if="(agents ?? []).filter(a => a.policy_id === selectedPolicyId).length > 0" class="space-y-2">
+            <div
+              v-for="agent in (agents ?? []).filter(a => a.policy_id === selectedPolicyId)"
+              :key="agent.id"
+              class="text-sm py-2 px-2.5 rounded hover:bg-muted/30 transition"
+            >
+              <p class="font-medium">{{ agent.name }}</p>
+              <p class="text-xs text-muted font-mono">{{ agent.id }}</p>
+            </div>
+          </div>
+          <div v-else class="text-xs text-muted py-2">
+            No agents attached.
+          </div>
+        </section>
+      </div>
+    </USlideover>
   </div>
 </template>
