@@ -275,43 +275,30 @@ Interceptors enforce policy, trace, validate, and cost on every action.
 
 ---
 
-## Current State (as of 2026-04-06)
+## Current State (as of 2026-04-07)
 
-### Done
+### Done — v1 complete and working
 - `core/` — full intercept pipeline: Action, Result, Pipeline, Interceptor, Run, Policy, context helpers
-- `connectors/` — interfaces + stubs for all LLM providers (OpenAI, Anthropic, Gemini, Groq, Ollama), frameworks (LangChain, CrewAI, OpenAI Agents, AutoGen, OpenClaw), tools (GitHub, Stripe, Slack, Gmail, Postgres, S3, Zarinpal), protocols (MCP, OTel, A2A)
-- `server/infra/` — Postgres, Casbin (RBAC), PASETO tokens, AES crypto, connection pools, RiverQ job queue
-- `server/auth/` — CasbinPolicyEngine wired to core auth interface
-- `server/cost/` — PostgresMeter + pricing tables
-- `server/trace/` — PostgresTracer wired to core trace interface
-- `server/store/` — app store (SQLite + Postgres) + span store (DuckDB + Postgres) with factory
-- `server/proxy/` — HTTP proxy skeleton (proxy.go + upstream.go)
-- `server/pipeline.go` — server-side pipeline assembly
-- `server/config/` — YAML config with type-safe structs
-- `server/db/` — migration runners for SQLite and DuckDB
-- `cli/cmd/` — root, start, stop, status, socket, trace commands
+- `connectors/` — interfaces + stubs for all LLM providers and frameworks
+- `server/infra/` — Postgres, Casbin, PASETO, AES crypto, connection pools, RiverQ
+- `server/api/` — full REST API: agents, policies, runs, spans, cost, credentials, workspaces, SSE watch
+- `server/proxy/` — LLM proxy with streaming (SSE tee), gzip-transparent, per-provider auth passthrough, UUID-based agent resolution, default agent fallback
+- `server/trace/` — Tracer with per-model pricing (Anthropic/OpenAI/Gemini/Groq/Mistral), cache token cost (read/write different rates)
+- `server/store/` — SQLite (AppStore) + DuckDB (SpanStore), auto-migrate, default workspace/policy/agent seeded on startup
+- `server/ui/` — Vue 3 dashboard embedded via `go:embed all:dist`, SPA handler
+- `dashboard/` — integrated into monorepo (was kave-dashboard), Vue 3 + Vite + TanStack Query, live SSE traces with LIVE badge, cache hit indicator (⚡), real cost display
+- `cli/cmd/` — root, start, stop, status, watch (SSE tail), socket commands
 
-### v1 Build Remaining
+### Zero-config event mode
+Server starts with default workspace + policy (permissive) + agent. No Bearer token required on proxy — falls back to default agent. Startup banner prints proxy URLs. Run `ANTHROPIC_BASE_URL=http://localhost:8080/proxy/anthropic claude` to trace Claude Code itself.
 
-**server/api/ — REST API handlers (highest priority, nothing exists yet)**
-- `POST /agents` — register agent (name, policy_id, metadata/persona)
-- `GET /agents/:id` — get agent details
-- `GET /runs` — list runs with filters
-- `GET /runs/:id/spans` — full trace tree for a run
-- `GET /spans` — span search/explorer
-- `GET /cost/summary` — spend breakdown by agent/model/period
-- `POST /policies` — create policy (budget cap, permissions, guardrails)
-- `GET /health` — liveness probe
-
-**server/proxy/ — Complete the LLM proxy**
-- Route by provider prefix (`/proxy/openai`, `/proxy/anthropic`, etc.)
-- Strip/inject auth headers (zero shared API keys)
-- Run intercept pipeline on every proxied request
-- Record span to store
-
-**CLI — finish operational commands**
-- `kave watch --agent <id>` — live tail spans via server socket
-- `kave trace <run-id>` — print span tree for a run
+### Proxy behavior
+- No auth header → default agent (event mode)
+- Bearer UUID → that agent
+- Bearer non-UUID (real API key) → default agent + key passed through to upstream
+- No stored credential → client's own auth headers passed through
+- Streaming detected by `Content-Type: text/event-stream`, teed to client while buffering for token extraction
+- `Accept-Encoding` stripped so Go transport handles gzip transparently
 
 **Agent persona — what's in scope for v1**
 - Name, tag, description

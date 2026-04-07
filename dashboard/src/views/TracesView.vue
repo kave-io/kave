@@ -1,5 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import type { Span } from '@/types/api'
+
+// Show total context (input + cache hits) → output.
+// Cache hits are marked with ⚡ to indicate they were cheap.
+function formatTokens(s: Span): string {
+  if (s.input_tokens == null) return '—'
+  const totalIn = (s.input_tokens ?? 0) + (s.cache_read_tokens ?? 0) + (s.cache_write_tokens ?? 0)
+  const cacheHit = (s.cache_read_tokens ?? 0) > 0
+  return `${totalIn}${cacheHit ? '⚡' : ''}→${s.output_tokens ?? 0}`
+}
 import { useSpans } from '@/lib/queries'
 import { useSpanStream } from '@/composables/useSpanStream'
 
@@ -20,8 +30,9 @@ const rows = computed(() => {
     run_id: s.run_id.slice(0, 8),
     model: s.model ?? '—',
     duration: s.duration_ms != null ? `${s.duration_ms}ms` : '—',
-    tokens: s.input_tokens != null ? `${s.input_tokens}→${s.output_tokens}` : '—',
+    tokens: formatTokens(s),
     cost: s.cost_usd != null ? `$${s.cost_usd.toFixed(6)}` : '—',
+    cached: (s.cache_read_tokens ?? 0) > 0,
     status: s.error ? 'error' : 'ok',
     started: new Date(s.started_at).toLocaleTimeString(),
     _isNew: liveIds.has(s.id),
