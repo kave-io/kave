@@ -55,19 +55,15 @@ func (p *Proxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 	connector := trimmed[:slash]
 	upstreamPath := trimmed[slash:] // includes leading /
 
-	// Agent token from Authorization header
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		http.Error(w, "missing authorization", http.StatusUnauthorized)
-		return
-	}
-	agentID := strings.TrimPrefix(authHeader, "Bearer ")
-	if agentID == authHeader {
-		http.Error(w, "invalid authorization format: expected Bearer token", http.StatusUnauthorized)
-		return
+	// Agent token from Authorization header.
+	// No token → fallback to default agent (event mode: trace everything).
+	agentID := "default"
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		if token := strings.TrimPrefix(auth, "Bearer "); token != auth {
+			agentID = token
+		}
 	}
 
-	// Look up agent
 	agent, err := p.app.GetAgentByID(ctx, agentID)
 	if err != nil || agent == nil {
 		http.Error(w, "agent not found", http.StatusUnauthorized)

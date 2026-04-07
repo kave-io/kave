@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,7 +28,6 @@ func main() {
 
 	// Load config from YAML + environment
 	cfg := config.MustReadConfig(".")
-	log.Printf("Kave server starting:\n%s", cfg)
 
 	// Setup database (postgres or sqlite, depending on config)
 	var pool *pgxpool.Pool
@@ -89,20 +89,8 @@ func main() {
 		}
 	}
 
-	// Seed default workspace if it doesn't exist
-	seedCtx := context.Background()
-	if ws, _ := appStore.GetWorkspace(seedCtx, "default"); ws == nil {
-		now := time.Now().UnixMilli()
-		_ = appStore.CreateWorkspace(seedCtx, &corestore.Workspace{
-			ID:          "default",
-			Name:        "Default",
-			Slug:        "default",
-			Description: "Auto-created default workspace",
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		})
-		log.Println("created default workspace")
-	}
+	// Seed default workspace, policy, and agent
+	seedDefaults(context.Background(), appStore)
 
 	// Create and register proxy
 	proxyServer := proxy.New(appStore, encKey, pipeline)
@@ -123,7 +111,7 @@ func main() {
 
 	// Start HTTP server
 	addr := cfg.Server.Addr()
-	log.Printf("listening on %s", addr)
+	printBanner(addr)
 
 	server := &http.Server{
 		Addr:         addr,
@@ -136,4 +124,68 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+// seedDefaults ensures the default workspace, policy, and agent exist.
+// All defaults are permissive — event mode: trace everything, no auth or budget limits.
+func seedDefaults(ctx context.Context, app corestore.AppStore) {
+	now := time.Now().UnixMilli()
+
+	if ws, _ := app.GetWorkspace(ctx, "default"); ws == nil {
+		_ = app.CreateWorkspace(ctx, &corestore.Workspace{
+			ID: "default", Name: "Default", Slug: "default",
+			Description: "Auto-created default workspace",
+			CreatedAt:   now, UpdatedAt: now,
+		})
+	}
+
+	if p, _ := app.GetPolicy(ctx, "default"); p == nil {
+		_ = app.CreatePolicy(ctx, &corestore.Policy{
+			ID: "default", WorkspaceID: "default",
+			Name:              "Default Policy",
+			Description:       "Permissive — traces everything, no auth or budget limits",
+			AllowedConnectors: []string{"*"},
+			AllowedMethods:    []string{"*"},
+			CreatedAt:         now, UpdatedAt: now,
+		})
+	}
+
+	if a, _ := app.GetAgentByID(ctx, "default"); a == nil {
+		defPolicy := "default"
+		defBudget := 99999.0
+		_ = app.CreateAgent(ctx, &corestore.Agent{
+			ID: "default", WorkspaceID: "default",
+			Name:          "default",
+			Description:   "Default agent — unauthenticated proxy calls are traced here",
+			PolicyID:      &defPolicy,
+			MonthlyBudget: &defBudget,
+			Metadata:      map[string]any{},
+			CreatedAt:     now, UpdatedAt: now,
+		})
+	}
+}
+
+// printBanner prints the startup banner with connection instructions.
+func printBanner(addr string) {
+	host := addr
+	if strings.HasPrefix(addr, ":") {
+		host = "localhost" + addr
+	}
+	base := "http://" + host
+	fmt.Printf(`
+  ┌─────────────────────────────────────────────────────┐
+  │  kave  ready                                        │
+  │                                                     │
+  │  dashboard  → %s                      │
+  │                                                     │
+  │  point your AI at the proxy — no config needed:    │
+  │                                                     │
+  │  OpenAI     OPENAI_BASE_URL=%s/proxy/openai   │
+  │  Anthropic  ANTHROPIC_BASE_URL=%s/proxy/anthropic │
+  │  Ollama     OLLAMA_HOST=%s/proxy/ollama       │
+  │                                                     │
+  │  kave watch   →  tail traces in your terminal      │
+  └─────────────────────────────────────────────────────┘
+
+`, base, base, base, base)
 }

@@ -69,14 +69,14 @@ func (a *API) watchSpans(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				fmt.Fprintf(w, "data: %s\n\n", data)
-
-				// Advance cursor past this span
-				if span.CreatedAt > cursor {
-					cursor = span.CreatedAt
-				}
 			}
 
 			if len(spans) > 0 {
+				// Advance cursor past all returned spans
+				last := spans[len(spans)-1]
+				if last.StartedAt >= cursor {
+					cursor = last.StartedAt + 1
+				}
 				flusher.Flush()
 			}
 		}
