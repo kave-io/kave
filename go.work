@@ -4,6 +4,5 @@ use (
 	./cli
 	./connectors
 	./core
-	./sdk/go
 	./server
 )

@@ -57,10 +57,10 @@ client := kave.Wrap(openai.NewClient(apiKey),
 )
 ```
 
-Or point your existing agent at Kave's proxy — no code changes:
+Or point Claude Code at Kave's framework gateway — no code changes:
 
 ```bash
-export OPENAI_BASE_URL=https://your.kave.instance/proxy/openai
+export OPENAI_BASE_URL=https://your.kave.instance/frameworks/claude-code/openai
 ```
 
 ## The four modules
@@ -74,7 +74,7 @@ export OPENAI_BASE_URL=https://your.kave.instance/proxy/openai
 
 ## Connectors
 
-Kave works with everything — via native SDK wrappers, HTTP proxy, or OpenTelemetry:
+Kave works with everything — via framework gateways, native SDK wrappers, or OpenTelemetry:
 
 **Frameworks** — LangChain · LangGraph · CrewAI · OpenAI Agents SDK · OpenClaw · AutoGen · Google ADK  
 **Models** — OpenAI · Anthropic · Ollama · Gemini · Groq · Mistral · DeepSeek · any OpenAI-compatible endpoint  
@@ -87,7 +87,7 @@ Kave works with everything — via native SDK wrappers, HTTP proxy, or OpenTelem
 kave/
 ├── core/          # the engine — 4 modules, pure Go, zero dependencies
 ├── connectors/    # pluggable adapters for frameworks, models, tools, protocols
-├── server/        # deployable kave server (REST + gRPC + HTTP proxy)
+├── server/        # deployable kave server (REST + gRPC + framework gateway)
 ├── sdk/           # go · python · typescript · openapi spec
 ├── cli/           # kave CLI — init, watch, trace, simulate, deploy
 ├── dashboard/     # nuxt 4 web dashboard

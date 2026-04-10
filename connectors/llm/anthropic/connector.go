@@ -3,9 +3,13 @@ package anthropic
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/kave-io/kave/connectors"
+	"github.com/kave-io/kave/connectors/llm/shared"
+	"github.com/kave-io/kave/connectors/runtime"
 	"github.com/kave-io/kave/core/intercept"
+	"github.com/tidwall/gjson"
 )
 
 // APIVersion is the Anthropic API version this connector was built against.
@@ -37,4 +41,72 @@ func (c *Connector) Capabilities() connectors.Capabilities {
 		CanStream:        true,
 		APIVersion:       APIVersion,
 	}
+}
+
+func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*runtime.PreparedRequest, error) {
+	base, err := url.Parse("https://api.anthropic.com")
+	if err != nil {
+		return nil, err
+	}
+	base.Path = call.UpstreamPath
+	base.RawQuery = call.RawQuery
+
+	headers := runtime.CloneHeader(call.Header)
+	headers.Del("Authorization")
+	headers.Del("X-API-Key")
+	headers.Del("Connection")
+	headers.Del("Transfer-Encoding")
+	headers.Del("Accept-Encoding")
+	if credential != "" {
+		headers.Set("X-API-Key", credential)
+	}
+	headers.Set("Anthropic-Version", APIVersion)
+
+	return &runtime.PreparedRequest{
+		Method: call.Method,
+		URL:    base.String(),
+		Header: headers,
+		Body:   call.Body,
+	}, nil
+}
+
+func (c *Connector) ParseResponse(body []byte, _ string) (*intercept.Result, error) {
+	result := &intercept.Result{Body: body}
+
+	usage := &intercept.TokenUsage{
+		InputTokens:  int(gjson.GetBytes(body, "usage.input_tokens").Int()),
+		OutputTokens: int(gjson.GetBytes(body, "usage.output_tokens").Int()),
+		CacheRead:    int(gjson.GetBytes(body, "usage.cache_read_input_tokens").Int()),
+		CacheWrite:   int(gjson.GetBytes(body, "usage.cache_creation_input_tokens").Int()),
+		Model:        gjson.GetBytes(body, "model").String(),
+	}
+
+	if usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.Model == "" && usage.CacheRead == 0 && usage.CacheWrite == 0 {
+		for _, line := range shared.SplitSSEDataLines(body) {
+			if line == "" || line == "[DONE]" {
+				continue
+			}
+			if usage.InputTokens == 0 {
+				usage.InputTokens = int(gjson.Get(line, "message.usage.input_tokens").Int())
+			}
+			if usage.CacheRead == 0 {
+				usage.CacheRead = int(gjson.Get(line, "message.usage.cache_read_input_tokens").Int())
+			}
+			if usage.CacheWrite == 0 {
+				usage.CacheWrite = int(gjson.Get(line, "message.usage.cache_creation_input_tokens").Int())
+			}
+			if usage.OutputTokens == 0 {
+				usage.OutputTokens = int(gjson.Get(line, "usage.output_tokens").Int())
+			}
+			if usage.Model == "" {
+				usage.Model = gjson.Get(line, "message.model").String()
+			}
+		}
+	}
+
+	if usage.InputTokens != 0 || usage.OutputTokens != 0 || usage.Model != "" || usage.CacheRead != 0 || usage.CacheWrite != 0 {
+		result.TokenUsage = usage
+	}
+
+	return result, nil
 }

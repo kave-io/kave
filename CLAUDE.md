@@ -62,7 +62,7 @@ server/           github.com/kave-io/kave/server
 ├── infra/        — external services (postgres, redis, casbin, paseto, ollama, etc.)
 ├── api/          — REST API handlers
 ├── grpc/         — gRPC endpoints
-├── proxy/        — HTTP proxy for LLM calls
+├── gateway/      — framework-routed gateway for LLM calls
 ├── config/       — configuration loading
 ├── db/           — migrations
 └── main.go       — server entrypoint
@@ -282,7 +282,7 @@ Interceptors enforce policy, trace, validate, and cost on every action.
 - `connectors/` — interfaces + stubs for all LLM providers and frameworks
 - `server/infra/` — Postgres, Casbin, PASETO, AES crypto, connection pools, RiverQ
 - `server/api/` — full REST API: agents, policies, runs, spans, cost, credentials, workspaces, SSE watch
-- `server/proxy/` — LLM proxy with streaming (SSE tee), gzip-transparent, per-provider auth passthrough, UUID-based agent resolution, default agent fallback
+- `server/gateway/` — framework-routed LLM gateway with shared transport, UUID-based agent resolution, and streaming passthrough
 - `server/trace/` — Tracer with per-model pricing (Anthropic/OpenAI/Gemini/Groq/Mistral), cache token cost (read/write different rates)
 - `server/store/` — SQLite (AppStore) + DuckDB (SpanStore), auto-migrate, default workspace/policy/agent seeded on startup
 - `server/ui/` — Vue 3 dashboard embedded via `go:embed all:dist`, SPA handler
@@ -290,9 +290,9 @@ Interceptors enforce policy, trace, validate, and cost on every action.
 - `cli/cmd/` — root, start, stop, status, watch (SSE tail), socket commands
 
 ### Zero-config event mode
-Server starts with default workspace + policy (permissive) + agent. No Bearer token required on proxy — falls back to default agent. Startup banner prints proxy URLs. Run `ANTHROPIC_BASE_URL=http://localhost:8080/proxy/anthropic claude` to trace Claude Code itself.
+Server starts with default workspace + policy (permissive) + agent. No Bearer token required on the framework gateway — falls back to default agent. Startup banner prints framework URLs. Run `ANTHROPIC_BASE_URL=http://localhost:8080/frameworks/claude-code/anthropic claude` to trace Claude Code itself.
 
-### Proxy behavior
+### Framework gateway behavior
 - No auth header → default agent (event mode)
 - Bearer UUID → that agent
 - Bearer non-UUID (real API key) → default agent + key passed through to upstream

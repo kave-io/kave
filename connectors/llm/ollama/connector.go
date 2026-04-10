@@ -3,9 +3,12 @@ package ollama
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/kave-io/kave/connectors"
+	"github.com/kave-io/kave/connectors/runtime"
 	"github.com/kave-io/kave/core/intercept"
+	"github.com/tidwall/gjson"
 )
 
 type Connector struct {
@@ -38,4 +41,42 @@ func (c *Connector) Capabilities() connectors.Capabilities {
 		CanStream:        true,
 		APIVersion:       APIVersion,
 	}
+}
+
+func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*runtime.PreparedRequest, error) {
+	base, err := url.Parse("http://localhost:11434")
+	if err != nil {
+		return nil, err
+	}
+	base.Path = call.UpstreamPath
+	base.RawQuery = call.RawQuery
+
+	headers := runtime.CloneHeader(call.Header)
+	headers.Del("Authorization")
+	headers.Del("Connection")
+	headers.Del("Transfer-Encoding")
+	headers.Del("Accept-Encoding")
+	if credential != "" {
+		headers.Set("Authorization", "Bearer "+credential)
+	}
+
+	return &runtime.PreparedRequest{
+		Method: call.Method,
+		URL:    base.String(),
+		Header: headers,
+		Body:   call.Body,
+	}, nil
+}
+
+func (c *Connector) ParseResponse(body []byte, _ string) (*intercept.Result, error) {
+	result := &intercept.Result{Body: body}
+	usage := &intercept.TokenUsage{
+		InputTokens:  int(gjson.GetBytes(body, "prompt_eval_count").Int()),
+		OutputTokens: int(gjson.GetBytes(body, "eval_count").Int()),
+		Model:        gjson.GetBytes(body, "model").String(),
+	}
+	if usage.InputTokens != 0 || usage.OutputTokens != 0 || usage.Model != "" {
+		result.TokenUsage = usage
+	}
+	return result, nil
 }

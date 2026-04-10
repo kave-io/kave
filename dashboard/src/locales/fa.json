@@ -51,13 +51,13 @@
     },
     "traces": {
       "title": "ردیابی‌ها",
-      "subtitle": "هر فراخوانی LLM، استفاده از ابزار و عملی از طریق proxy.",
+      "subtitle": "هر فراخوانی LLM، استفاده از ابزار و عملی از طریق درگاه فریم‌ورک.",
       "live_indicator": "زنده",
       "connecting_indicator": "در حال اتصال",
       "count_loaded": "ردیابی بارگذاری‌شده",
       "waiting_traces": "منتظر ردیابی‌ها",
-      "waiting_hint": "هر فراخوانی LLM را به proxy هدایت کنید.",
-      "example_url": "OPENAI_BASE_URL=http://localhost:8080/proxy/openai",
+      "waiting_hint": "هر فراخوانی LLM در Claude Code را به درگاه فریم‌ورک هدایت کنید.",
+      "example_url": "OPENAI_BASE_URL=http://localhost:8080/frameworks/claude-code/openai",
       "error_loading": "ناموفق در بارگذاری span‌ها:",
       "table_time": "زمان",
       "table_run": "اجرا",
@@ -134,8 +134,8 @@
       "workspace": "فضای کاری",
       "workspace_hint": "انزوای فضای کاری چند‌مستاجر.",
       "workspace_id": "شناسه فضای کاری",
-      "proxy_urls": "URL‌های Proxy",
-      "proxy_hint": "فراخوانی‌های LLM را از طریق Kave مسیریابی کنید تا ردیابی، اعتبارسنجی و کنترل هزینه انجام شود.",
+      "proxy_urls": "URL‌های فریم‌ورک",
+      "proxy_hint": "فراخوانی‌های LLM در Claude Code را از طریق Kave مسیریابی کنید تا ردیابی، اعتبارسنجی و کنترل هزینه انجام شود.",
       "export": "صادرات",
       "preferences": "ترجیحات",
       "languages": "زبان‌ها",
@@ -143,8 +143,7 @@
       "proxy_openai": "OpenAI",
       "proxy_anthropic": "Anthropic",
       "proxy_gemini": "Google Gemini",
-      "proxy_groq": "Groq",
-      "proxy_mistral": "Mistral"
+      "proxy_ollama": "Ollama"
     }
   },
   "common": {

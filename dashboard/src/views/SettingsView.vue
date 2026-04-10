@@ -1,15 +1,30 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
 import { useLocaleStore, ALL_LOCALES } from '../stores/locale'
 import { useCurrencyStore, ALL_CURRENCIES } from '../stores/currency'
 import { workspaceId } from '@/stores/workspace'
+import { usePricingBook, useSavePricingBook } from '@/lib/queries'
 
 const { locale, t } = useI18n()
 const localeStore = useLocaleStore()
 const currencyStore = useCurrencyStore()
 const copiedUrl = ref<string | null>(null)
+const pricingEditor = ref('')
+const pricingError = ref<string | null>(null)
+const pricingQuery = usePricingBook()
+const savePricing = useSavePricingBook()
+
+watch(
+  () => pricingQuery.data.value,
+  (book) => {
+    if (book) {
+      pricingEditor.value = JSON.stringify(book, null, 2)
+    }
+  },
+  { immediate: true }
+)
 
 function handleLocaleToggle(code: string) {
   if (code === locale.value && localeStore.enabledLocales.length > 1) {
@@ -25,11 +40,10 @@ function handleLocaleToggle(code: string) {
 const baseUrl = window.location.origin
 
 const proxyUrls = computed(() => [
-  { name: t('pages.settings.proxy_openai'), url: `${baseUrl}/proxy/openai`, env: 'OPENAI_BASE_URL' },
-  { name: t('pages.settings.proxy_anthropic'), url: `${baseUrl}/proxy/anthropic`, env: 'ANTHROPIC_BASE_URL' },
-  { name: t('pages.settings.proxy_gemini'), url: `${baseUrl}/proxy/gemini`, env: 'GOOGLE_GENERATIVEAI_API_BASE' },
-  { name: t('pages.settings.proxy_groq'), url: `${baseUrl}/proxy/groq`, env: 'GROQ_BASE_URL' },
-  { name: t('pages.settings.proxy_mistral'), url: `${baseUrl}/proxy/mistral`, env: 'MISTRAL_API_BASE_URL' },
+  { name: t('pages.settings.proxy_openai'), url: `${baseUrl}/frameworks/claude-code/openai`, env: 'OPENAI_BASE_URL' },
+  { name: t('pages.settings.proxy_anthropic'), url: `${baseUrl}/frameworks/claude-code/anthropic`, env: 'ANTHROPIC_BASE_URL' },
+  { name: t('pages.settings.proxy_gemini'), url: `${baseUrl}/frameworks/claude-code/gemini`, env: 'GOOGLE_GENERATIVEAI_API_BASE' },
+  { name: t('pages.settings.proxy_ollama'), url: `${baseUrl}/frameworks/claude-code/ollama`, env: 'OLLAMA_HOST' },
 ])
 
 async function copyUrl(url: string) {
@@ -38,6 +52,16 @@ async function copyUrl(url: string) {
   setTimeout(() => {
     copiedUrl.value = null
   }, 2000)
+}
+
+async function savePricingBook() {
+  pricingError.value = null
+  try {
+    const parsed = JSON.parse(pricingEditor.value)
+    await savePricing.mutateAsync(parsed)
+  } catch (error) {
+    pricingError.value = error instanceof Error ? error.message : 'Failed to save pricing'
+  }
 }
 </script>
 
@@ -203,6 +227,37 @@ async function copyUrl(url: string) {
           </div>
         </UCard>
       </div>
+    </section>
+
+    <section class="space-y-4 border-t border-default pt-8">
+      <div>
+        <h2 class="text-base font-semibold">Pricing</h2>
+        <p class="text-sm text-muted mt-1">
+          Edit the active price book used for cost calculation. Changes apply immediately to new spans and budget entries.
+        </p>
+      </div>
+
+      <UCard class="rounded-xl space-y-4">
+        <UTextarea
+          v-model="pricingEditor"
+          :rows="18"
+          autoresize
+          class="font-mono"
+        />
+
+        <p v-if="pricingError" class="text-sm text-red-500">{{ pricingError }}</p>
+        <p v-else-if="savePricing.isSuccess.value" class="text-sm text-green-600">Pricing saved.</p>
+
+        <div class="flex justify-end">
+          <UButton
+            color="primary"
+            :loading="pricingQuery.isLoading.value || savePricing.isPending.value"
+            @click="savePricingBook"
+          >
+            Save Pricing
+          </UButton>
+        </div>
+      </UCard>
     </section>
   </div>
 </template>

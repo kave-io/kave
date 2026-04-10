@@ -9,17 +9,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kave-io/kave/core/intercept"
 	corestore "github.com/kave-io/kave/core/store"
-	"github.com/kave-io/kave/server/api"
+	"github.com/kave-io/kave/server/internal/config"
+	"github.com/kave-io/kave/server/internal/gateway"
+	storeimpl "github.com/kave-io/kave/server/internal/store"
+	"github.com/kave-io/kave/server/ops/cost"
+	"github.com/kave-io/kave/server/ops/trace"
+	porthttp "github.com/kave-io/kave/server/port/http"
 	"github.com/kave-io/kave/server/ui"
-	"github.com/kave-io/kave/server/config"
-	"github.com/kave-io/kave/server/cost"
-	postgresinfra "github.com/kave-io/kave/server/infra/postgres"
-	"github.com/kave-io/kave/server/proxy"
-	storeimpl "github.com/kave-io/kave/server/store"
-	"github.com/kave-io/kave/server/trace"
 )
 
 func main() {
@@ -29,53 +27,29 @@ func main() {
 	// Load config from YAML + environment
 	cfg := config.MustReadConfig(".")
 
-	// Setup database (postgres or sqlite, depending on config)
-	var pool *pgxpool.Pool
-	if cfg.Storage.Backend == "postgres" {
-		var err error
-		pool, err = postgresinfra.New(ctx, cfg.Postgres)
-		if err != nil {
-			log.Fatalf("postgres connection: %v", err)
-		}
-		defer pool.Close()
-
-		// Run migrations
-		if err := postgresinfra.Migrate(ctx, pool); err != nil {
-			log.Fatalf("postgres migrations: %v", err)
-		}
-	}
-
-	// Create AppStore and SpanStore (pool may be nil for sqlite/duckdb)
-	appStore, err := storeimpl.NewAppStore(cfg.Storage, pool)
+	storeManager, err := storeimpl.NewManager(ctx, cfg.Storage, cfg.Postgres)
 	if err != nil {
-		log.Fatalf("create app store: %v", err)
+		log.Fatalf("create stores: %v", err)
 	}
-	defer appStore.Close()
-
-	spanStore, err := storeimpl.NewSpanStore(cfg.Storage, pool)
+	defer storeManager.Close()
+	appStore := storeManager.AppStore()
+	costService, err := cost.NewService(ctx, appStore)
 	if err != nil {
-		log.Fatalf("create span store: %v", err)
+		log.Fatalf("create cost service: %v", err)
 	}
-	defer spanStore.Close()
 
-	// Run migrations on stores
 	if err := appStore.Migrate(ctx); err != nil {
 		log.Fatalf("app store migrations: %v", err)
-	}
-	if err := spanStore.Migrate(ctx); err != nil {
-		log.Fatalf("span store migrations: %v", err)
 	}
 
 	// Create pipeline interceptors in order: cost → trace
 	// (auth requires casbin config, skipped for now in local dev)
 	var interceptors []intercept.Interceptor
 
-	if pool != nil {
-		costInterceptor := cost.New(pool)
-		interceptors = append(interceptors, costInterceptor)
-	}
+	costInterceptor := cost.New(appStore, costService)
+	interceptors = append(interceptors, costInterceptor)
 
-	traceInterceptor := trace.New(spanStore)
+	traceInterceptor := trace.New(storeManager, costService)
 	interceptors = append(interceptors, traceInterceptor)
 
 	pipeline := intercept.New(interceptors...)
@@ -92,13 +66,13 @@ func main() {
 	// Seed default workspace, policy, and agent
 	seedDefaults(context.Background(), appStore)
 
-	// Create and register proxy
-	proxyServer := proxy.New(appStore, encKey, pipeline)
+	// Create and register framework gateway
+	gatewayServer := gateway.New(appStore, encKey, pipeline)
 	mux := http.NewServeMux()
-	proxyServer.RegisterRoutes(mux)
+	gatewayServer.RegisterRoutes(mux)
 
 	// Register REST API
-	api.New(appStore, spanStore, encKey).RegisterRoutes(mux)
+	porthttp.New(appStore, storeManager, costService, encKey).RegisterRoutes(mux)
 
 	// Register health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -118,7 +92,7 @@ func main() {
 		Handler:     mux,
 		ReadTimeout: 30 * time.Second,
 		// WriteTimeout is intentionally 0 (no timeout) to support streaming
-		// responses from the LLM proxy which can run for minutes.
+		// responses from the framework gateway which can run for minutes.
 		IdleTimeout: 120 * time.Second,
 	}
 
@@ -157,7 +131,7 @@ func seedDefaults(ctx context.Context, app corestore.AppStore) {
 		_ = app.CreateAgent(ctx, &corestore.Agent{
 			ID: "default", WorkspaceID: "default",
 			Name:          "default",
-			Description:   "Default agent — unauthenticated proxy calls are traced here",
+			Description:   "Default agent — unauthenticated framework gateway calls are traced here",
 			PolicyID:      &defPolicy,
 			MonthlyBudget: &defBudget,
 			Metadata:      map[string]any{},
@@ -177,16 +151,13 @@ func printBanner(addr string) {
   ┌─────────────────────────────────────────────────────┐
   │  kave  ready                                        │
   │                                                     │
-  │  dashboard  → %s                      │
+  │  dashboard  → %s                 │
   │                                                     │
-  │  point your AI at the proxy — no config needed:    │
+  │  point your AI at the framework gateway             │
   │                                                     │
-  │  OpenAI     OPENAI_BASE_URL=%s/proxy/openai   │
-  │  Anthropic  ANTHROPIC_BASE_URL=%s/proxy/anthropic │
-  │  Ollama     OLLAMA_HOST=%s/proxy/ollama       │
   │                                                     │
-  │  kave watch   →  tail traces in your terminal      │
+  │  kave watch   →  tail traces in your terminal       │
   └─────────────────────────────────────────────────────┘
 
-`, base, base, base, base)
+`, base)
 }

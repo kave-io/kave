@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query'
 import { api } from './fetch'
 import type { Ref } from 'vue'
-import type { Agent, Policy, Run, Span, SpendReport, CreateAgentRequest, CreatePolicyRequest } from '@/types/api'
+import type { Agent, Policy, Run, Span, SpendReport, CreateAgentRequest, CreatePolicyRequest, PriceBook } from '@/types/api'
 
 // ── Agents ────────────────────────────────────────────────────────────────────
 
@@ -135,5 +135,20 @@ export function useCostSummary(params?: { agentId?: string | Ref<string>; connec
       if (params?.model) q.set('model', params.model)
       return api.get<SpendReport>(`/cost/summary?${q}`)
     },
+  })
+}
+
+export function usePricingBook() {
+  return useQuery({
+    queryKey: ['settings', 'pricing'],
+    queryFn: () => api.get<PriceBook>('/settings/pricing'),
+  })
+}
+
+export function useSavePricingBook() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (data: PriceBook) => api.put<PriceBook, PriceBook>('/settings/pricing', data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings', 'pricing'] }),
   })
 }

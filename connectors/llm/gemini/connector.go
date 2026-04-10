@@ -3,9 +3,12 @@ package gemini
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"github.com/kave-io/kave/connectors"
+	"github.com/kave-io/kave/connectors/runtime"
 	"github.com/kave-io/kave/core/intercept"
+	"github.com/tidwall/gjson"
 )
 
 // APIVersion is the Gemini REST API version this connector was built against.
@@ -37,4 +40,53 @@ func (c *Connector) Capabilities() connectors.Capabilities {
 		CanStream:        true,
 		APIVersion:       APIVersion,
 	}
+}
+
+func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*runtime.PreparedRequest, error) {
+	base, err := url.Parse("https://generativelanguage.googleapis.com")
+	if err != nil {
+		return nil, err
+	}
+	base.Path = call.UpstreamPath
+	query := base.Query()
+	if call.RawQuery != "" {
+		if parsed, err := url.ParseQuery(call.RawQuery); err == nil {
+			for key, values := range parsed {
+				for _, value := range values {
+					query.Add(key, value)
+				}
+			}
+		}
+	}
+	if credential != "" {
+		query.Set("key", credential)
+	}
+	base.RawQuery = query.Encode()
+
+	headers := runtime.CloneHeader(call.Header)
+	headers.Del("Authorization")
+	headers.Del("X-API-Key")
+	headers.Del("Connection")
+	headers.Del("Transfer-Encoding")
+	headers.Del("Accept-Encoding")
+
+	return &runtime.PreparedRequest{
+		Method: call.Method,
+		URL:    base.String(),
+		Header: headers,
+		Body:   call.Body,
+	}, nil
+}
+
+func (c *Connector) ParseResponse(body []byte, _ string) (*intercept.Result, error) {
+	result := &intercept.Result{Body: body}
+	usage := &intercept.TokenUsage{
+		InputTokens:  int(gjson.GetBytes(body, "usageMetadata.promptTokenCount").Int()),
+		OutputTokens: int(gjson.GetBytes(body, "usageMetadata.candidatesTokenCount").Int()),
+		Model:        gjson.GetBytes(body, "modelVersion").String(),
+	}
+	if usage.InputTokens != 0 || usage.OutputTokens != 0 || usage.Model != "" {
+		result.TokenUsage = usage
+	}
+	return result, nil
 }

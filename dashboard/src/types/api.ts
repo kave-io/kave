@@ -70,6 +70,21 @@ export interface SpendReport {
   period_end: number   // UnixMilli
 }
 
+export interface PriceModel {
+  provider: string
+  match: string
+  source: string
+  input_per_million: number
+  output_per_million: number
+  cache_read_per_million: number
+  cache_write_per_million: number
+}
+
+export interface PriceBook {
+  version: string
+  entries: PriceModel[]
+}
+
 export interface CreateAgentRequest {
   workspace_id: string
   name: string

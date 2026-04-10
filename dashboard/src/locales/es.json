@@ -51,13 +51,13 @@
     },
     "traces": {
       "title": "Trazas",
-      "subtitle": "Cada llamada LLM, uso de herramientas y acción a través del proxy.",
+      "subtitle": "Cada llamada LLM, uso de herramientas y acción a través de la pasarela de framework.",
       "live_indicator": "EN VIVO",
       "connecting_indicator": "conectando",
       "count_loaded": "trazas cargadas",
       "waiting_traces": "Esperando rastros",
-      "waiting_hint": "Dirija cualquier llamada LLM al proxy.",
-      "example_url": "OPENAI_BASE_URL=http://localhost:8080/proxy/openai",
+      "waiting_hint": "Dirija cualquier llamada LLM de Claude Code a la pasarela de framework.",
+      "example_url": "OPENAI_BASE_URL=http://localhost:8080/frameworks/claude-code/openai",
       "error_loading": "Error al cargar tramos:",
       "table_time": "Hora",
       "table_run": "Ejecución",
@@ -134,8 +134,8 @@
       "workspace": "Espacio de Trabajo",
       "workspace_hint": "Aislamiento multiinquilino del espacio de trabajo.",
       "workspace_id": "ID del Espacio de Trabajo",
-      "proxy_urls": "URLs de Proxy",
-      "proxy_hint": "Enrute llamadas LLM a través de Kave para rastrear, validar y controlar costos.",
+      "proxy_urls": "URLs de Framework",
+      "proxy_hint": "Enrute llamadas LLM de Claude Code a través de Kave para rastrear, validar y controlar costos.",
       "export": "Exportar",
       "preferences": "Preferencias",
       "languages": "Idiomas",
@@ -143,8 +143,7 @@
       "proxy_openai": "OpenAI",
       "proxy_anthropic": "Anthropic",
       "proxy_gemini": "Google Gemini",
-      "proxy_groq": "Groq",
-      "proxy_mistral": "Mistral"
+      "proxy_ollama": "Ollama"
     }
   },
   "common": {

@@ -38,7 +38,7 @@ any OpenAI-compatible endpoint, OpenAI Agents SDK.
 
 **Action model fit:** perfect. HTTP req/resp serializes cleanly to []byte JSON.
 
-**Connector lives in:** `server/proxy/` — this is the proxy server, not a connectors/ package entry.
+**Connector lives in:** the framework-routed server gateway — provider logic lives in `connectors/llm/<provider>/`, while the server owns transport, policy, and credential orchestration.
 Provider-specific logic (token extraction, pricing) lives in `connectors/llm/<provider>/`.
 
 ---

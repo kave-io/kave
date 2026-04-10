@@ -29,6 +29,13 @@ type AppStore interface {
 	UpdateRun(ctx context.Context, id string, update *RunUpdate) error
 	ListRuns(ctx context.Context, filter *RunFilter) ([]*Run, error)
 
+	// Action
+	CreateAction(ctx context.Context, a *ActionRecord) error
+
+	// Pricing
+	GetPriceBook(ctx context.Context) (*PriceBook, error)
+	SavePriceBook(ctx context.Context, book *PriceBook) error
+
 	// Budget
 	InsertBudgetEntry(ctx context.Context, entry *BudgetEntry) error
 	AddRunSpend(ctx context.Context, runID string, costUSD float64) error
@@ -147,6 +154,50 @@ type RunFilter struct {
 	Limit       int
 }
 
+// ActionRecord is the persisted representation of an intercepted action.
+type ActionRecord struct {
+	ID         string
+	RunID      string
+	ActionType string
+	Connector  string
+	Method     string
+	Input      []byte
+	Metadata   map[string]any
+	CreatedAt  int64 // UnixMilli
+}
+
+// PriceSnapshot captures the exact price inputs used to compute a cost.
+// Snapshots are stored with budget entries and spans so historical cost remains stable.
+type PriceSnapshot struct {
+	Version              string
+	Provider             string
+	Model                string
+	Match                string
+	Source               string
+	InputPerMillion      float64
+	OutputPerMillion     float64
+	CacheReadPerMillion  float64
+	CacheWritePerMillion float64
+	ResolvedAt           int64 // UnixMilli
+}
+
+// PriceModel defines one provider/model pricing rule.
+type PriceModel struct {
+	Provider             string
+	Match                string
+	Source               string
+	InputPerMillion      float64
+	OutputPerMillion     float64
+	CacheReadPerMillion  float64
+	CacheWritePerMillion float64
+}
+
+// PriceBook is the active pricing configuration used for metering.
+type PriceBook struct {
+	Version string
+	Entries []PriceModel
+}
+
 // BudgetEntry is one record in the append-only budget ledger.
 type BudgetEntry struct {
 	ID               string
@@ -162,6 +213,8 @@ type BudgetEntry struct {
 	CacheReadTokens  int
 	CacheWriteTokens int
 	CostUSD          float64
+	PriceVersion     string
+	PriceSnapshot    *PriceSnapshot
 	Metadata         map[string]any
 	CreatedAt        int64 // UnixMilli
 }
@@ -228,6 +281,8 @@ type SpanRow struct {
 	CacheWriteTokens *int
 	Model            *string
 	CostUSD          *float64
+	PriceVersion     *string
+	PriceSnapshot    *PriceSnapshot
 	CreatedAt        int64 // UnixMilli
 }
 

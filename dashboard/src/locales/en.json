@@ -51,13 +51,13 @@
     },
     "traces": {
       "title": "Traces",
-      "subtitle": "Every LLM call, tool use, and action through the proxy.",
+      "subtitle": "Every LLM call, tool use, and action through the framework gateway.",
       "live_indicator": "LIVE",
       "connecting_indicator": "connecting",
       "count_loaded": "traces loaded",
       "waiting_traces": "Waiting for traces",
-      "waiting_hint": "Point any LLM call at the proxy.",
-      "example_url": "OPENAI_BASE_URL=http://localhost:8080/proxy/openai",
+      "waiting_hint": "Point any Claude Code LLM call at the framework gateway.",
+      "example_url": "OPENAI_BASE_URL=http://localhost:8080/frameworks/claude-code/openai",
       "error_loading": "Failed to load spans:",
       "table_time": "Time",
       "table_run": "Run",
@@ -134,8 +134,8 @@
       "workspace": "Workspace",
       "workspace_hint": "Multi-tenant workspace isolation.",
       "workspace_id": "Workspace ID",
-      "proxy_urls": "Proxy URLs",
-      "proxy_hint": "Route LLM calls through Kave to trace, validate, and cost-control.",
+      "proxy_urls": "Framework URLs",
+      "proxy_hint": "Route Claude Code LLM calls through Kave to trace, validate, and cost-control.",
       "export": "Export",
       "preferences": "Preferences",
       "languages": "Languages",
@@ -143,8 +143,7 @@
       "proxy_openai": "OpenAI",
       "proxy_anthropic": "Anthropic",
       "proxy_gemini": "Google Gemini",
-      "proxy_groq": "Groq",
-      "proxy_mistral": "Mistral"
+      "proxy_ollama": "Ollama"
     }
   },
   "common": {
