@@ -1,0 +1,25 @@
+services:
+  buf:
+    build:
+      context: .
+      dockerfile: Dockerfile.buf
+    container_name: buf
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - .:/workspace
+      - buf-go-modules:/go/pkg/mod
+      - buf-go-cache:/root/.cache/go-build
+    working_dir: /workspace
+    environment:
+      FORCE_COLOR: "1"
+      GO111MODULE: "on"
+      HOME: /tmp
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null
+
+volumes:
+  buf-go-modules:
+    driver: local
+  buf-go-cache:
+    driver: local

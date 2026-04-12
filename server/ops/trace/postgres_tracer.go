@@ -3,17 +3,20 @@ package trace
 import (
 	"context"
 
-	"github.com/kave-io/kave/core/intercept"
+	"github.com/google/uuid"
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/timex"
-	"github.com/kave-io/kave/core/store"
+	"github.com/kave-io/kave/core/runtime"
+	coreStore "github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/ops/cost"
 )
 
 type SpanStoreResolver interface {
-	SpanStore(ctx context.Context, agentID string) (store.SpanStore, error)
+	SpanStore(ctx context.Context, agentID string) (coreStore.SpanStore, error)
 }
 
-// Tracer implements intercept.Interceptor and routes spans to the configured store.
+// Tracer implements pipeline.Interceptor and routes spans to the configured store.
 type Tracer struct {
 	spans  SpanStoreResolver
 	prices *cost.Service
@@ -24,51 +27,78 @@ func New(spans SpanStoreResolver, prices *cost.Service) *Tracer {
 }
 
 // Before stamps the action start time.
-func (t *Tracer) Before(ctx context.Context, action *intercept.Action) (*intercept.Action, error) {
+func (t *Tracer) Before(ctx context.Context, action *runtime.Action) (*runtime.Action, error) {
 	action.StartedAt = timex.Now()
 	return action, nil
 }
 
 // After records the span with timing, tokens, cost.
-func (t *Tracer) After(ctx context.Context, action *intercept.Action, result *intercept.Result) error {
-	action.EndedAt = timex.Now()
+func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipeline.Result) error {
+	now := timex.Now()
+	endedAtMS := int64(now)
+	startedAtMS := int64(action.StartedAt)
+	durationMs := int64(timex.Since(action.StartedAt))
 
 	spanStore, err := t.spans.SpanStore(ctx, action.AgentID)
 	if err != nil {
 		return err
 	}
 
-	now := int64(timex.Now())
-	endedAt := int64(action.EndedAt)
+	spanID := action.ID
+	if spanID == "" {
+		spanID = uuid.NewString()
+	}
 
-	row := &store.SpanRow{
-		ID:         action.ID,
+	row := &runtimemodel.SpanRow{
+		ID:         spanID,
+		ProjectID:  action.ProjectID,
+		EnvID:      action.EnvID,
+		AgentID:    action.AgentID,
 		RunID:      action.RunID,
 		ActionID:   action.ID,
-		StartedAt:  int64(action.StartedAt),
-		EndedAt:    &endedAt,
-		DurationMs: timex.Since(action.StartedAt),
+		Name:       action.Connector + "." + action.Method,
+		Kind:       "action",
+		Source:     "intercept",
+		Connector:  action.Connector,
+		StartedAt:  startedAtMS,
+		EndedAt:    &endedAtMS,
+		DurationMs: durationMs,
 		Error:      action.Error,
-		CreatedAt:  now,
+		TraceID:    action.RunID, // Kave-native: TraceID defaults to RunID
+		RootSpanID: spanID,
+		CreatedAt:  endedAtMS,
 	}
 
 	if result != nil {
-		action.Output = result.Body
+		if len(result.Body) > 0 {
+			action.Output = &result.Body
+			row.Output = &result.Body
+		}
 
 		if u := result.TokenUsage; u != nil {
 			row.InputTokens = &u.InputTokens
 			row.OutputTokens = &u.OutputTokens
-			if u.CacheRead > 0 {
-				row.CacheReadTokens = &u.CacheRead
+			ptrIfPos := func(v int) *int {
+				if v > 0 {
+					return &v
+				}
+				return nil
 			}
-			if u.CacheWrite > 0 {
-				row.CacheWriteTokens = &u.CacheWrite
-			}
+			row.CacheReadTokens = ptrIfPos(u.CacheRead)
+			row.CacheWriteTokens = ptrIfPos(u.CacheWrite)
+			row.ReasoningTokens = ptrIfPos(u.Reasoning)
+			row.AudioInputTokens = ptrIfPos(u.AudioInput)
+			row.AudioOutputTokens = ptrIfPos(u.AudioOutput)
+			row.ImageUnits = ptrIfPos(u.ImageUnits)
+
 			if u.Model != "" {
 				row.Model = &u.Model
 				if snapshot := t.prices.Snapshot(action.Connector, u.Model); snapshot != nil {
-					costUSD := cost.Calculate(snapshot, u.InputTokens, u.OutputTokens, u.CacheRead, u.CacheWrite).Dollars()
-					row.CostUSD = &costUSD
+					c := cost.Calculate(snapshot,
+						u.InputTokens, u.OutputTokens, u.CacheRead, u.CacheWrite,
+						u.Reasoning, u.AudioInput, u.AudioOutput, u.ImageUnits,
+						0, 0, 0, 0)
+					row.Cost = &c
 					row.PriceVersion = &snapshot.Version
 					row.PriceSnapshot = snapshot
 				}
@@ -76,7 +106,9 @@ func (t *Tracer) After(ctx context.Context, action *intercept.Action, result *in
 		}
 	}
 
-	return spanStore.WriteSpan(ctx, row)
+	return spanStore.OpenSpan(ctx, row)
 }
 
 func (t *Tracer) Name() string { return "tracer" }
+
+var _ pipeline.Interceptor = (*Tracer)(nil)

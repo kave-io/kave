@@ -1,297 +1,177 @@
-// Package store defines storage interfaces and data types for the Kave control plane.
-// These interfaces are implemented by server/store/* packages using SQLite, Postgres, and DuckDB.
+// Package store defines storage interfaces for the Kave control plane.
+// Implementations live in server/store/* packages using SQLite, Postgres, and DuckDB.
 package store
 
-import "context"
+import (
+	"context"
 
-// AppStore is the primary application data store.
-// It holds workspaces, agents, policies, runs, budget ledger, tokens, and credentials.
-type AppStore interface {
-	// Workspace
-	CreateWorkspace(ctx context.Context, w *Workspace) error
-	GetWorkspace(ctx context.Context, id string) (*Workspace, error)
+	controlmodel "github.com/kave-io/kave/core/model/control"
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pkg/money"
+)
 
-	// Agent
-	CreateAgent(ctx context.Context, a *Agent) error
-	GetAgentByID(ctx context.Context, id string) (*Agent, error)
-	GetAgentByName(ctx context.Context, workspaceID, name string) (*Agent, error)
-	UpdateAgent(ctx context.Context, id string, update *AgentUpdate) error
-	ListAgents(ctx context.Context, workspaceID string) ([]*Agent, error)
+// OrgStore owns organization persistence.
+type OrgStore interface {
+	CreateOrg(ctx context.Context, o *controlmodel.Organization) error
+	GetOrg(ctx context.Context, id string) (*controlmodel.Organization, error)
+	GetOrgBySlug(ctx context.Context, slug string) (*controlmodel.Organization, error)
+}
 
-	// Policy
-	CreatePolicy(ctx context.Context, p *Policy) error
-	GetPolicy(ctx context.Context, id string) (*Policy, error)
-	GetAgentPolicy(ctx context.Context, agentID string) (*Policy, error)
+// UserStore owns user persistence.
+type UserStore interface {
+	CreateUser(ctx context.Context, u *controlmodel.User) error
+	GetUser(ctx context.Context, id string) (*controlmodel.User, error)
+	GetUserByEmail(ctx context.Context, orgID, email string) (*controlmodel.User, error)
+	UpdateUser(ctx context.Context, id string, update *controlmodel.UserUpdate) error
+}
 
-	// Run
-	CreateRun(ctx context.Context, r *Run) error
-	GetRunByID(ctx context.Context, id string) (*Run, error)
-	UpdateRun(ctx context.Context, id string, update *RunUpdate) error
-	ListRuns(ctx context.Context, filter *RunFilter) ([]*Run, error)
+// MembershipStore owns org membership persistence.
+type MembershipStore interface {
+	AddMember(ctx context.Context, m *controlmodel.Membership) error
+	GetMembership(ctx context.Context, orgID, userID string) (*controlmodel.Membership, error)
+	ListMembers(ctx context.Context, orgID string) ([]*controlmodel.Membership, error)
+	RemoveMember(ctx context.Context, orgID, userID string) error
+}
 
-	// Action
-	CreateAction(ctx context.Context, a *ActionRecord) error
+// ProjectStore owns project persistence.
+type ProjectStore interface {
+	CreateProject(ctx context.Context, p *controlmodel.Project) error
+	GetProject(ctx context.Context, id string) (*controlmodel.Project, error)
+	ListProjects(ctx context.Context, orgID string) ([]*controlmodel.Project, error)
+}
 
-	// Pricing
-	GetPriceBook(ctx context.Context) (*PriceBook, error)
-	SavePriceBook(ctx context.Context, book *PriceBook) error
+// EnvironmentStore owns environment persistence.
+type EnvironmentStore interface {
+	CreateEnvironment(ctx context.Context, e *controlmodel.Environment) error
+	GetEnvironment(ctx context.Context, id string) (*controlmodel.Environment, error)
+	GetEnvironmentBySlug(ctx context.Context, projectID, slug string) (*controlmodel.Environment, error)
+	ListEnvironments(ctx context.Context, projectID string) ([]*controlmodel.Environment, error)
+}
 
-	// Budget
-	InsertBudgetEntry(ctx context.Context, entry *BudgetEntry) error
-	AddRunSpend(ctx context.Context, runID string, costUSD float64) error
-	SumAgentSpend(ctx context.Context, agentID string, sinceMs int64) (float64, error)
-	GetSpendReport(ctx context.Context, filter *SpendFilter) (*SpendReport, error)
+// AgentStore owns agent persistence.
+type AgentStore interface {
+	CreateAgent(ctx context.Context, a *controlmodel.Agent) error
+	GetAgentByID(ctx context.Context, id string) (*controlmodel.Agent, error)
+	GetAgentByName(ctx context.Context, envID, name string) (*controlmodel.Agent, error)
+	UpdateAgent(ctx context.Context, id string, update *controlmodel.AgentUpdate) error
+	ListAgents(ctx context.Context, envID string) ([]*controlmodel.Agent, error)
+}
 
-	// Tokens
-	InsertAgentToken(ctx context.Context, token *AgentToken) error
-	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
-	InsertRevokedToken(ctx context.Context, tokenID string) error
+// PolicyStore owns policy persistence.
+type PolicyStore interface {
+	CreatePolicy(ctx context.Context, p *controlmodel.PolicyRecord) error
+	GetPolicy(ctx context.Context, id string) (*controlmodel.PolicyRecord, error)
+	GetAgentPolicy(ctx context.Context, agentID string) (*controlmodel.PolicyRecord, error)
+	ListPolicies(ctx context.Context, envID string) ([]*controlmodel.PolicyRecord, error)
+}
 
-	// Credentials
-	GetCredential(ctx context.Context, workspaceID, connector string) (*Credential, error)
-	StoreCredential(ctx context.Context, c *Credential) error
-	DeleteCredential(ctx context.Context, id string) error
+// RunStore owns run persistence.
+type RunStore interface {
+	CreateRun(ctx context.Context, r *runtimemodel.RunRecord) error
+	GetRunByID(ctx context.Context, id string) (*runtimemodel.RunRecord, error)
+	GetRunByIdempotencyKey(ctx context.Context, envID, key string) (*runtimemodel.RunRecord, error)
+	UpdateRun(ctx context.Context, id string, update *runtimemodel.RunUpdate) error
+	ListRuns(ctx context.Context, filter *runtimemodel.RunFilter) ([]*runtimemodel.RunRecord, error)
+}
+
+// ActionStore owns action persistence.
+type ActionStore interface {
+	CreateAction(ctx context.Context, a *runtimemodel.ActionRecord) error
+	GetAction(ctx context.Context, id string) (*runtimemodel.ActionRecord, error)
+	ListActionsByRun(ctx context.Context, runID string) ([]*runtimemodel.ActionRecord, error)
+}
+
+// CostStore owns price book and budget ledger persistence.
+type CostStore interface {
+	GetPriceBook(ctx context.Context) (*runtimemodel.PriceBook, error)
+	SavePriceBook(ctx context.Context, book *runtimemodel.PriceBook) error
+	InsertBudgetEntry(ctx context.Context, entry *runtimemodel.BudgetEntry) error
+	AddRunSpend(ctx context.Context, runID string, cost money.Amount) error
+	SumAgentSpend(ctx context.Context, agentID string, sinceMs int64) (money.Amount, error)
+	GetSpendReport(ctx context.Context, filter *runtimemodel.SpendFilter) (*runtimemodel.SpendReport, error)
+}
+
+// TokenStore owns agent token issuance and lifecycle.
+// Stores only the hash of the raw token; raw token is shown once at creation then never persisted.
+type TokenStore interface {
+	// Issuance
+	InsertAgentToken(ctx context.Context, token *controlmodel.AgentToken) error
+
+	// Lookup by hash (never by raw token)
+	GetTokenByHash(ctx context.Context, hash string) (*controlmodel.AgentToken, error)
 
 	// Lifecycle
+	RevokeToken(ctx context.Context, tokenID, revokedBy, reason string) error
+	TouchToken(ctx context.Context, tokenID string) error // updates last_used_at; async-safe
+
+	// Legacy: deny-list for fast JWT rejection (optional optimization, internal to store implementation)
+	// Deprecated: use RevokedAt field on AgentToken instead.
+	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
+	InsertRevokedToken(ctx context.Context, tokenID string) error
+}
+
+// CredentialStore owns outbound connector secret persistence.
+// Supports all four tiers: external reference, encrypted local, ephemeral, pass-through.
+type CredentialStore interface {
+	// CRUD
+	GetCredential(ctx context.Context, id string) (*controlmodel.ConnectorCredential, error)
+	StoreCredential(ctx context.Context, c *controlmodel.ConnectorCredential) error
+	DeleteCredential(ctx context.Context, id string) error
+	ListCredentials(ctx context.Context, envID string) ([]*controlmodel.ConnectorCredential, error)
+
+	// Lookup: policy-driven resolution (not singleton by connector).
+	// Fallback chain: exact label match → "primary" label → any active credential for this connector.
+	// Returns ErrNoCredential if nothing found — caller decides whether to fall through to passthrough.
+	ResolveCredential(ctx context.Context, filter *controlmodel.CredentialFilter) (*controlmodel.ConnectorCredential, error)
+
+	// Lifecycle mutations
+	RotateCredential(ctx context.Context, id string, newBlob []byte, wrappingKeyID, rotatedBy string) error
+	RevokeCredential(ctx context.Context, id string, revokedBy, reason string) error
+	TouchCredential(ctx context.Context, id string) error // updates last_used_at; async-safe
+}
+
+// StoreLifecycle owns transactional and migration behavior.
+type StoreLifecycle interface {
 	WithTx(ctx context.Context, fn func(AppStore) error) error
 	Migrate(ctx context.Context) error
 	Close() error
 }
 
+// AppStore is the primary application data store.
+type AppStore interface {
+	OrgStore
+	UserStore
+	MembershipStore
+	ProjectStore
+	EnvironmentStore
+	AgentStore
+	PolicyStore
+	RunStore
+	ActionStore
+	CostStore
+	TokenStore
+	CredentialStore
+	StoreLifecycle
+}
+
 // SpanStore holds trace spans. Separated from AppStore because it uses a
 // different backend optimized for append-heavy analytical queries (DuckDB by default).
 type SpanStore interface {
-	WriteSpan(ctx context.Context, span *SpanRow) error
-	UpdateSpan(ctx context.Context, span *SpanRow) error
-	GetSpan(ctx context.Context, spanID string) (*SpanRow, error)
-	QuerySpans(ctx context.Context, filter *SpanFilter) ([]*SpanRow, error)
-	SpendByDimension(ctx context.Context, groupBy string, filter *SpanFilter) (map[string]float64, error)
+	OpenSpan(ctx context.Context, span *runtimemodel.SpanRow) error
+	CloseSpan(ctx context.Context, spanID string, end *runtimemodel.SpanEnd) error
+	GetSpan(ctx context.Context, spanID string) (*runtimemodel.SpanRow, error)
+	QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error)
+	SpendByDimension(ctx context.Context, groupBy string, filter *runtimemodel.SpanFilter) (map[string]money.Amount, error)
 	Migrate(ctx context.Context) error
 	Close() error
 }
 
-// ── Data types ────────────────────────────────────────────────────────────────
-
-// Workspace is the multi-tenancy root.
-type Workspace struct {
-	ID          string
-	Name        string
-	Slug        string
-	Description string
-	CreatedAt   int64 // UnixMilli
-	UpdatedAt   int64 // UnixMilli
-}
-
-// Agent is a registered AI agent identity.
-type Agent struct {
-	ID            string
-	WorkspaceID   string
-	Name          string
-	Description   string
-	PolicyID      *string
-	MonthlyBudget *float64
-	Metadata      map[string]any
-	CreatedAt     int64 // UnixMilli
-	UpdatedAt     int64 // UnixMilli
-}
-
-// AgentUpdate holds partial update fields for an agent. Nil fields are not updated.
-type AgentUpdate struct {
-	Description   *string
-	PolicyID      *string
-	MonthlyBudget *float64
-	Metadata      map[string]any
-}
-
-// Policy defines what an agent is allowed to do.
-type Policy struct {
-	ID                string
-	WorkspaceID       string
-	Name              string
-	Description       string
-	AllowedConnectors []string
-	AllowedMethods    []string
-	BudgetCapUSD      float64
-	Config            map[string]any
-	CreatedAt         int64 // UnixMilli
-	UpdatedAt         int64 // UnixMilli
-}
-
-// Run represents one agent task execution from start to finish.
-type Run struct {
-	ID           string
-	WorkspaceID  string
-	AgentID      string
-	PolicyID     *string
-	Name         string
-	Status       string
-	BudgetCapUSD float64
-	SpentUSD     float64
-	Metadata     map[string]any
-	ErrorMessage *string
-	StartedAt    int64  // UnixMilli
-	EndedAt      *int64 // UnixMilli; nil if still running
-	CreatedAt    int64  // UnixMilli
-	UpdatedAt    int64  // UnixMilli
-}
-
-// RunUpdate holds partial update fields for a run. Nil fields are not updated.
-type RunUpdate struct {
-	Status       *string
-	SpentUSD     *float64
-	ErrorMessage *string
-	EndedAt      *int64
-	Metadata     map[string]any
-}
-
-// RunFilter filters ListRuns queries.
-type RunFilter struct {
-	WorkspaceID string
-	AgentID     string
-	Status      string
-	FromMs      *int64
-	ToMs        *int64
-	Limit       int
-}
-
-// ActionRecord is the persisted representation of an intercepted action.
-type ActionRecord struct {
-	ID         string
-	RunID      string
-	ActionType string
-	Connector  string
-	Method     string
-	Input      []byte
-	Metadata   map[string]any
-	CreatedAt  int64 // UnixMilli
-}
-
-// PriceSnapshot captures the exact price inputs used to compute a cost.
-// Snapshots are stored with budget entries and spans so historical cost remains stable.
-type PriceSnapshot struct {
-	Version              string
-	Provider             string
-	Model                string
-	Match                string
-	Source               string
-	InputPerMillion      float64
-	OutputPerMillion     float64
-	CacheReadPerMillion  float64
-	CacheWritePerMillion float64
-	ResolvedAt           int64 // UnixMilli
-}
-
-// PriceModel defines one provider/model pricing rule.
-type PriceModel struct {
-	Provider             string
-	Match                string
-	Source               string
-	InputPerMillion      float64
-	OutputPerMillion     float64
-	CacheReadPerMillion  float64
-	CacheWritePerMillion float64
-}
-
-// PriceBook is the active pricing configuration used for metering.
-type PriceBook struct {
-	Version string
-	Entries []PriceModel
-}
-
-// BudgetEntry is one record in the append-only budget ledger.
-type BudgetEntry struct {
-	ID               string
-	WorkspaceID      string
-	AgentID          string
-	RunID            string
-	ActionID         *string
-	SpanID           *string
-	Connector        string
-	Model            string
-	InputTokens      int
-	OutputTokens     int
-	CacheReadTokens  int
-	CacheWriteTokens int
-	CostUSD          float64
-	PriceVersion     string
-	PriceSnapshot    *PriceSnapshot
-	Metadata         map[string]any
-	CreatedAt        int64 // UnixMilli
-}
-
-// SpendFilter filters spend queries.
-type SpendFilter struct {
-	AgentID   string
-	Connector string
-	Model     string
-	FromMs    *int64
-	ToMs      *int64
-}
-
-// SpendReport is the result of an aggregated spend query.
-type SpendReport struct {
-	TotalUSD    float64
-	ByAgent     map[string]float64
-	ByConnector map[string]float64
-	ByModel     map[string]float64
-	PeriodStart int64 // UnixMilli
-	PeriodEnd   int64 // UnixMilli
-}
-
-// AgentToken is an authorization token issued to an agent.
-type AgentToken struct {
-	ID           string
-	AgentID      string
-	Connectors   []string
-	Methods      []string
-	BudgetCapUSD *float64
-	ExpiresAt    int64 // UnixMilli
-	CreatedAt    int64 // UnixMilli
-}
-
-// Credential holds an encrypted API key for a connector.
-type Credential struct {
-	ID          string
-	WorkspaceID string
-	Connector   string
-	Label       string
-	KeyHash     string
-	Encrypted   []byte
-	LastUsedAt  *int64 // UnixMilli
-	CreatedAt   int64  // UnixMilli
-}
-
-// SpanRow is the flat database representation of a trace span.
-type SpanRow struct {
-	ID               string
-	RunID            string
-	ActionID         string
-	ParentID         *string
-	Name             string
-	StartedAt        int64  // UnixMilli
-	EndedAt          *int64 // UnixMilli
-	DurationMs       int64
-	Input            []byte
-	Output           []byte
-	Tags             []byte
-	Error            *string
-	InputTokens      *int
-	OutputTokens     *int
-	CacheReadTokens  *int
-	CacheWriteTokens *int
-	Model            *string
-	CostUSD          *float64
-	PriceVersion     *string
-	PriceSnapshot    *PriceSnapshot
-	CreatedAt        int64 // UnixMilli
-}
-
-// SpanFilter filters QuerySpans queries.
-type SpanFilter struct {
-	RunID    string
-	ActionID string
-	FromMs   *int64
-	ToMs     *int64
-	HasError *bool
-	Limit    int
+// AuditStore holds append-only audit logs.
+// Separated from AppStore: different backend may be preferred for compliance, and the
+// write-only append pattern is distinct from the mutable control-plane data.
+type AuditStore interface {
+	AppendAudit(ctx context.Context, entry *controlmodel.AuditLog) error
+	QueryAudits(ctx context.Context, filter *controlmodel.AuditFilter) ([]*controlmodel.AuditLog, error)
+	Migrate(ctx context.Context) error
+	Close() error
 }

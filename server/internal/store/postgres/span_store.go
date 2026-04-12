@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 )
+
+var _ store.SpanStore = (*PostgresSpanStore)(nil)
 
 // PostgresSpanStore implements store.SpanStore using Postgres.
 // Unlike DuckDB, Postgres handles concurrent writes natively so no buffering is needed.
@@ -16,7 +21,7 @@ type PostgresSpanStore struct {
 	pool *pgxpool.Pool
 }
 
-// New creates a new Postgres span store.
+// NewSpanStore creates a new Postgres span store.
 func NewSpanStore(pool *pgxpool.Pool) *PostgresSpanStore {
 	return &PostgresSpanStore{pool: pool}
 }
@@ -32,78 +37,203 @@ func (p *PostgresSpanStore) Migrate(ctx context.Context) error {
 	return nil
 }
 
-// WriteSpan inserts a new span.
-func (p *PostgresSpanStore) WriteSpan(ctx context.Context, span *store.SpanRow) error {
-	snapshotJSON, _ := json.Marshal(span.PriceSnapshot)
+// OpenSpan inserts a new span.
+func (p *PostgresSpanStore) OpenSpan(ctx context.Context, span *runtimemodel.SpanRow) error {
+	var costUSD *float64
+	if span.Cost != nil {
+		v := span.Cost.Dollars()
+		costUSD = &v
+	}
+	var snapshotJSON []byte
+	if span.PriceSnapshot != nil {
+		snapshotJSON, _ = json.Marshal(span.PriceSnapshot)
+	}
+	var validationMeta []byte
+	if len(span.ValidationMeta) > 0 {
+		validationMeta = span.ValidationMeta
+	}
+
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms, input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model, cost_usd, price_version, price_snapshot, tags, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-	`, span.ID, span.RunID, span.ActionID, span.ParentID, span.Name, pgTime(span.StartedAt), ptrPgTime(span.EndedAt), span.DurationMs, span.Input, span.Output, span.Error, span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens, span.Model, span.CostUSD, span.PriceVersion, snapshotJSON, span.Tags, time.Now())
+		INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		                   input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+		                   model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		                   reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
+		                   compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
+	`,
+		span.ID, span.RunID, span.ActionID, span.ParentID, span.Name,
+		pgTime(span.StartedAt), ptrPgTime(span.EndedAt), span.DurationMs,
+		derefBytesP(span.Input), derefBytesP(span.Output), span.Error,
+		span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens,
+		span.Model, costUSD, span.PriceVersion, snapshotJSON, derefBytesP(span.Attrs),
+		time.Now(),
+		span.ReasoningTokens, span.AudioInputTokens, span.AudioOutputTokens, span.ImageUnits, span.RequestCount,
+		span.ComputeMs, span.StorageBytes, span.BandwidthBytes,
+		span.TraceID, span.RootSpanID, validationMeta,
+	)
 	return err
 }
 
-// UpdateSpan updates an existing span.
-func (p *PostgresSpanStore) UpdateSpan(ctx context.Context, span *store.SpanRow) error {
-	snapshotJSON, _ := json.Marshal(span.PriceSnapshot)
+// CloseSpan updates an existing span with its final fields.
+func (p *PostgresSpanStore) CloseSpan(ctx context.Context, spanID string, end *runtimemodel.SpanEnd) error {
+	var costUSD *float64
+	if end.Cost != nil {
+		v := end.Cost.Dollars()
+		costUSD = &v
+	}
+	var snapshotJSON []byte
+	if end.PriceSnapshot != nil {
+		snapshotJSON, _ = json.Marshal(end.PriceSnapshot)
+	}
+	var validationMeta []byte
+	if len(end.ValidationMeta) > 0 {
+		validationMeta = end.ValidationMeta
+	}
+	var traceID, rootSpanID *string
+	if end.TraceID != "" {
+		traceID = &end.TraceID
+	}
+	if end.RootSpanID != "" {
+		rootSpanID = &end.RootSpanID
+	}
+
 	_, err := p.pool.Exec(ctx, `
-		UPDATE spans
-		SET ended_at = COALESCE($2, ended_at),
-		    duration_ms = COALESCE($3, duration_ms),
-		    output = COALESCE($4, output),
-		    error = COALESCE($5, error),
-		    input_tokens = COALESCE($6, input_tokens),
-		    output_tokens = COALESCE($7, output_tokens),
-		    cache_read_tokens = COALESCE($8, cache_read_tokens),
-		    cache_write_tokens = COALESCE($9, cache_write_tokens),
-		    model = COALESCE($10, model),
-		    cost_usd = COALESCE($11, cost_usd),
-		    price_version = COALESCE($12, price_version),
-		    price_snapshot = COALESCE($13, price_snapshot),
-		    tags = COALESCE($14, tags)
+		UPDATE spans SET
+			ended_at           = COALESCE($2, ended_at),
+			duration_ms        = COALESCE($3, duration_ms),
+			output             = COALESCE($4, output),
+			attrs              = COALESCE($5, attrs),
+			error              = COALESCE($6, error),
+			input_tokens       = COALESCE($7, input_tokens),
+			output_tokens      = COALESCE($8, output_tokens),
+			cache_read_tokens  = COALESCE($9, cache_read_tokens),
+			cache_write_tokens = COALESCE($10, cache_write_tokens),
+			reasoning_tokens   = COALESCE($11, reasoning_tokens),
+			audio_input_tokens = COALESCE($12, audio_input_tokens),
+			audio_output_tokens= COALESCE($13, audio_output_tokens),
+			image_units        = COALESCE($14, image_units),
+			request_count      = COALESCE($15, request_count),
+			compute_ms         = COALESCE($16, compute_ms),
+			storage_bytes      = COALESCE($17, storage_bytes),
+			bandwidth_bytes    = COALESCE($18, bandwidth_bytes),
+			model              = COALESCE($19, model),
+			cost_usd           = COALESCE($20, cost_usd),
+			price_version      = COALESCE($21, price_version),
+			price_snapshot     = COALESCE($22, price_snapshot),
+			trace_id           = COALESCE($23, trace_id),
+			root_span_id       = COALESCE($24, root_span_id),
+			validation_meta    = COALESCE($25, validation_meta)
 		WHERE id = $1
-	`, span.ID, ptrPgTime(span.EndedAt), span.DurationMs, span.Output, span.Error, span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens, span.Model, span.CostUSD, span.PriceVersion, snapshotJSON, span.Tags)
+	`,
+		spanID, ptrPgTime(end.EndedAt), end.DurationMs,
+		derefBytesP(end.Output), derefBytesP(end.Attrs), end.Error,
+		end.InputTokens, end.OutputTokens, end.CacheReadTokens, end.CacheWriteTokens,
+		end.ReasoningTokens, end.AudioInputTokens, end.AudioOutputTokens, end.ImageUnits, end.RequestCount,
+		end.ComputeMs, end.StorageBytes, end.BandwidthBytes,
+		end.Model, costUSD, end.PriceVersion, snapshotJSON,
+		traceID, rootSpanID, validationMeta,
+	)
 	return err
 }
 
 // GetSpan retrieves a single span by ID.
-func (p *PostgresSpanStore) GetSpan(ctx context.Context, spanID string) (*store.SpanRow, error) {
-	var row store.SpanRow
-	var startedAt time.Time
-	var endedAt *time.Time
-	var createdAt time.Time
-	var snapshotJSON []byte
+func (p *PostgresSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimemodel.SpanRow, error) {
+	row := &runtimemodel.SpanRow{}
+	var (
+		startedAt, createdAt   time.Time
+		endedAt                *time.Time
+		model                  *string
+		costUSD                *float64
+		priceVersion           *string
+		snapshotJSON           []byte
+		validationMeta         []byte
+		input, output, attrs   []byte
+		inputTokens            *int32
+		outputTokens           *int32
+		cacheReadTokens        *int32
+		cacheWriteTokens       *int32
+		reasoningTokens        *int32
+		audioInputTokens       *int32
+		audioOutputTokens      *int32
+		imageUnits             *int32
+		requestCount           *int32
+		computeMs              *int64
+		storageBytes           *int64
+		bandwidthBytes         *int64
+	)
 
 	err := p.pool.QueryRow(ctx, `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
-		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model, cost_usd, price_version, price_snapshot, tags, created_at
+		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+		       model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		       reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
+		       compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta
 		FROM spans WHERE id = $1
 	`, spanID).Scan(
 		&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &startedAt, &endedAt, &row.DurationMs,
-		&row.Input, &row.Output, &row.Error, &row.InputTokens, &row.OutputTokens, &row.CacheReadTokens, &row.CacheWriteTokens, &row.Model, &row.CostUSD, &row.PriceVersion, &snapshotJSON, &row.Tags, &createdAt,
+		&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
+		&model, &costUSD, &priceVersion, &snapshotJSON, &attrs, &createdAt,
+		&reasoningTokens, &audioInputTokens, &audioOutputTokens, &imageUnits, &requestCount,
+		&computeMs, &storageBytes, &bandwidthBytes, &row.TraceID, &row.RootSpanID, &validationMeta,
 	)
-
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
 		return nil, err
 	}
 
 	row.StartedAt = startedAt.UnixMilli()
+	row.CreatedAt = createdAt.UnixMilli()
 	if endedAt != nil {
 		ms := endedAt.UnixMilli()
 		row.EndedAt = &ms
 	}
-	if len(snapshotJSON) > 0 {
-		_ = json.Unmarshal(snapshotJSON, &row.PriceSnapshot)
+	if input != nil {
+		row.Input = &input
 	}
-	row.CreatedAt = createdAt.UnixMilli()
+	if output != nil {
+		row.Output = &output
+	}
+	if attrs != nil {
+		row.Attrs = &attrs
+	}
+	row.Model = model
+	row.PriceVersion = priceVersion
+	if costUSD != nil {
+		amt := money.FromDollars(*costUSD)
+		row.Cost = &amt
+	}
+	if len(snapshotJSON) > 0 {
+		var ps runtimemodel.PriceSnapshot
+		_ = json.Unmarshal(snapshotJSON, &ps)
+		row.PriceSnapshot = &ps
+	}
+	if len(validationMeta) > 0 {
+		row.ValidationMeta = validationMeta
+	}
+	setPtrInt32(&row.InputTokens, inputTokens)
+	setPtrInt32(&row.OutputTokens, outputTokens)
+	setPtrInt32(&row.CacheReadTokens, cacheReadTokens)
+	setPtrInt32(&row.CacheWriteTokens, cacheWriteTokens)
+	setPtrInt32(&row.ReasoningTokens, reasoningTokens)
+	setPtrInt32(&row.AudioInputTokens, audioInputTokens)
+	setPtrInt32(&row.AudioOutputTokens, audioOutputTokens)
+	setPtrInt32(&row.ImageUnits, imageUnits)
+	setPtrInt32(&row.RequestCount, requestCount)
+	row.ComputeMs = computeMs
+	row.StorageBytes = storageBytes
+	row.BandwidthBytes = bandwidthBytes
 
-	return &row, nil
+	return row, nil
 }
 
 // QuerySpans retrieves spans matching a filter.
-func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *store.SpanFilter) ([]*store.SpanRow, error) {
+func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error) {
 	query := `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
-		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model, cost_usd, price_version, price_snapshot, tags, created_at
+		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+		       model, cost_usd, attrs, created_at
 		FROM spans WHERE 1=1
 	`
 	var args []any
@@ -149,37 +279,58 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *store.SpanFi
 	}
 	defer rows.Close()
 
-	var spans []*store.SpanRow
+	var spans []*runtimemodel.SpanRow
 	for rows.Next() {
-		var row store.SpanRow
-		var startedAt time.Time
-		var endedAt *time.Time
-		var createdAt time.Time
-		var snapshotJSON []byte
+		row := &runtimemodel.SpanRow{}
+		var (
+			startedAt, createdAt time.Time
+			endedAt              *time.Time
+			model                *string
+			costUSD              *float64
+			input, output, attrs []byte
+			inputTokens          *int32
+			outputTokens         *int32
+			cacheReadTokens      *int32
+			cacheWriteTokens     *int32
+		)
 		if err := rows.Scan(
 			&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &startedAt, &endedAt, &row.DurationMs,
-			&row.Input, &row.Output, &row.Error, &row.InputTokens, &row.OutputTokens, &row.CacheReadTokens, &row.CacheWriteTokens, &row.Model, &row.CostUSD, &row.PriceVersion, &snapshotJSON, &row.Tags, &createdAt,
+			&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
+			&model, &costUSD, &attrs, &createdAt,
 		); err != nil {
 			return nil, err
 		}
 		row.StartedAt = startedAt.UnixMilli()
+		row.CreatedAt = createdAt.UnixMilli()
 		if endedAt != nil {
 			ms := endedAt.UnixMilli()
 			row.EndedAt = &ms
 		}
-		if len(snapshotJSON) > 0 {
-			_ = json.Unmarshal(snapshotJSON, &row.PriceSnapshot)
+		if input != nil {
+			row.Input = &input
 		}
-		row.CreatedAt = createdAt.UnixMilli()
-		spans = append(spans, &row)
+		if output != nil {
+			row.Output = &output
+		}
+		if attrs != nil {
+			row.Attrs = &attrs
+		}
+		row.Model = model
+		if costUSD != nil {
+			amt := money.FromDollars(*costUSD)
+			row.Cost = &amt
+		}
+		setPtrInt32(&row.InputTokens, inputTokens)
+		setPtrInt32(&row.OutputTokens, outputTokens)
+		setPtrInt32(&row.CacheReadTokens, cacheReadTokens)
+		setPtrInt32(&row.CacheWriteTokens, cacheWriteTokens)
+		spans = append(spans, row)
 	}
-
 	return spans, rows.Err()
 }
 
 // SpendByDimension aggregates cost by the given dimension.
-func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string, filter *store.SpanFilter) (map[string]float64, error) {
-	// Validate groupBy against allowlist
+func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string, filter *runtimemodel.SpanFilter) (map[string]money.Amount, error) {
 	col, ok := allowedGroupBy[groupBy]
 	if !ok {
 		return nil, fmt.Errorf("invalid groupBy %q", groupBy)
@@ -207,7 +358,6 @@ func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string
 		args = append(args, pgTime(*filter.ToMs))
 		argNum++
 	}
-
 	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_usd) DESC`, col)
 
 	rows, err := p.pool.Query(ctx, query, args...)
@@ -216,25 +366,22 @@ func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string
 	}
 	defer rows.Close()
 
-	result := make(map[string]float64)
+	result := make(map[string]money.Amount)
 	for rows.Next() {
 		var dimension string
 		var cost float64
 		if err := rows.Scan(&dimension, &cost); err != nil {
 			return nil, err
 		}
-		result[dimension] = cost
+		result[dimension] = money.FromDollars(cost)
 	}
-
 	return result, rows.Err()
 }
 
-// Helper to convert UnixMilli int64 to time.Time
 func pgTime(ms int64) time.Time {
 	return time.UnixMilli(ms)
 }
 
-// Helper to convert *int64 to *time.Time
 func ptrPgTime(ms *int64) *time.Time {
 	if ms == nil {
 		return nil
@@ -243,7 +390,21 @@ func ptrPgTime(ms *int64) *time.Time {
 	return &t
 }
 
-// Allowlist for groupBy values in SpendByDimension
+func derefBytesP(b *[]byte) []byte {
+	if b == nil {
+		return nil
+	}
+	return *b
+}
+
+func setPtrInt32(dst **int, src *int32) {
+	if src != nil {
+		v := int(*src)
+		*dst = &v
+	}
+}
+
+// Allowlist for groupBy values in SpendByDimension.
 var allowedGroupBy = map[string]string{
 	"model":     "CAST(model AS TEXT)",
 	"run_id":    "CAST(run_id AS TEXT)",

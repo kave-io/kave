@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/kave-io/kave/core/intercept"
+	"github.com/kave-io/kave/core/pipeline"
+	coreruntime "github.com/kave-io/kave/core/runtime"
 )
 
 // Request is the inbound request shape connectors can inspect without depending
@@ -25,7 +26,7 @@ type LLMCall struct {
 	RawQuery     string
 	Header       http.Header
 	Body         []byte
-	Action       *intercept.Action
+	Action       *coreruntime.Action
 }
 
 // PreparedRequest is the outbound HTTP request an LLM connector wants the
@@ -47,7 +48,7 @@ type LLMFramework interface {
 type LLMConnector interface {
 	Name() string
 	PrepareRequest(call *LLMCall, credential string) (*PreparedRequest, error)
-	ParseResponse(body []byte, contentType string) (*intercept.Result, error)
+	ParseResponse(body []byte, contentType string) (*pipeline.Result, error)
 }
 
 // CloneHeader copies a header map for safe mutation.

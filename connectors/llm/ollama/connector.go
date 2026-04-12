@@ -7,7 +7,8 @@ import (
 
 	"github.com/kave-io/kave/connectors"
 	"github.com/kave-io/kave/connectors/runtime"
-	"github.com/kave-io/kave/core/intercept"
+	"github.com/kave-io/kave/core/pipeline"
+	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/tidwall/gjson"
 )
 
@@ -26,7 +27,7 @@ func (c *Connector) Name() string {
 	return "ollama"
 }
 
-func (c *Connector) Intercept(ctx context.Context, action *intercept.Action, next connectors.Handler) (*intercept.Result, error) {
+func (c *Connector) Intercept(ctx context.Context, action *coreruntime.Action, next connectors.Handler) (*pipeline.Result, error) {
 	if action.Connector != "ollama" {
 		return nil, fmt.Errorf("ollama: unexpected connector %q", action.Connector)
 	}
@@ -35,10 +36,10 @@ func (c *Connector) Intercept(ctx context.Context, action *intercept.Action, nex
 
 func (c *Connector) Capabilities() connectors.Capabilities {
 	return connectors.Capabilities{
-		SupportedActions: []intercept.ActionType{intercept.TypeLLM},
+		SupportedActions: []coreruntime.ActionType{coreruntime.TypeLLM},
 		SupportedMethods: []string{"chat", "generate", "embed"},
 		CanProxy:         false,
-		CanStream:        true,
+		StreamSupport:    true,
 		APIVersion:       APIVersion,
 	}
 }
@@ -68,9 +69,9 @@ func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*r
 	}, nil
 }
 
-func (c *Connector) ParseResponse(body []byte, _ string) (*intercept.Result, error) {
-	result := &intercept.Result{Body: body}
-	usage := &intercept.TokenUsage{
+func (c *Connector) ParseResponse(body []byte, _ string) (*pipeline.Result, error) {
+	result := &pipeline.Result{Body: body}
+	usage := &coreruntime.TokenUsage{
 		InputTokens:  int(gjson.GetBytes(body, "prompt_eval_count").Int()),
 		OutputTokens: int(gjson.GetBytes(body, "eval_count").Int()),
 		Model:        gjson.GetBytes(body, "model").String(),

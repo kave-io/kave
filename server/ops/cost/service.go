@@ -10,6 +10,7 @@ import (
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/pkg/timex"
 	"github.com/kave-io/kave/core/store"
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 )
 
 //go:embed defaults.json
@@ -18,7 +19,7 @@ var defaultBookJSON []byte
 type Service struct {
 	app  store.AppStore
 	mu   sync.RWMutex
-	book *store.PriceBook
+	book *runtimemodel.PriceBook
 }
 
 func NewService(ctx context.Context, app store.AppStore) (*Service, error) {
@@ -50,13 +51,13 @@ func (s *Service) Load(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) Current() *store.PriceBook {
+func (s *Service) Current() *runtimemodel.PriceBook {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return cloneBook(s.book)
 }
 
-func (s *Service) Replace(ctx context.Context, book *store.PriceBook) error {
+func (s *Service) Replace(ctx context.Context, book *runtimemodel.PriceBook) error {
 	book = normalizeBook(book)
 	if err := s.app.SavePriceBook(ctx, book); err != nil {
 		return err
@@ -67,7 +68,7 @@ func (s *Service) Replace(ctx context.Context, book *store.PriceBook) error {
 	return nil
 }
 
-func (s *Service) Snapshot(provider, model string) *store.PriceSnapshot {
+func (s *Service) Snapshot(provider, model string) *runtimemodel.PriceSnapshot {
 	s.mu.RLock()
 	book := s.book
 	s.mu.RUnlock()
@@ -84,7 +85,7 @@ func (s *Service) Snapshot(provider, model string) *store.PriceSnapshot {
 			continue
 		}
 		if entryMatch == "" || strings.Contains(model, entryMatch) {
-			return &store.PriceSnapshot{
+			return &runtimemodel.PriceSnapshot{
 				Version:              book.Version,
 				Provider:             provider,
 				Model:                model,
@@ -94,6 +95,14 @@ func (s *Service) Snapshot(provider, model string) *store.PriceSnapshot {
 				OutputPerMillion:     entry.OutputPerMillion,
 				CacheReadPerMillion:  entry.CacheReadPerMillion,
 				CacheWritePerMillion: entry.CacheWritePerMillion,
+				ReasoningPerMillion:  entry.ReasoningPerMillion,
+				AudioInputPerMillion: entry.AudioInputPerMillion,
+				AudioOutputPerMillion: entry.AudioOutputPerMillion,
+				ImageUnitPrice:       entry.ImageUnitPrice,
+				PerRequest:           entry.PerRequest,
+				PerComputeMs:         entry.PerComputeMs,
+				PerGBStored:          entry.PerGBStored,
+				PerGBTransferred:     entry.PerGBTransferred,
 				ResolvedAt:           int64(timex.Now()),
 			}
 		}
@@ -101,34 +110,51 @@ func (s *Service) Snapshot(provider, model string) *store.PriceSnapshot {
 	return nil
 }
 
-func Calculate(snapshot *store.PriceSnapshot, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int) money.Amount {
+// Calculate computes cost from a snapshot and all billable token/usage dimensions.
+func Calculate(snapshot *runtimemodel.PriceSnapshot, input, output, cacheRead, cacheWrite, reasoning, audioIn, audioOut, imageUnits int, requestCount int, computeMs int64, storageBytes int64, bandwidthBytes int64) money.Amount {
 	if snapshot == nil {
 		return 0
 	}
-	return money.FromDollars((float64(inputTokens)*snapshot.InputPerMillion +
-		float64(outputTokens)*snapshot.OutputPerMillion +
-		float64(cacheReadTokens)*snapshot.CacheReadPerMillion +
-		float64(cacheWriteTokens)*snapshot.CacheWritePerMillion) / 1_000_000)
+	total := float64(input)*snapshot.InputPerMillion +
+		float64(output)*snapshot.OutputPerMillion +
+		float64(cacheRead)*snapshot.CacheReadPerMillion +
+		float64(cacheWrite)*snapshot.CacheWritePerMillion +
+		float64(reasoning)*snapshot.ReasoningPerMillion +
+		float64(audioIn)*snapshot.AudioInputPerMillion +
+		float64(audioOut)*snapshot.AudioOutputPerMillion +
+		float64(imageUnits)*snapshot.ImageUnitPrice
+	total /= 1_000_000
+	total += float64(requestCount) * snapshot.PerRequest
+	if computeMs > 0 {
+		total += float64(computeMs) * snapshot.PerComputeMs
+	}
+	if storageBytes > 0 {
+		total += float64(storageBytes) / (1 << 30) * snapshot.PerGBStored
+	}
+	if bandwidthBytes > 0 {
+		total += float64(bandwidthBytes) / (1 << 30) * snapshot.PerGBTransferred
+	}
+	return money.FromDollars(total)
 }
 
-func DefaultBook() (*store.PriceBook, error) {
-	var book store.PriceBook
+func DefaultBook() (*runtimemodel.PriceBook, error) {
+	var book runtimemodel.PriceBook
 	if err := json.Unmarshal(defaultBookJSON, &book); err != nil {
 		return nil, err
 	}
 	return normalizeBook(&book), nil
 }
 
-func normalizeBook(book *store.PriceBook) *store.PriceBook {
+func normalizeBook(book *runtimemodel.PriceBook) *runtimemodel.PriceBook {
 	if book == nil {
-		return &store.PriceBook{Entries: []store.PriceModel{}}
+		return &runtimemodel.PriceBook{Entries: []runtimemodel.PriceModel{}}
 	}
 	out := cloneBook(book)
 	if out.Version == "" {
 		out.Version = "custom"
 	}
 	if out.Entries == nil {
-		out.Entries = []store.PriceModel{}
+		out.Entries = []runtimemodel.PriceModel{}
 	}
 	for i := range out.Entries {
 		out.Entries[i].Provider = strings.ToLower(strings.TrimSpace(out.Entries[i].Provider))
@@ -140,13 +166,13 @@ func normalizeBook(book *store.PriceBook) *store.PriceBook {
 	return out
 }
 
-func cloneBook(book *store.PriceBook) *store.PriceBook {
+func cloneBook(book *runtimemodel.PriceBook) *runtimemodel.PriceBook {
 	if book == nil {
 		return nil
 	}
-	out := &store.PriceBook{
+	out := &runtimemodel.PriceBook{
 		Version: book.Version,
-		Entries: make([]store.PriceModel, len(book.Entries)),
+		Entries: make([]runtimemodel.PriceModel, len(book.Entries)),
 	}
 	copy(out.Entries, book.Entries)
 	return out

@@ -20,11 +20,11 @@ and sees their calls immediately. That is the product.
 | **Project**    | Top-level workspace. Everything belongs to a project.                                                                                             |
 | **Tap**        | A configured interception point. Represents one connected app or service. Proxy type: point your LLM client's base URL at it.                     |
 | **Persona**    | Optional named agent identity. Has a purpose, a system prompt, and a policy. Kave works without one — unidentified calls use the default policy. |
-| **Policy**     | A rule bundle: what actions are allowed, budget caps, trace config, validation config. One struct, four logical sections.                         |
+| **Policy**     | A control-policy composition root with typed sub-policies for auth, cost, trace, and validation.                                                  |
 | **Run**        | A single execution from trigger to completion. A DAG of actions. Could be one LLM call or hundreds of nested agents.                              |
 | **Action**     | One unit of work inside a run. Has a type, connector, method, input, output, and a parent (for DAG structure).                                    |
 | **Span**       | Immutable analytics record of one action. Timing, tokens, cost, error. Goes to a separate store.                                                  |
-| **Credential** | An encrypted API key stored by Kave. Injected into proxied requests at intercept time. Agents never see the real key.                             |
+| **Credential** | An encrypted API key stored by Kave. Injected into proxied requests at enforcement time. Agents never see the real key.                             |
 
 ---
 
@@ -227,7 +227,7 @@ Joins exist in the schema but only happen at:
 | #  | Decision                                                                                                                                                                                                       |
 | -- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1  | Action input/output stored as raw `[]byte` JSON — parse only when queried                                                                                                                                   |
-| 2  | Policy: one flat struct, cached in memory, write-through, TTL 60s                                                                                                                                              |
+| 2  | Policy: one control-policy root with typed sub-policies, cached in memory, write-through, TTL 60s                                                                                                         |
 | 3  | Action and Span are separate — Action is mutable lifecycle, Span is immutable analytics                                                                                                                       |
 | 4  | All IDs: UUID v7                                                                                                                                                                                               |
 | 5  | All timestamps:`int64` UnixMilli                                                                                                                                                                             |
@@ -239,7 +239,27 @@ Joins exist in the schema but only happen at:
 | 11 | Run boundary: default = one Run per request (always correct, connection pooling breaks TCP-based grouping); explicit `X-Kave-Run-Id` header attaches to an existing Run; `X-Kave-Parent-Id` builds the DAG |
 | 12 | Process detection via `/proc` deferred to v2 — latency on hot path, Linux-only, breaks in containers                                                                                                        |
 | 13 | Daemon ↔ CLI: Unix domain socket at `~/.kave/kave.sock` — no port conflicts, no TIME_WAIT buildup, file-system ACL                                                                                         |
-| 14 | Three-way model: `Action` (Kave causal, can block), `Event` (agent-reported, audit only, no "blocked" status), `Span` (immutable record for all patterns). `Unit` is the shared embedded base for Action and Event. |
+| 14 | Three-way model: `Action` (Kave causal, can block), `ObservedAction` (agent-reported, audit only, no "blocked" status), `Span` (immutable record for all patterns). `Invocation` is the shared embedded base for Action and ObservedAction, split into `InvocationRef`, `InvocationTarget`, `InvocationData`, and `InvocationTiming`. `Action.Outcome` carries structured decision detail. |
+
+---
+
+## Package Architecture (V1 Rule)
+
+Four-package pattern with clear boundaries:
+
+| Package | Owns | Examples |
+|---------|------|----------|
+| `runtime/` | Live execution domain | Action, Run, Policy, Outcome, TokenUsage |
+| `model/` | Persisted records (storage contracts) | ActionRecord, RunRecord, SpanRow, BudgetEntry |
+| `ops/` | Module interfaces and decision types | auth.Decision, cost.BudgetStatus, validate.Result |
+| `mappers/` | Translation layer (runtime ↔ model only) | ActionToRecord, RunToRecord, AuthDecisionToOutcome |
+
+**Key principle:** If you need to convert between runtime and model, do it in mappers/. Don't scatter conversions. `model/` is storage-shaped and boring — no logic, just fields. `runtime/` is execution-ergonomic. `ops/` has module contracts, not durable entities.
+
+**Naming convention:** Persisted model types use *Record suffix when they correspond to a runtime type:
+- `runtime.Run` (live execution state) → `model/runtime.RunRecord` (persisted database row)
+- `runtime.Action` (in-flight action) → `model/runtime.ActionRecord` (persisted action audit)
+- Other persisted types that don't have a live runtime counterpart stay simple (SpanRow, BudgetEntry, PriceBook).
 
 ---
 
@@ -284,7 +304,7 @@ CLI is now live. kave status, kave watch, etc. connect via ~/.kave/kave.sock.
 
 ---
 
-### Flow 2 — Proxy intercept (hot path)
+### Flow 2 — Proxy enforcement (hot path)
 
 Every LLM call through the proxy runs this path. Sync = blocks the response. Async = fire and forget.
 
@@ -314,15 +334,15 @@ proxy
   │           status=running, input=request body, depth, seq
   │
   ├─ [SYNC] AUTH CHECK
-  │           policy.allowed_types contains "llm"?
-  │           policy.allowed_connectors contains "openai"?
-  │           policy.allowed_methods contains "chat.completions"?
+  │           policy.auth.allowed_types contains "llm"?
+  │           policy.auth.allowed_connectors contains "openai"?
+  │           policy.auth.allowed_methods contains "chat.completions"?
   │             fail → action.status = blocked
   │                    return 403 to client   ← request dies here
   │             pass → continue
   │
-  ├─ [SYNC] BUDGET CHECK  (only if policy.budget_cap_usd != nil)
-  │           run.spent_usd >= policy.budget_cap_usd?
+  ├─ [SYNC] BUDGET CHECK  (only if policy.cost.budget_cap != nil)
+  │           run.spent_usd >= policy.cost.budget_cap?
   │             block  → return 429 to client
   │             warn   → continue, attach warning header to response
   │
@@ -344,8 +364,8 @@ proxy
   ├─ [SYNC] update Run
   │           spent_usd += cost  (atomic increment)
   │
-  ├─ [ASYNC] write Span  ← non-blocking, buffered channel → SpanStore
-  │           all token/cost/timing data
+  ├─ [ASYNC] open Span  ← non-blocking, buffered channel → SpanStore
+  │           later close/finalize with end data
   │
   └─ return response to client
 ```
@@ -400,7 +420,7 @@ DAG in memory:
 1. ~~Package architecture~~ → see `docs/architecture.md`
 2. ~~Connector compatibility~~ → see `docs/connectors.md`
 3. **Build** — top-down, one package at a time:
-   `intercept/` → `auth/` → `trace/` → `cost/` → `validate/`
+   `runtime/` → `policy/` → `pipeline/` → `ops/auth/` → `ops/trace/` → `ops/cost/` → `ops/validate/`
 
 ---
 

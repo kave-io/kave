@@ -11,11 +11,13 @@ require (
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/kave-io/kave/connectors v0.0.0
 	github.com/kave-io/kave/core v0.0.0
+	github.com/kave-io/kave/proto v0.0.0
 	github.com/marcboeker/go-duckdb v1.8.4
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/noho-digital/casbin-pgx-adapter v1.1.1
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/spf13/viper v1.21.0
+	google.golang.org/grpc v1.69.2
 )
 
 require (
@@ -55,6 +57,7 @@ require (
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect
 	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/net v0.51.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260209163413-e7419c687ee4 // indirect
@@ -66,4 +69,5 @@ require (
 replace (
 	github.com/kave-io/kave/connectors => ../connectors
 	github.com/kave-io/kave/core => ../core
+	github.com/kave-io/kave/proto => ../proto
 )

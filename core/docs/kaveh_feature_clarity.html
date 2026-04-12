@@ -125,7 +125,7 @@
         <div class="feature-row">
           <div class="feature-name">Tool-level permissions</div>
           <div class="feature-desc">Define exactly which tools each agent can call, with what parameters, under what conditions. "This agent can read files but never delete. This agent can send emails only to internal domains."</div>
-          <div class="feature-how">Casbin policy engine, evaluated at intercept layer</div>
+          <div class="feature-how">Casbin policy engine, evaluated at the enforcement layer</div>
         </div>
         <div class="feature-row">
           <div class="feature-name">Credential vault</div>
@@ -172,7 +172,7 @@
         <div class="feature-row">
           <div class="feature-name">Budget enforcement</div>
           <div class="feature-desc">Set monthly/daily token budgets per agent, per team. When a budget is hit: warn, throttle, or hard-stop. Jensen's "token salary" vision made real and manageable.</div>
-          <div class="feature-how">River job checks budget counters, blocks at SDK intercept</div>
+          <div class="feature-how">River job checks budget counters, blocks at SDK enforcement</div>
         </div>
         <div class="feature-row">
           <div class="feature-name">Model routing recommendations</div>
@@ -244,7 +244,7 @@
         <div class="phase-item">Auth & permissions module</div>
         <div class="phase-item">Output validation middleware</div>
         <div class="phase-item">Budget enforcement</div>
-        <div class="phase-item">ClickHouse for event scale</div>
+        <div class="phase-item">ClickHouse for observed-action scale</div>
         <div class="phase-item">Multi-tenant, Team plan live</div>
       </div>
       <div class="phase-card">

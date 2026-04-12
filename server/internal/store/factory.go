@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/internal/config"
 	postgresdb "github.com/kave-io/kave/server/internal/db/postgres"
@@ -77,87 +78,6 @@ func (m *Manager) Close() error {
 	return nil
 }
 
-func (m *Manager) WriteSpan(ctx context.Context, span *store.SpanRow) error {
-	defaultStore, err := m.SpanStore(ctx, "")
-	if err != nil {
-		return err
-	}
-	return defaultStore.WriteSpan(ctx, span)
-}
-
-func (m *Manager) UpdateSpan(ctx context.Context, span *store.SpanRow) error {
-	defaultStore, err := m.SpanStore(ctx, "")
-	if err != nil {
-		return err
-	}
-	return defaultStore.UpdateSpan(ctx, span)
-}
-
-func (m *Manager) GetSpan(ctx context.Context, spanID string) (*store.SpanRow, error) {
-	stores, err := m.allSpanStores(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for _, spanStore := range stores {
-		span, err := spanStore.GetSpan(ctx, spanID)
-		if err != nil {
-			return nil, err
-		}
-		if span != nil {
-			return span, nil
-		}
-	}
-	return nil, nil
-}
-
-func (m *Manager) QuerySpans(ctx context.Context, filter *store.SpanFilter) ([]*store.SpanRow, error) {
-	stores, err := m.allSpanStores(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var spans []*store.SpanRow
-	for _, spanStore := range stores {
-		rows, err := spanStore.QuerySpans(ctx, filter)
-		if err != nil {
-			return nil, err
-		}
-		spans = append(spans, rows...)
-	}
-
-	sort.Slice(spans, func(i, j int) bool {
-		return spans[i].StartedAt > spans[j].StartedAt
-	})
-	if filter.Limit > 0 && len(spans) > filter.Limit {
-		spans = spans[:filter.Limit]
-	}
-	return spans, nil
-}
-
-func (m *Manager) SpendByDimension(ctx context.Context, groupBy string, filter *store.SpanFilter) (map[string]float64, error) {
-	stores, err := m.allSpanStores(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	total := map[string]float64{}
-	for _, spanStore := range stores {
-		values, err := spanStore.SpendByDimension(ctx, groupBy, filter)
-		if err != nil {
-			return nil, err
-		}
-		for key, value := range values {
-			total[key] += value
-		}
-	}
-	return total, nil
-}
-
-func (m *Manager) Migrate(ctx context.Context) error {
-	_, err := m.allSpanStores(ctx)
-	return err
-}
-
 func (m *Manager) allSpanStores(ctx context.Context) ([]store.SpanStore, error) {
 	keys := map[string]bool{"": true}
 	for agentID := range m.storage.Agents {
@@ -180,6 +100,35 @@ func (m *Manager) allSpanStores(ctx context.Context) ([]store.SpanStore, error) 
 		stores = append(stores, spanStore)
 	}
 	return stores, nil
+}
+
+func (m *Manager) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error) {
+	stores, err := m.allSpanStores(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var spans []*runtimemodel.SpanRow
+	for _, spanStore := range stores {
+		rows, err := spanStore.QuerySpans(ctx, filter)
+		if err != nil {
+			return nil, err
+		}
+		spans = append(spans, rows...)
+	}
+
+	sort.Slice(spans, func(i, j int) bool {
+		return spans[i].StartedAt > spans[j].StartedAt
+	})
+	if filter.Limit > 0 && len(spans) > filter.Limit {
+		spans = spans[:filter.Limit]
+	}
+	return spans, nil
+}
+
+func (m *Manager) Migrate(ctx context.Context) error {
+	_, err := m.allSpanStores(ctx)
+	return err
 }
 
 func newAppStoreFromSpec(ctx context.Context, spec config.StoreSpec, postgresCfg config.PostgresConfig) (store.AppStore, error) {

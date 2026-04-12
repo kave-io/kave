@@ -1,8 +1,12 @@
-.PHONY: help dev dev-server dev-dashboard build build-server dashboard-build \
-        test test-fast lint fmt vet migrate clean
+.PHONY: help dev dev-server dev-dashboard serve build build-server dashboard-build \
+        test test-fast lint fmt vet migrate clean \
+        buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
+        buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev
 
 DASHBOARD_DIR := dashboard
 SERVER_DIR    := server
+BUF_COMPOSE_FILE := compose.buf.yaml
+BUF_CONTAINER := buf
 
 help:
 	@echo "Kave — Control Plane for AI Agents"
@@ -11,6 +15,7 @@ help:
 	@echo "  make dev               Run server (hot reload) + dashboard dev server in parallel"
 	@echo "  make dev-server        Hot reload Go server only (Air)"
 	@echo "  make dev-dashboard     Vite dev server only (port 5173, proxies /api to :8080)"
+	@echo "  make serve             Run the Go server with HTTP + gRPC"
 	@echo ""
 	@echo "Build:"
 	@echo "  make build             Build dashboard then compile server binary with embedded UI"
@@ -46,6 +51,9 @@ dev-server:
 dev-dashboard:
 	@command -v bun >/dev/null 2>&1 || (echo "bun not installed: https://bun.sh" && exit 1)
 	cd $(DASHBOARD_DIR) && bun run dev
+
+serve:
+	cd $(SERVER_DIR) && go run .
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -93,6 +101,52 @@ vet:
 	cd server     && go vet ./...
 	cd connectors && go vet ./...
 	cd cli        && go vet ./...
+
+# ── Buf / Protobuf ────────────────────────────────────────────────────────────
+
+buf-build:
+	@echo "Building buf toolchain image..."
+	@docker compose -f $(BUF_COMPOSE_FILE) build
+
+buf-up:
+	@echo "Starting buf toolchain container..."
+	@docker compose -f $(BUF_COMPOSE_FILE) up -d
+
+buf-down:
+	@echo "Stopping buf toolchain container..."
+	@docker compose -f $(BUF_COMPOSE_FILE) down
+
+buf-shell: buf-up
+	@echo "Opening shell in buf toolchain container..."
+	@docker exec -it $(BUF_CONTAINER) /bin/sh
+
+buf-version: buf-up
+	@docker exec $(BUF_CONTAINER) buf --version
+
+buf-lint: buf-up
+	@docker exec $(BUF_CONTAINER) buf lint
+
+buf-format-check: buf-up
+	@docker exec $(BUF_CONTAINER) buf format --diff
+
+buf-format: buf-up
+	@docker exec $(BUF_CONTAINER) buf format -w
+
+buf-generate: buf-up
+	@docker exec $(BUF_CONTAINER) buf generate
+
+buf-breaking: buf-up
+	@docker exec $(BUF_CONTAINER) buf breaking --against '.git#branch=main'
+
+buf-test: buf-up
+	@$(MAKE) buf-lint
+	@$(MAKE) buf-format-check
+	@$(MAKE) buf-breaking
+
+buf-clean: buf-down
+	@docker compose -f $(BUF_COMPOSE_FILE) down -v
+
+buf-quick-dev: buf-format buf-lint buf-generate
 
 # ── Ops ───────────────────────────────────────────────────────────────────────
 

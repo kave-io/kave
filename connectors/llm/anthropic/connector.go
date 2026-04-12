@@ -8,7 +8,8 @@ import (
 	"github.com/kave-io/kave/connectors"
 	"github.com/kave-io/kave/connectors/llm/shared"
 	"github.com/kave-io/kave/connectors/runtime"
-	"github.com/kave-io/kave/core/intercept"
+	"github.com/kave-io/kave/core/pipeline"
+	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/tidwall/gjson"
 )
 
@@ -26,7 +27,7 @@ func NewConnector(client *Client) *Connector {
 
 func (c *Connector) Name() string { return "anthropic" }
 
-func (c *Connector) Intercept(ctx context.Context, action *intercept.Action, next connectors.Handler) (*intercept.Result, error) {
+func (c *Connector) Intercept(ctx context.Context, action *coreruntime.Action, next connectors.Handler) (*pipeline.Result, error) {
 	if action.Connector != "anthropic" {
 		return nil, fmt.Errorf("anthropic: unexpected connector %q", action.Connector)
 	}
@@ -35,10 +36,10 @@ func (c *Connector) Intercept(ctx context.Context, action *intercept.Action, nex
 
 func (c *Connector) Capabilities() connectors.Capabilities {
 	return connectors.Capabilities{
-		SupportedActions: []intercept.ActionType{intercept.TypeLLM},
+		SupportedActions: []coreruntime.ActionType{coreruntime.TypeLLM},
 		SupportedMethods: []string{"messages", "messages.streaming"},
 		CanProxy:         true,
-		CanStream:        true,
+		StreamSupport:    true,
 		APIVersion:       APIVersion,
 	}
 }
@@ -70,10 +71,10 @@ func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*r
 	}, nil
 }
 
-func (c *Connector) ParseResponse(body []byte, _ string) (*intercept.Result, error) {
-	result := &intercept.Result{Body: body}
+func (c *Connector) ParseResponse(body []byte, _ string) (*pipeline.Result, error) {
+	result := &pipeline.Result{Body: body}
 
-	usage := &intercept.TokenUsage{
+	usage := &coreruntime.TokenUsage{
 		InputTokens:  int(gjson.GetBytes(body, "usage.input_tokens").Int()),
 		OutputTokens: int(gjson.GetBytes(body, "usage.output_tokens").Int()),
 		CacheRead:    int(gjson.GetBytes(body, "usage.cache_read_input_tokens").Int()),

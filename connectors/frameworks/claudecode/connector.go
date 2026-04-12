@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/kave-io/kave/connectors/runtime"
-	"github.com/kave-io/kave/core/intercept"
+	coreruntime "github.com/kave-io/kave/core/runtime"
 )
 
 const prefix = "/frameworks/claude-code/"
@@ -33,6 +33,9 @@ func (c *Connector) ParseLLMRequest(req *runtime.Request) (*runtime.LLMCall, err
 	upstreamPath := trimmed[slash:]
 	method := actionMethod(upstreamPath, req.Body)
 
+	inputCopy := make([]byte, len(req.Body))
+	copy(inputCopy, req.Body)
+
 	return &runtime.LLMCall{
 		Provider:     provider,
 		Method:       req.Method,
@@ -40,15 +43,21 @@ func (c *Connector) ParseLLMRequest(req *runtime.Request) (*runtime.LLMCall, err
 		RawQuery:     req.RawQuery,
 		Header:       runtime.CloneHeader(req.Header),
 		Body:         req.Body,
-		Action: &intercept.Action{
-			Unit: intercept.Unit{
-				ID:        uuid.NewString(),
-				Type:      intercept.TypeLLM,
-				Connector: provider,
-				Method:    method,
-				Input:     req.Body,
+		Action: &coreruntime.Action{
+			Invocation: coreruntime.Invocation{
+				InvocationRef: coreruntime.InvocationRef{
+					ID: uuid.NewString(),
+				},
+				InvocationTarget: coreruntime.InvocationTarget{
+					Type:      coreruntime.TypeLLM,
+					Connector: provider,
+					Method:    method,
+				},
+				InvocationData: coreruntime.InvocationData{
+					Input: &inputCopy,
+				},
 			},
-			Status: intercept.StatusPending,
+			Status: coreruntime.StatusPending,
 		},
 	}, nil
 }

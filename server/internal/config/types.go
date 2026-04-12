@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
+	GRPC     GRPCConfig     `mapstructure:"grpc"`
 	Security SecurityConfig `mapstructure:"security"`
 	Postgres PostgresConfig `mapstructure:"postgres"`
 	Storage  StorageConfig  `mapstructure:"storage"`
@@ -43,6 +44,14 @@ func (s ServerConfig) Addr() string {
 
 func (s ServerConfig) IsDev() bool {
 	return s.Environment == "development"
+}
+
+type GRPCConfig struct {
+	Port int `mapstructure:"port"`
+}
+
+func (g GRPCConfig) Addr() string {
+	return fmt.Sprintf(":%d", g.Port)
 }
 
 // ── Postgres ──────────────────────────────────────────────────────────────────
@@ -352,6 +361,9 @@ func (c *Config) Validate() error {
 	if c.Server.Environment == "" {
 		c.Server.Environment = "development"
 	}
+	if c.GRPC.Port == 0 {
+		c.GRPC.Port = 9090
+	}
 
 	// Postgres
 	if c.Postgres.SSLMode == "" {
@@ -441,6 +453,7 @@ func (c *Config) Validate() error {
 func (c *Config) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "server:   %s (%s)\n", c.Server.Addr(), c.Server.Environment)
+	fmt.Fprintf(&b, "grpc:     %s\n", c.GRPC.Addr())
 	fmt.Fprintf(&b, "ollama:   %s (timeout: %ds)\n", c.Ollama.Host, c.Ollama.Timeout)
 	fmt.Fprintf(&b, "postgres: %s:%d/%s\n", c.Postgres.Host, c.Postgres.Port, c.Postgres.DBName)
 	fmt.Fprintf(&b, "output:   format=%s max_tokens=%d\n", c.Output.Format, c.Output.MaxTokens)

@@ -10,10 +10,14 @@ import (
 	"sync"
 	"time"
 
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 	dbduckdb "github.com/kave-io/kave/server/internal/db/duckdb"
 	_ "github.com/marcboeker/go-duckdb"
 )
+
+var _ store.SpanStore = (*DuckDBSpanStore)(nil)
 
 const (
 	defaultBufferSize    = 100
@@ -23,18 +27,18 @@ const (
 // DuckDBSpanStore implements store.SpanStore using DuckDB with a buffered channel writer.
 // A single background goroutine owns the DuckDB connection and writes batches.
 type DuckDBSpanStore struct {
-	db    *sql.DB
-	ch    chan writeReq
-	done  chan struct{}
-	once  sync.Once
-	errCh chan error
-	mu    sync.Mutex // guards reads (optional, for safety)
+	db   *sql.DB
+	ch   chan writeReq
+	done chan struct{}
+	once sync.Once
+	mu   sync.Mutex // guards reads
 }
 
 type writeReq struct {
-	span     *store.SpanRow
-	respCh   chan error
-	isUpdate bool // true for UpdateSpan, false for WriteSpan
+	spanID string               // set for CloseSpan
+	open   *runtimemodel.SpanRow // set for OpenSpan
+	end    *runtimemodel.SpanEnd // set for CloseSpan
+	respCh chan error
 }
 
 // New creates a new DuckDB span store with the given file path.
@@ -54,13 +58,11 @@ func New(path string) (*DuckDBSpanStore, error) {
 	}
 
 	s := &DuckDBSpanStore{
-		db:    db,
-		ch:    make(chan writeReq, defaultBufferSize),
-		done:  make(chan struct{}),
-		errCh: make(chan error, 1),
+		db:   db,
+		ch:   make(chan writeReq, defaultBufferSize),
+		done: make(chan struct{}),
 	}
 
-	// Run migrations
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := s.Migrate(ctx); err != nil {
@@ -68,9 +70,7 @@ func New(path string) (*DuckDBSpanStore, error) {
 		return nil, fmt.Errorf("duckdb: migrate: %w", err)
 	}
 
-	// Start background writer goroutine
 	go s.writerLoop()
-
 	return s, nil
 }
 
@@ -79,7 +79,6 @@ func (s *DuckDBSpanStore) Close() error {
 	var err error
 	s.once.Do(func() {
 		close(s.done)
-		// Give the writer goroutine time to flush
 		time.Sleep(100 * time.Millisecond)
 		err = s.db.Close()
 	})
@@ -91,14 +90,11 @@ func (s *DuckDBSpanStore) Migrate(ctx context.Context) error {
 	return dbduckdb.Migrate(ctx, s.db)
 }
 
-// WriteSpan writes a span to the store (buffered, non-blocking).
-func (s *DuckDBSpanStore) WriteSpan(ctx context.Context, span *store.SpanRow) error {
+// OpenSpan inserts a new span (buffered, async).
+func (s *DuckDBSpanStore) OpenSpan(ctx context.Context, span *runtimemodel.SpanRow) error {
 	respCh := make(chan error, 1)
-	req := writeReq{span: span, respCh: respCh, isUpdate: false}
-
 	select {
-	case s.ch <- req:
-		// Wait for response with context timeout
+	case s.ch <- writeReq{open: span, respCh: respCh}:
 		select {
 		case err := <-respCh:
 			return err
@@ -112,13 +108,11 @@ func (s *DuckDBSpanStore) WriteSpan(ctx context.Context, span *store.SpanRow) er
 	}
 }
 
-// UpdateSpan updates an existing span (upsert semantics).
-func (s *DuckDBSpanStore) UpdateSpan(ctx context.Context, span *store.SpanRow) error {
+// CloseSpan updates an existing span with its final fields (buffered, async).
+func (s *DuckDBSpanStore) CloseSpan(ctx context.Context, spanID string, end *runtimemodel.SpanEnd) error {
 	respCh := make(chan error, 1)
-	req := writeReq{span: span, respCh: respCh, isUpdate: true}
-
 	select {
-	case s.ch <- req:
+	case s.ch <- writeReq{spanID: spanID, end: end, respCh: respCh}:
 		select {
 		case err := <-respCh:
 			return err
@@ -133,24 +127,47 @@ func (s *DuckDBSpanStore) UpdateSpan(ctx context.Context, span *store.SpanRow) e
 }
 
 // GetSpan retrieves a single span by ID.
-func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*store.SpanRow, error) {
+func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimemodel.SpanRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var row store.SpanRow
-	var input, output, tags []byte
-	var priceVersion sql.NullString
-	var snapshotJSON sql.NullString
+	row := &runtimemodel.SpanRow{}
+	var (
+		input, output, attrs []byte
+		endedAt              sql.NullInt64
+		model                sql.NullString
+		costUSD              sql.NullFloat64
+		priceVersion         sql.NullString
+		snapshotJSON         sql.NullString
+		validationMeta       sql.NullString
+		inputTokens          sql.NullInt32
+		outputTokens         sql.NullInt32
+		cacheReadTokens      sql.NullInt32
+		cacheWriteTokens     sql.NullInt32
+		reasoningTokens      sql.NullInt32
+		audioInputTokens     sql.NullInt32
+		audioOutputTokens    sql.NullInt32
+		imageUnits           sql.NullInt32
+		requestCount         sql.NullInt32
+		computeMs            sql.NullInt64
+		storageBytes         sql.NullInt64
+		bandwidthBytes       sql.NullInt64
+	)
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
-		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model, cost_usd, price_version, price_snapshot, tags, created_at
+		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+		       model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		       reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
+		       compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta
 		FROM spans WHERE id = $1
 	`, spanID).Scan(
-		&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &row.EndedAt, &row.DurationMs,
-		&input, &output, &row.Error, &row.InputTokens, &row.OutputTokens, &row.CacheReadTokens, &row.CacheWriteTokens, &row.Model, &row.CostUSD, &priceVersion, &snapshotJSON, &tags, &row.CreatedAt,
+		&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &endedAt, &row.DurationMs,
+		&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
+		&model, &costUSD, &priceVersion, &snapshotJSON, &attrs, &row.CreatedAt,
+		&reasoningTokens, &audioInputTokens, &audioOutputTokens, &imageUnits, &requestCount,
+		&computeMs, &storageBytes, &bandwidthBytes, &row.TraceID, &row.RootSpanID, &validationMeta,
 	)
-
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -158,27 +175,67 @@ func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*store.Sp
 		return nil, err
 	}
 
-	row.Input = input
-	row.Output = output
-	row.Tags = tags
+	if endedAt.Valid {
+		row.EndedAt = &endedAt.Int64
+	}
+	if input != nil {
+		row.Input = &input
+	}
+	if output != nil {
+		row.Output = &output
+	}
+	if attrs != nil {
+		row.Attrs = &attrs
+	}
+	if model.Valid {
+		row.Model = &model.String
+	}
+	if costUSD.Valid {
+		amt := money.FromDollars(costUSD.Float64)
+		row.Cost = &amt
+	}
 	if priceVersion.Valid {
 		row.PriceVersion = &priceVersion.String
 	}
 	if snapshotJSON.Valid && snapshotJSON.String != "" {
-		_ = json.Unmarshal([]byte(snapshotJSON.String), &row.PriceSnapshot)
+		var ps runtimemodel.PriceSnapshot
+		_ = json.Unmarshal([]byte(snapshotJSON.String), &ps)
+		row.PriceSnapshot = &ps
+	}
+	if validationMeta.Valid {
+		row.ValidationMeta = []byte(validationMeta.String)
+	}
+	setNullInt32(&row.InputTokens, inputTokens)
+	setNullInt32(&row.OutputTokens, outputTokens)
+	setNullInt32(&row.CacheReadTokens, cacheReadTokens)
+	setNullInt32(&row.CacheWriteTokens, cacheWriteTokens)
+	setNullInt32(&row.ReasoningTokens, reasoningTokens)
+	setNullInt32(&row.AudioInputTokens, audioInputTokens)
+	setNullInt32(&row.AudioOutputTokens, audioOutputTokens)
+	setNullInt32(&row.ImageUnits, imageUnits)
+	setNullInt32(&row.RequestCount, requestCount)
+	if computeMs.Valid {
+		row.ComputeMs = &computeMs.Int64
+	}
+	if storageBytes.Valid {
+		row.StorageBytes = &storageBytes.Int64
+	}
+	if bandwidthBytes.Valid {
+		row.BandwidthBytes = &bandwidthBytes.Int64
 	}
 
-	return &row, nil
+	return row, nil
 }
 
 // QuerySpans retrieves spans matching a filter.
-func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *store.SpanFilter) ([]*store.SpanRow, error) {
+func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	query := `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
-		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model, cost_usd, tags
+		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+		       model, cost_usd, attrs, created_at
 		FROM spans WHERE 1=1
 	`
 	var args []any
@@ -219,39 +276,59 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *store.SpanFilt
 	}
 	defer rows.Close()
 
-	var spans []*store.SpanRow
+	var spans []*runtimemodel.SpanRow
 	for rows.Next() {
-		var row store.SpanRow
-		var input, output, tags []byte
-		var priceVersion sql.NullString
-		var snapshotJSON sql.NullString
+		row := &runtimemodel.SpanRow{}
+		var (
+			input, output, attrs []byte
+			endedAt              sql.NullInt64
+			model                sql.NullString
+			costUSD              sql.NullFloat64
+			inputTokens          sql.NullInt32
+			outputTokens         sql.NullInt32
+			cacheReadTokens      sql.NullInt32
+			cacheWriteTokens     sql.NullInt32
+		)
 		if err := rows.Scan(
-			&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &row.EndedAt, &row.DurationMs,
-			&input, &output, &row.Error, &row.InputTokens, &row.OutputTokens, &row.CacheReadTokens, &row.CacheWriteTokens, &row.Model, &row.CostUSD, &priceVersion, &snapshotJSON, &tags, &row.CreatedAt,
+			&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &endedAt, &row.DurationMs,
+			&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
+			&model, &costUSD, &attrs, &row.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
-		row.Input = input
-		row.Output = output
-		row.Tags = tags
-		if priceVersion.Valid {
-			row.PriceVersion = &priceVersion.String
+		if endedAt.Valid {
+			row.EndedAt = &endedAt.Int64
 		}
-		if snapshotJSON.Valid && snapshotJSON.String != "" {
-			_ = json.Unmarshal([]byte(snapshotJSON.String), &row.PriceSnapshot)
+		if input != nil {
+			row.Input = &input
 		}
-		spans = append(spans, &row)
+		if output != nil {
+			row.Output = &output
+		}
+		if attrs != nil {
+			row.Attrs = &attrs
+		}
+		if model.Valid {
+			row.Model = &model.String
+		}
+		if costUSD.Valid {
+			amt := money.FromDollars(costUSD.Float64)
+			row.Cost = &amt
+		}
+		setNullInt32(&row.InputTokens, inputTokens)
+		setNullInt32(&row.OutputTokens, outputTokens)
+		setNullInt32(&row.CacheReadTokens, cacheReadTokens)
+		setNullInt32(&row.CacheWriteTokens, cacheWriteTokens)
+		spans = append(spans, row)
 	}
-
 	return spans, rows.Err()
 }
 
 // SpendByDimension aggregates cost by the given dimension.
-func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, filter *store.SpanFilter) (map[string]float64, error) {
+func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, filter *runtimemodel.SpanFilter) (map[string]money.Amount, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Validate groupBy against allowlist
 	col, ok := allowedGroupBy[groupBy]
 	if !ok {
 		return nil, fmt.Errorf("invalid groupBy %q", groupBy)
@@ -275,7 +352,6 @@ func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, 
 		query += ` AND started_at <= $` + fmt.Sprint(len(args)+1)
 		args = append(args, *filter.ToMs)
 	}
-
 	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_usd) DESC`, col)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -284,16 +360,15 @@ func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, 
 	}
 	defer rows.Close()
 
-	result := make(map[string]float64)
+	result := make(map[string]money.Amount)
 	for rows.Next() {
 		var dimension string
 		var cost float64
 		if err := rows.Scan(&dimension, &cost); err != nil {
 			return nil, err
 		}
-		result[dimension] = cost
+		result[dimension] = money.FromDollars(cost)
 	}
-
 	return result, rows.Err()
 }
 
@@ -309,7 +384,6 @@ func (s *DuckDBSpanStore) writerLoop() {
 			return
 		}
 
-		// Execute batch in a transaction
 		tx, err := s.db.Begin()
 		if err != nil {
 			for _, req := range batch {
@@ -321,28 +395,15 @@ func (s *DuckDBSpanStore) writerLoop() {
 
 		for _, req := range batch {
 			var execErr error
-			snapshotJSON, _ := json.Marshal(req.span.PriceSnapshot)
-			if req.isUpdate {
-				// UPDATE (upsert with INSERT OR REPLACE)
-				_, execErr = tx.Exec(`
-					INSERT OR REPLACE INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms, input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model, cost_usd, price_version, price_snapshot, tags, created_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, req.span.ID, req.span.RunID, req.span.ActionID, req.span.ParentID, req.span.Name, req.span.StartedAt, req.span.EndedAt, req.span.DurationMs,
-					req.span.Input, req.span.Output, req.span.Error, req.span.InputTokens, req.span.OutputTokens, req.span.CacheReadTokens, req.span.CacheWriteTokens, req.span.Model, req.span.CostUSD, req.span.PriceVersion, string(snapshotJSON), req.span.Tags, time.Now().UnixMilli())
-			} else {
-				// INSERT
-				_, execErr = tx.Exec(`
-					INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms, input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, model, cost_usd, price_version, price_snapshot, tags, created_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-				`, req.span.ID, req.span.RunID, req.span.ActionID, req.span.ParentID, req.span.Name, req.span.StartedAt, req.span.EndedAt, req.span.DurationMs,
-					req.span.Input, req.span.Output, req.span.Error, req.span.InputTokens, req.span.OutputTokens, req.span.CacheReadTokens, req.span.CacheWriteTokens, req.span.Model, req.span.CostUSD, req.span.PriceVersion, string(snapshotJSON), req.span.Tags, time.Now().UnixMilli())
+			if req.open != nil {
+				execErr = insertSpan(tx, req.open)
+			} else if req.end != nil {
+				execErr = updateSpan(tx, req.spanID, req.end)
 			}
 			req.respCh <- execErr
 		}
 
-		if err := tx.Commit(); err != nil {
-			// Already sent per-request errors above, just log here if needed
-		}
+		_ = tx.Commit()
 		batch = batch[:0]
 	}
 
@@ -353,23 +414,135 @@ func (s *DuckDBSpanStore) writerLoop() {
 			if len(batch) >= defaultBufferSize {
 				flush()
 			}
-
 		case <-ticker.C:
 			flush()
-
 		case <-s.done:
-			// Final flush
 			flush()
 			return
 		}
 	}
 }
 
-// Allowlist for groupBy values in SpendByDimension
+func insertSpan(tx *sql.Tx, span *runtimemodel.SpanRow) error {
+	var costUSD *float64
+	if span.Cost != nil {
+		v := span.Cost.Dollars()
+		costUSD = &v
+	}
+	var snapshotJSON *string
+	if span.PriceSnapshot != nil {
+		b, _ := json.Marshal(span.PriceSnapshot)
+		s := string(b)
+		snapshotJSON = &s
+	}
+	var validationMeta *string
+	if len(span.ValidationMeta) > 0 {
+		s := string(span.ValidationMeta)
+		validationMeta = &s
+	}
+
+	_, err := tx.Exec(`
+		INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		                   input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+		                   model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		                   reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
+		                   compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		span.ID, span.RunID, span.ActionID, span.ParentID, span.Name, span.StartedAt, span.EndedAt, span.DurationMs,
+		derefBytes(span.Input), derefBytes(span.Output), span.Error,
+		span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens,
+		span.Model, costUSD, span.PriceVersion, snapshotJSON, derefBytes(span.Attrs), time.Now().UnixMilli(),
+		span.ReasoningTokens, span.AudioInputTokens, span.AudioOutputTokens, span.ImageUnits, span.RequestCount,
+		span.ComputeMs, span.StorageBytes, span.BandwidthBytes, span.TraceID, span.RootSpanID, validationMeta,
+	)
+	return err
+}
+
+func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
+	var costUSD *float64
+	if end.Cost != nil {
+		v := end.Cost.Dollars()
+		costUSD = &v
+	}
+	var snapshotJSON *string
+	if end.PriceSnapshot != nil {
+		b, _ := json.Marshal(end.PriceSnapshot)
+		s := string(b)
+		snapshotJSON = &s
+	}
+	var validationMeta *string
+	if len(end.ValidationMeta) > 0 {
+		s := string(end.ValidationMeta)
+		validationMeta = &s
+	}
+	var traceID, rootSpanID *string
+	if end.TraceID != "" {
+		traceID = &end.TraceID
+	}
+	if end.RootSpanID != "" {
+		rootSpanID = &end.RootSpanID
+	}
+
+	_, err := tx.Exec(`
+		UPDATE spans SET
+			ended_at          = ?,
+			duration_ms       = ?,
+			output            = ?,
+			attrs             = ?,
+			error             = ?,
+			input_tokens      = COALESCE(?, input_tokens),
+			output_tokens     = COALESCE(?, output_tokens),
+			cache_read_tokens = COALESCE(?, cache_read_tokens),
+			cache_write_tokens= COALESCE(?, cache_write_tokens),
+			reasoning_tokens  = COALESCE(?, reasoning_tokens),
+			audio_input_tokens= COALESCE(?, audio_input_tokens),
+			audio_output_tokens= COALESCE(?, audio_output_tokens),
+			image_units       = COALESCE(?, image_units),
+			request_count     = COALESCE(?, request_count),
+			compute_ms        = COALESCE(?, compute_ms),
+			storage_bytes     = COALESCE(?, storage_bytes),
+			bandwidth_bytes   = COALESCE(?, bandwidth_bytes),
+			model             = COALESCE(?, model),
+			cost_usd          = COALESCE(?, cost_usd),
+			price_version     = COALESCE(?, price_version),
+			price_snapshot    = COALESCE(?, price_snapshot),
+			trace_id          = COALESCE(?, trace_id),
+			root_span_id      = COALESCE(?, root_span_id),
+			validation_meta   = COALESCE(?, validation_meta)
+		WHERE id = ?
+	`,
+		end.EndedAt, end.DurationMs,
+		derefBytes(end.Output), derefBytes(end.Attrs), end.Error,
+		end.InputTokens, end.OutputTokens, end.CacheReadTokens, end.CacheWriteTokens,
+		end.ReasoningTokens, end.AudioInputTokens, end.AudioOutputTokens, end.ImageUnits, end.RequestCount,
+		end.ComputeMs, end.StorageBytes, end.BandwidthBytes,
+		end.Model, costUSD, end.PriceVersion, snapshotJSON,
+		traceID, rootSpanID, validationMeta,
+		spanID,
+	)
+	return err
+}
+
+// Allowlist for groupBy values in SpendByDimension.
 var allowedGroupBy = map[string]string{
 	"model":     "COALESCE(model, '')",
 	"run_id":    "run_id",
 	"connector": "connector",
 	"hour":      "date_trunc('hour', to_timestamp(started_at / 1000.0))",
 	"day":       "date_trunc('day', to_timestamp(started_at / 1000.0))",
+}
+
+func derefBytes(b *[]byte) []byte {
+	if b == nil {
+		return nil
+	}
+	return *b
+}
+
+func setNullInt32(dst **int, v sql.NullInt32) {
+	if v.Valid {
+		i := int(v.Int32)
+		*dst = &i
+	}
 }

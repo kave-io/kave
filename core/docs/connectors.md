@@ -5,6 +5,9 @@ we're planning — without getting blocked later?
 
 Short answer: yes, with two constraints to note now.
 
+Core owns the connector contracts in `ports/connectors.go`. The concrete adapters under
+`connectors/` should implement those interfaces, not define the source of truth for them.
+
 ---
 
 ## The 4 integration patterns
@@ -63,7 +66,7 @@ Pydantic AI (middleware), Semantic Kernel (filter), AutoGen (OTel exporter).
 - on_tool_end   → PATCH /api/actions/:id  { status: completed, output: ... }
 
 **What Kave does:**
-- Receives the event, creates/updates Action record
+- Receives the observed action, creates/updates Action record
 - Runs pipeline (auth, trace, cost) against the action data
 - Cannot block the agent (the call already happened)
 - Auth in this mode = audit + alert, not block-before-execute
@@ -127,7 +130,7 @@ Enriches them with cost data and policy violations. Stores in SpanStore.
 any agent already using OTel instrumentation.
 
 **Critical difference from patterns 1–3:**
-This is NOT an intercept path. The calls have already happened.
+This is NOT an enforcement path. The calls have already happened.
 Kave cannot block or enforce policy before execution.
 This is purely observability + post-hoc analysis.
 
@@ -140,8 +143,8 @@ This is purely observability + post-hoc analysis.
 - Surfaces in dashboard alongside intercepted runs
 
 **Implication:** Kave needs a separate ingestion endpoint for OTel, distinct from the
-intercept pipeline. The SpanStore handles both intercepted spans and imported spans.
-Add `source` field to Span: "intercept" | "otel_import".
+pipeline. The SpanStore handles both intercepted spans and imported spans.
+Add `kind` and `source` fields to Span for classification: action/observed_action/import and enforcement/report/otel_import.
 
 **Connector lives in:** `connectors/protocols/otel/` (the OTel receiver/collector)
 
@@ -171,7 +174,7 @@ LLM proxy responses can be streamed (`stream: true`). The proxy must:
 - Write Action.output and Span only when the stream closes
 
 The Action model is fine (output gets written at completion).
-The proxy implementation needs a streaming variant of the intercept flow.
+The proxy implementation needs a streaming variant of the enforcement flow.
 Note this in the proxy flow — do not solve now.
 
 ### Constraint 2 — Auth mode differs by pattern
@@ -199,9 +202,9 @@ connectors/
     ollama/         ← native Go SDK wrap
     generic/        ← any OpenAI-compatible endpoint
   frameworks/
-    langchain/      ← API handler for LangChain SDK events
-    crewai/         ← API handler for CrewAI SDK events
-    openclaw/       ← middleware plugin + event handler
+    langchain/      ← API handler for LangChain SDK observed actions
+    crewai/         ← API handler for CrewAI SDK observed actions
+    openclaw/       ← middleware plugin + observed-action handler
   tools/
     stripe/         ← HTTP REST (wraps pattern 1 for tools)
     github/

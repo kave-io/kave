@@ -9,74 +9,177 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/kave-io/kave/core/intercept"
+	controlmodel "github.com/kave-io/kave/core/model/control"
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pipeline"
+	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 )
 
+// mockAppStore implements store.AppStore with minimal logic for gateway tests.
 type mockAppStore struct {
-	agent *store.Agent
-	cred  *store.Credential
+	agent *controlmodel.Agent
+	cred  *controlmodel.ConnectorCredential
 }
 
-func (m *mockAppStore) GetAgentByID(_ context.Context, _ string) (*store.Agent, error) {
+// AgentStore
+func (m *mockAppStore) CreateAgent(_ context.Context, _ *controlmodel.Agent) error { return nil }
+func (m *mockAppStore) GetAgentByID(_ context.Context, _ string) (*controlmodel.Agent, error) {
 	return m.agent, nil
 }
-func (m *mockAppStore) GetCredential(_ context.Context, _, _ string) (*store.Credential, error) {
-	return m.cred, nil
-}
-func (m *mockAppStore) CreateWorkspace(_ context.Context, _ *store.Workspace) error { return nil }
-func (m *mockAppStore) GetWorkspace(_ context.Context, _ string) (*store.Workspace, error) {
+func (m *mockAppStore) GetAgentByName(_ context.Context, _, _ string) (*controlmodel.Agent, error) {
 	return nil, nil
 }
-func (m *mockAppStore) CreateAgent(_ context.Context, _ *store.Agent) error { return nil }
-func (m *mockAppStore) GetAgentByName(_ context.Context, _, _ string) (*store.Agent, error) {
-	return nil, nil
-}
-func (m *mockAppStore) UpdateAgent(_ context.Context, _ string, _ *store.AgentUpdate) error {
+func (m *mockAppStore) UpdateAgent(_ context.Context, _ string, _ *controlmodel.AgentUpdate) error {
 	return nil
 }
-func (m *mockAppStore) ListAgents(_ context.Context, _ string) ([]*store.Agent, error) {
+func (m *mockAppStore) ListAgents(_ context.Context, _ string) ([]*controlmodel.Agent, error) {
 	return nil, nil
 }
-func (m *mockAppStore) CreatePolicy(_ context.Context, _ *store.Policy) error { return nil }
-func (m *mockAppStore) GetPolicy(_ context.Context, _ string) (*store.Policy, error) {
+
+// PolicyStore
+func (m *mockAppStore) CreatePolicy(_ context.Context, _ *controlmodel.PolicyRecord) error { return nil }
+func (m *mockAppStore) GetPolicy(_ context.Context, _ string) (*controlmodel.PolicyRecord, error) {
 	return nil, nil
 }
-func (m *mockAppStore) GetAgentPolicy(_ context.Context, _ string) (*store.Policy, error) {
+func (m *mockAppStore) GetAgentPolicy(_ context.Context, _ string) (*controlmodel.PolicyRecord, error) {
 	return nil, nil
 }
-func (m *mockAppStore) CreateRun(_ context.Context, _ *store.Run) error { return nil }
-func (m *mockAppStore) CreateAction(_ context.Context, _ *store.ActionRecord) error {
+func (m *mockAppStore) ListPolicies(_ context.Context, _ string) ([]*controlmodel.PolicyRecord, error) {
+	return nil, nil
+}
+
+// RunStore
+func (m *mockAppStore) CreateRun(_ context.Context, _ *runtimemodel.RunRecord) error { return nil }
+func (m *mockAppStore) GetRunByID(_ context.Context, _ string) (*runtimemodel.RunRecord, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetRunByIdempotencyKey(_ context.Context, _, _ string) (*runtimemodel.RunRecord, error) {
+	return nil, nil
+}
+func (m *mockAppStore) UpdateRun(_ context.Context, _ string, _ *runtimemodel.RunUpdate) error {
 	return nil
 }
-func (m *mockAppStore) GetRunByID(_ context.Context, _ string) (*store.Run, error) {
+func (m *mockAppStore) ListRuns(_ context.Context, _ *runtimemodel.RunFilter) ([]*runtimemodel.RunRecord, error) {
 	return nil, nil
 }
-func (m *mockAppStore) UpdateRun(_ context.Context, _ string, _ *store.RunUpdate) error { return nil }
-func (m *mockAppStore) ListRuns(_ context.Context, _ *store.RunFilter) ([]*store.Run, error) {
+
+// ActionStore
+func (m *mockAppStore) CreateAction(_ context.Context, _ *runtimemodel.ActionRecord) error { return nil }
+func (m *mockAppStore) GetAction(_ context.Context, _ string) (*runtimemodel.ActionRecord, error) {
 	return nil, nil
 }
-func (m *mockAppStore) InsertBudgetEntry(_ context.Context, _ *store.BudgetEntry) error { return nil }
-func (m *mockAppStore) AddRunSpend(_ context.Context, _ string, _ float64) error        { return nil }
-func (m *mockAppStore) SumAgentSpend(_ context.Context, _ string, _ int64) (float64, error) {
+func (m *mockAppStore) ListActionsByRun(_ context.Context, _ string) ([]*runtimemodel.ActionRecord, error) {
+	return nil, nil
+}
+
+// CostStore
+func (m *mockAppStore) GetPriceBook(_ context.Context) (*runtimemodel.PriceBook, error) { return nil, nil }
+func (m *mockAppStore) SavePriceBook(_ context.Context, _ *runtimemodel.PriceBook) error { return nil }
+func (m *mockAppStore) InsertBudgetEntry(_ context.Context, _ *runtimemodel.BudgetEntry) error {
+	return nil
+}
+func (m *mockAppStore) AddRunSpend(_ context.Context, _ string, _ money.Amount) error { return nil }
+func (m *mockAppStore) SumAgentSpend(_ context.Context, _ string, _ int64) (money.Amount, error) {
 	return 0, nil
 }
-func (m *mockAppStore) GetSpendReport(_ context.Context, _ *store.SpendFilter) (*store.SpendReport, error) {
-	return &store.SpendReport{}, nil
+func (m *mockAppStore) GetSpendReport(_ context.Context, _ *runtimemodel.SpendFilter) (*runtimemodel.SpendReport, error) {
+	return &runtimemodel.SpendReport{}, nil
 }
-func (m *mockAppStore) GetPriceBook(_ context.Context) (*store.PriceBook, error)      { return nil, nil }
-func (m *mockAppStore) SavePriceBook(_ context.Context, _ *store.PriceBook) error     { return nil }
-func (m *mockAppStore) InsertAgentToken(_ context.Context, _ *store.AgentToken) error { return nil }
-func (m *mockAppStore) IsTokenRevoked(_ context.Context, _ string) (bool, error)      { return false, nil }
-func (m *mockAppStore) InsertRevokedToken(_ context.Context, _ string) error          { return nil }
-func (m *mockAppStore) StoreCredential(_ context.Context, _ *store.Credential) error  { return nil }
-func (m *mockAppStore) DeleteCredential(_ context.Context, _ string) error            { return nil }
+
+// TokenStore
+func (m *mockAppStore) InsertAgentToken(_ context.Context, _ *controlmodel.AgentToken) error { return nil }
+func (m *mockAppStore) GetTokenByHash(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
+	return nil, nil
+}
+func (m *mockAppStore) RevokeToken(_ context.Context, _, _, _ string) error      { return nil }
+func (m *mockAppStore) TouchToken(_ context.Context, _ string) error              { return nil }
+func (m *mockAppStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) { return false, nil }
+func (m *mockAppStore) InsertRevokedToken(_ context.Context, _ string) error     { return nil }
+
+// CredentialStore
+func (m *mockAppStore) GetCredential(_ context.Context, _ string) (*controlmodel.ConnectorCredential, error) {
+	return m.cred, nil
+}
+func (m *mockAppStore) StoreCredential(_ context.Context, _ *controlmodel.ConnectorCredential) error {
+	return nil
+}
+func (m *mockAppStore) DeleteCredential(_ context.Context, _ string) error { return nil }
+func (m *mockAppStore) ListCredentials(_ context.Context, _ string) ([]*controlmodel.ConnectorCredential, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ResolveCredential(_ context.Context, _ *controlmodel.CredentialFilter) (*controlmodel.ConnectorCredential, error) {
+	return m.cred, nil
+}
+func (m *mockAppStore) RotateCredential(_ context.Context, _ string, _ []byte, _, _ string) error {
+	return nil
+}
+func (m *mockAppStore) RevokeCredential(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockAppStore) TouchCredential(_ context.Context, _ string) error        { return nil }
+
+// OrgStore
+func (m *mockAppStore) CreateOrg(_ context.Context, _ *controlmodel.Organization) error { return nil }
+func (m *mockAppStore) GetOrg(_ context.Context, _ string) (*controlmodel.Organization, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetOrgBySlug(_ context.Context, _ string) (*controlmodel.Organization, error) {
+	return nil, nil
+}
+
+// UserStore
+func (m *mockAppStore) CreateUser(_ context.Context, _ *controlmodel.User) error { return nil }
+func (m *mockAppStore) GetUser(_ context.Context, _ string) (*controlmodel.User, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetUserByEmail(_ context.Context, _, _ string) (*controlmodel.User, error) {
+	return nil, nil
+}
+func (m *mockAppStore) UpdateUser(_ context.Context, _ string, _ *controlmodel.UserUpdate) error {
+	return nil
+}
+
+// MembershipStore
+func (m *mockAppStore) AddMember(_ context.Context, _ *controlmodel.Membership) error { return nil }
+func (m *mockAppStore) GetMembership(_ context.Context, _, _ string) (*controlmodel.Membership, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListMembers(_ context.Context, _ string) ([]*controlmodel.Membership, error) {
+	return nil, nil
+}
+func (m *mockAppStore) RemoveMember(_ context.Context, _, _ string) error { return nil }
+
+// ProjectStore
+func (m *mockAppStore) CreateProject(_ context.Context, _ *controlmodel.Project) error { return nil }
+func (m *mockAppStore) GetProject(_ context.Context, _ string) (*controlmodel.Project, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListProjects(_ context.Context, _ string) ([]*controlmodel.Project, error) {
+	return nil, nil
+}
+
+// EnvironmentStore
+func (m *mockAppStore) CreateEnvironment(_ context.Context, _ *controlmodel.Environment) error {
+	return nil
+}
+func (m *mockAppStore) GetEnvironment(_ context.Context, _ string) (*controlmodel.Environment, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetEnvironmentBySlug(_ context.Context, _, _ string) (*controlmodel.Environment, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListEnvironments(_ context.Context, _ string) ([]*controlmodel.Environment, error) {
+	return nil, nil
+}
+
+// StoreLifecycle
 func (m *mockAppStore) WithTx(_ context.Context, fn func(store.AppStore) error) error { return fn(m) }
 func (m *mockAppStore) Migrate(_ context.Context) error                               { return nil }
 func (m *mockAppStore) Close() error                                                  { return nil }
 
+var _ store.AppStore = (*mockAppStore)(nil)
+
 func TestGatewayAgentNotFound(t *testing.T) {
-	g := New(&mockAppStore{}, nil, intercept.New())
+	g := New(&mockAppStore{}, nil, pipeline.New())
 	mux := http.NewServeMux()
 	g.RegisterRoutes(mux)
 
@@ -109,9 +212,9 @@ func TestGatewayForwardsClaudeCodeOpenAI(t *testing.T) {
 	defer upstream.Close()
 
 	g := New(&mockAppStore{
-		agent: &store.Agent{ID: "a1", WorkspaceID: "ws1"},
-		cred:  &store.Credential{Encrypted: []byte("real-key")},
-	}, nil, intercept.New())
+		agent: &controlmodel.Agent{ID: "a1", ProjectID: "proj1", EnvID: "default", Status: controlmodel.AgentStatusActive},
+		cred:  &controlmodel.ConnectorCredential{EncryptedBlob: []byte("real-key"), ProjectID: "proj1"},
+	}, nil, pipeline.New())
 	g.transport.client.Transport = rewriteTransport(t, upstream.URL)
 
 	mux := http.NewServeMux()

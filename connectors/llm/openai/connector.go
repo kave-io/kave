@@ -8,7 +8,8 @@ import (
 	"github.com/kave-io/kave/connectors"
 	"github.com/kave-io/kave/connectors/llm/shared"
 	"github.com/kave-io/kave/connectors/runtime"
-	"github.com/kave-io/kave/core/intercept"
+	"github.com/kave-io/kave/core/pipeline"
+	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/tidwall/gjson"
 )
 
@@ -27,7 +28,7 @@ func (c *Connector) Name() string {
 	return "openai"
 }
 
-func (c *Connector) Intercept(ctx context.Context, action *intercept.Action, next connectors.Handler) (*intercept.Result, error) {
+func (c *Connector) Intercept(ctx context.Context, action *coreruntime.Action, next connectors.Handler) (*pipeline.Result, error) {
 	if action.Connector != "openai" {
 		return nil, fmt.Errorf("openai: unexpected connector %q", action.Connector)
 	}
@@ -36,17 +37,15 @@ func (c *Connector) Intercept(ctx context.Context, action *intercept.Action, nex
 
 func (c *Connector) Capabilities() connectors.Capabilities {
 	return connectors.Capabilities{
-		SupportedActions: []intercept.ActionType{
-			intercept.TypeLLM,
-		},
+		SupportedActions: []coreruntime.ActionType{coreruntime.TypeLLM},
 		SupportedMethods: []string{
 			"chat.completions",
 			"chat.completions.streaming",
 			"embeddings",
 		},
-		CanProxy:   true,
-		CanStream:  true,
-		APIVersion: APIVersion,
+		CanProxy:      true,
+		StreamSupport: true,
+		APIVersion:    APIVersion,
 	}
 }
 
@@ -75,8 +74,8 @@ func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*r
 	}, nil
 }
 
-func (c *Connector) ParseResponse(body []byte, _ string) (*intercept.Result, error) {
-	result := &intercept.Result{Body: body}
+func (c *Connector) ParseResponse(body []byte, _ string) (*pipeline.Result, error) {
+	result := &pipeline.Result{Body: body}
 
 	input := int(gjson.GetBytes(body, "usage.prompt_tokens").Int())
 	output := int(gjson.GetBytes(body, "usage.completion_tokens").Int())
@@ -88,7 +87,7 @@ func (c *Connector) ParseResponse(body []byte, _ string) (*intercept.Result, err
 	}
 
 	if input != 0 || output != 0 || model != "" {
-		result.TokenUsage = &intercept.TokenUsage{
+		result.TokenUsage = &coreruntime.TokenUsage{
 			InputTokens:  input,
 			OutputTokens: output,
 			Model:        model,
