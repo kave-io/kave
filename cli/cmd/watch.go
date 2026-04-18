@@ -7,26 +7,19 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-// spanRow mirrors server/core/store.SpanRow for JSON decoding.
-type spanRow struct {
-	ID           string  `json:"ID"`
-	RunID        string  `json:"RunID"`
-	ActionID     string  `json:"ActionID"`
-	Name         string  `json:"Name"`
-	StartedAt    int64   `json:"StartedAt"`
-	EndedAt      *int64  `json:"EndedAt"`
-	DurationMs   int64   `json:"DurationMs"`
-	Error        *string `json:"Error"`
-	InputTokens  *int    `json:"InputTokens"`
-	OutputTokens *int    `json:"OutputTokens"`
-	Model        *string `json:"Model"`
-	CostUSD      *float64 `json:"CostUSD"`
+// runEvent mirrors core/bus.RunEvent for JSON decoding.
+type runEvent struct {
+	RunID     string `json:"RunID"`
+	ProjectID string `json:"ProjectID"`
+	EnvID     string `json:"EnvID"`
+	AgentID   string `json:"AgentID"`
+	Status    string `json:"Status"`
+	SpanID    string `json:"SpanID"`
 }
 
 var watchCmd = &cobra.Command{
@@ -44,8 +37,9 @@ Examples:
 
 func init() {
 	watchCmd.Flags().String("server", "", "Kave server URL (default: http://localhost:8080)")
-	watchCmd.Flags().String("run", "", "Filter spans by run ID")
-	watchCmd.Flags().String("action", "", "Filter spans by action ID")
+	watchCmd.Flags().String("run", "", "Filter runs by run ID")
+	watchCmd.Flags().String("project", "", "Filter runs by project ID")
+	watchCmd.Flags().String("env", "", "Filter runs by environment ID")
 	rootCmd.AddCommand(watchCmd)
 }
 
@@ -59,7 +53,8 @@ func runWatch(cmd *cobra.Command, args []string) {
 	}
 
 	runID, _ := cmd.Flags().GetString("run")
-	actionID, _ := cmd.Flags().GetString("action")
+	projectID, _ := cmd.Flags().GetString("project")
+	envID, _ := cmd.Flags().GetString("env")
 
 	// Build SSE URL
 	endpoint := strings.TrimRight(serverURL, "/") + "/api/v1/spans/stream"
@@ -67,8 +62,11 @@ func runWatch(cmd *cobra.Command, args []string) {
 	if runID != "" {
 		params = append(params, "run_id="+runID)
 	}
-	if actionID != "" {
-		params = append(params, "action_id="+actionID)
+	if projectID != "" {
+		params = append(params, "project_id="+projectID)
+	}
+	if envID != "" {
+		params = append(params, "env_id="+envID)
 	}
 	if len(params) > 0 {
 		endpoint += "?" + strings.Join(params, "&")
@@ -96,11 +94,21 @@ func runWatch(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	filter := ""
+	filters := []string{}
 	if runID != "" {
-		filter = fmt.Sprintf(" (run: %s)", runID[:min(8, len(runID))])
+		filters = append(filters, fmt.Sprintf("run: %s", runID[:min(8, len(runID))]))
 	}
-	fmt.Printf("watching%s — press Ctrl+C to stop\n\n", filter)
+	if projectID != "" {
+		filters = append(filters, fmt.Sprintf("project: %s", projectID[:min(8, len(projectID))]))
+	}
+	if envID != "" {
+		filters = append(filters, fmt.Sprintf("env: %s", envID[:min(8, len(envID))]))
+	}
+	filterStr := ""
+	if len(filters) > 0 {
+		filterStr = " (" + strings.Join(filters, ", ") + ")"
+	}
+	fmt.Printf("watching runs%s — press Ctrl+C to stop\n\n", filterStr)
 
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
@@ -120,13 +128,13 @@ func runWatch(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 
-		var span spanRow
-		if err := json.Unmarshal([]byte(data), &span); err != nil {
-			fmt.Printf("? (unparseable span)\n")
+		var event runEvent
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			fmt.Printf("? (unparseable event)\n")
 			continue
 		}
 
-		printSpan(span)
+		printRunEvent(event)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -135,47 +143,22 @@ func runWatch(cmd *cobra.Command, args []string) {
 	}
 }
 
-func printSpan(s spanRow) {
-	ts := time.UnixMilli(s.StartedAt).Format("15:04:05.000")
-
+func printRunEvent(e runEvent) {
 	// Status indicator
-	status := "✓"
-	if s.Error != nil && *s.Error != "" {
+	status := "→"
+	if e.Status == "completed" {
+		status = "✓"
+	} else if e.Status == "failed" {
 		status = "✗"
 	}
 
-	// Duration
-	dur := ""
-	if s.DurationMs > 0 {
-		dur = fmt.Sprintf(" %dms", s.DurationMs)
+	// Format run ID
+	runIDShort := e.RunID
+	if len(runIDShort) > 8 {
+		runIDShort = runIDShort[:8]
 	}
 
-	// Token / cost info
-	tokens := ""
-	if s.InputTokens != nil && s.OutputTokens != nil {
-		tokens = fmt.Sprintf(" [%d→%d tok]", *s.InputTokens, *s.OutputTokens)
-	}
-
-	cost := ""
-	if s.CostUSD != nil && *s.CostUSD > 0 {
-		cost = fmt.Sprintf(" $%.6f", *s.CostUSD)
-	}
-
-	model := ""
-	if s.Model != nil && *s.Model != "" {
-		model = fmt.Sprintf(" (%s)", *s.Model)
-	}
-
-	name := s.Name
-	if name == "" {
-		name = s.ActionID
-	}
-
-	fmt.Printf("%s %s  %s%s%s%s%s\n", ts, status, name, dur, model, tokens, cost)
-
-	if s.Error != nil && *s.Error != "" {
-		fmt.Printf("         error: %s\n", *s.Error)
-	}
+	fmt.Printf("%s  %s  agent:%s  span:%s\n", status, runIDShort, e.AgentID[:min(8, len(e.AgentID))], e.SpanID[:min(8, len(e.SpanID))])
 }
 
 func min(a, b int) int {

@@ -1,12 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { formatAmount, type CurrencyConfig } from '@/lib/money'
 
-export interface CurrencyOption {
+export interface CurrencyOption extends CurrencyConfig {
   code: string
   name: string
   nativeName: string
-  symbol: string
-  symbolPosition: 'before' | 'after'
 }
 
 export const ALL_CURRENCIES: CurrencyOption[] = [
@@ -16,6 +15,10 @@ export const ALL_CURRENCIES: CurrencyOption[] = [
     nativeName: 'تومان',
     symbol: 'T',
     symbolPosition: 'after',
+    fractionDigits: 0,
+    decimalSep: '.',
+    thousandsSep: ',',
+    spaceBetween: true,
   },
   {
     code: 'USD',
@@ -23,6 +26,54 @@ export const ALL_CURRENCIES: CurrencyOption[] = [
     nativeName: 'US Dollar',
     symbol: '$',
     symbolPosition: 'before',
+    fractionDigits: 2,
+    decimalSep: '.',
+    thousandsSep: ',',
+    spaceBetween: false,
+  },
+  {
+    code: 'EUR',
+    name: 'Euro',
+    nativeName: 'Euro',
+    symbol: '€',
+    symbolPosition: 'after',
+    fractionDigits: 2,
+    decimalSep: ',',
+    thousandsSep: '.',
+    spaceBetween: true,
+  },
+  {
+    code: 'GBP',
+    name: 'Pound Sterling',
+    nativeName: 'Pound Sterling',
+    symbol: '£',
+    symbolPosition: 'before',
+    fractionDigits: 2,
+    decimalSep: '.',
+    thousandsSep: ',',
+    spaceBetween: false,
+  },
+  {
+    code: 'CHF',
+    name: 'Swiss Franc',
+    nativeName: 'Franken',
+    symbol: 'CHF',
+    symbolPosition: 'after',
+    fractionDigits: 2,
+    decimalSep: '.',
+    thousandsSep: "'",
+    spaceBetween: true,
+  },
+  {
+    code: 'IRR',
+    name: 'Iranian Rial',
+    nativeName: 'ریال',
+    symbol: '﷼',
+    symbolPosition: 'after',
+    fractionDigits: 0,
+    decimalSep: '.',
+    thousandsSep: ',',
+    spaceBetween: true,
   },
 ]
 
@@ -69,12 +120,8 @@ export const useCurrencyStore = defineStore('currency', () => {
     }
   }
 
-  function format(amount: number): string {
-    const c = selected.value
-    const formatted = amount.toLocaleString()
-    return c.symbolPosition === 'before'
-      ? `${c.symbol}${formatted}`
-      : `${formatted} ${c.symbol}`
+  function format(amount: string | undefined | null): string {
+    return formatAmount(amount, selected.value)
   }
 
   function save() {

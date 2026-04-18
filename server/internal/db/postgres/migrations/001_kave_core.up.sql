@@ -35,7 +35,7 @@ CREATE TABLE agents (
     name TEXT NOT NULL,
     description TEXT,
     policy_id UUID,
-    monthly_budget NUMERIC(15, 2) DEFAULT 100.00,
+    monthly_budget_amount_nanos BIGINT DEFAULT 100000000000,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -57,7 +57,7 @@ CREATE TABLE policies (
     description TEXT,
     allowed_connectors TEXT[] DEFAULT ARRAY['*'],
     allowed_methods TEXT[] DEFAULT ARRAY['*'],
-    budget_cap_usd NUMERIC(15, 2) NOT NULL DEFAULT 1000.00,
+    budget_cap_amount_nanos BIGINT NOT NULL DEFAULT 1000000000000,
     config JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -78,8 +78,8 @@ CREATE TABLE runs (
     policy_id UUID REFERENCES policies(id) ON DELETE SET NULL,
     name TEXT,
     status TEXT NOT NULL DEFAULT 'active', -- active | completed | failed
-    budget_cap_usd NUMERIC(15, 2),
-    spent_usd NUMERIC(15, 2) DEFAULT 0.00,
+    budget_cap_amount_nanos BIGINT,
+    spent_amount_nanos BIGINT DEFAULT 0,
     metadata JSONB DEFAULT '{}',
     error_message TEXT,
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -133,7 +133,7 @@ CREATE TABLE spans (
     cache_read_tokens INTEGER,
     cache_write_tokens INTEGER,
     model TEXT,
-    cost_usd NUMERIC(15, 6),
+    cost_amount_nanos BIGINT,
     tags JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -158,7 +158,7 @@ CREATE TABLE budget_ledger (
     output_tokens INTEGER,
     cache_read_tokens INTEGER,
     cache_write_tokens INTEGER,
-    cost_usd NUMERIC(15, 6) NOT NULL,
+    cost_amount_nanos BIGINT NOT NULL,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

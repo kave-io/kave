@@ -2,50 +2,63 @@ package runtime
 
 import "github.com/kave-io/kave/core/pkg/money"
 
-// PriceSnapshot captures the exact price inputs used to compute a cost.
-// Prices are float64 — they are config/reference values, not accounting values.
-type PriceSnapshot struct {
-	Version              string
-	Provider             string
-	Model                string
-	Match                string
-	Source               string
-	InputPerMillion      float64
-	OutputPerMillion     float64
-	CacheReadPerMillion  float64
-	CacheWritePerMillion float64
-	ReasoningPerMillion  float64
-	AudioInputPerMillion float64
-	AudioOutputPerMillion float64
-	ImageUnitPrice       float64
-	PerRequest           float64
-	PerComputeMs         float64
-	PerGBStored          float64
-	PerGBTransferred     float64
-	ResolvedAt           int64 // UnixMilli
+// DisplayMoney is a derived read-model amount for UI/reporting.
+// It is never the canonical accounting value and should not be persisted as the
+// source-of-truth in stores, logs, traces, or audits.
+type DisplayMoney struct {
+	Amount      money.Money
+	FXRate      string
+	FXSource    string
+	FXAsOfDate  string
+	FXFetchedAt int64
+	Rounded     bool
 }
 
-// PriceModel defines one provider/model pricing rule.
-// Prices are float64 — reference config, not accounting.
-type PriceModel struct {
+// PriceSnapshot captures the exact price inputs used to compute a cost.
+type PriceSnapshot struct {
+	Version               string
 	Provider              string
+	Model                 string
 	Match                 string
 	Source                string
-	InputPerMillion       float64
-	OutputPerMillion      float64
-	CacheReadPerMillion   float64
-	CacheWritePerMillion  float64
-	ReasoningPerMillion   float64  // reasoning tokens priced separately on some models
-	AudioInputPerMillion  float64  // audio input tokens (OpenAI audio models)
-	AudioOutputPerMillion float64  // audio output tokens (OpenAI audio models)
-	ImageUnitPrice        float64  // per image unit (tile/call/etc. — provider-specific)
-	PerRequest            float64  // per API call (some tools charge per-request)
-	PerComputeMs          float64  // compute time (Replicate, Modal, RunPod)
-	PerGBStored           float64  // storage cost per GB-month
-	PerGBTransferred      float64  // bandwidth cost per GB
-	EffectiveFrom         int64    // UnixMilli; 0 = from beginning of time
-	EffectiveTo           *int64   // UnixMilli; nil = currently active
-	RevisionNote          string   // brief change description
+	Currency              money.CurrencyCode
+	InputPerMillion       money.Amount
+	OutputPerMillion      money.Amount
+	CacheReadPerMillion   money.Amount
+	CacheWritePerMillion  money.Amount
+	ReasoningPerMillion   money.Amount
+	AudioInputPerMillion  money.Amount
+	AudioOutputPerMillion money.Amount
+	ImageUnitPrice        money.Amount
+	PerRequest            money.Amount
+	PerComputeMs          money.Amount
+	PerGBStored           money.Amount
+	PerGBTransferred      money.Amount
+	ResolvedAt            int64 // UnixMilli
+}
+
+// PriceModel is one entry in a PriceBook: pricing for a provider+model match,
+// valid for a time window (EffectiveFrom, EffectiveTo).
+type PriceModel struct {
+	Provider              string            `json:"provider"`
+	Match                 string            `json:"match"`
+	Source                string            `json:"source"`
+	Currency              money.CurrencyCode `json:"currency"`
+	InputPerMillion       money.Amount      `json:"input_per_million"`
+	OutputPerMillion      money.Amount      `json:"output_per_million"`
+	CacheReadPerMillion   money.Amount      `json:"cache_read_per_million"`
+	CacheWritePerMillion  money.Amount      `json:"cache_write_per_million"`
+	ReasoningPerMillion   money.Amount      `json:"reasoning_per_million"`
+	AudioInputPerMillion  money.Amount      `json:"audio_input_per_million"`
+	AudioOutputPerMillion money.Amount      `json:"audio_output_per_million"`
+	ImageUnitPrice        money.Amount      `json:"image_unit_price"`
+	PerRequest            money.Amount      `json:"per_request"`
+	PerComputeMs          money.Amount      `json:"per_compute_ms"`
+	PerGBStored           money.Amount      `json:"per_gb_stored"`
+	PerGBTransferred      money.Amount      `json:"per_gb_transferred"`
+	EffectiveFrom         int64             `json:"effective_from"`
+	EffectiveTo           *int64            `json:"effective_to"`
+	RevisionNote          string            `json:"revision_note"`
 }
 
 // PriceBook is the active pricing configuration used for metering.
@@ -56,34 +69,34 @@ type PriceBook struct {
 
 // BudgetEntry is one record in the append-only budget ledger.
 type BudgetEntry struct {
-	ID                  string
-	ProjectID           string
-	EnvID               string
-	PolicyID            string // which policy governed this spend
-	AgentID             string
-	RunID               string
-	ActionID            *string
-	SpanID              *string
-	Connector           string
-	Model               string
-	InputTokens         int
-	OutputTokens        int
-	CacheReadTokens     int
-	CacheWriteTokens    int
-	ReasoningTokens     int
-	AudioInputTokens    int
-	AudioOutputTokens   int
-	ImageUnits          int
-	RequestCount        int
-	ComputeMs           int64
-	StorageBytes        int64
-	BandwidthBytes      int64
-	Cost                money.Amount
-	PriceVersion        string
-	PriceSnapshot       *PriceSnapshot
-	UsageDetail         map[string]any // serialized Usage struct (non-token fields)
-	Metadata            map[string]any
-	CreatedAt           int64 // UnixMilli
+	ID                string
+	ProjectID         string
+	EnvID             string
+	PolicyID          string // which policy governed this spend
+	AgentID           string
+	RunID             string
+	ActionID          *string
+	SpanID            *string
+	Connector         string
+	Model             string
+	InputTokens       int
+	OutputTokens      int
+	CacheReadTokens   int
+	CacheWriteTokens  int
+	ReasoningTokens   int
+	AudioInputTokens  int
+	AudioOutputTokens int
+	ImageUnits        int
+	RequestCount      int
+	ComputeMs         int64
+	StorageBytes      int64
+	BandwidthBytes    int64
+	Cost              money.Amount
+	PriceVersion      string
+	PriceSnapshot     *PriceSnapshot
+	UsageDetail       map[string]any // serialized Usage struct (non-token fields)
+	Metadata          map[string]any
+	CreatedAt         int64 // UnixMilli
 }
 
 // SpendFilter filters spend queries.
@@ -111,8 +124,8 @@ type SpendReport struct {
 	ByEnv     map[string]money.Amount // group by environment ID
 
 	// Policy and agent breakdown
-	ByPolicy  map[string]money.Amount // group by policy ID
-	ByAgent   map[string]money.Amount // group by agent ID
+	ByPolicy map[string]money.Amount // group by policy ID
+	ByAgent  map[string]money.Amount // group by agent ID
 
 	// Operational breakdown
 	ByConnector map[string]money.Amount // group by connector

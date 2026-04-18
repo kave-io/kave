@@ -21,7 +21,7 @@ Maps between three domain models:
 - `decision.go` — auth/unified decision ↔ runtime outcome
 - `validation.go` — validation result -> runtime outcome/metadata
 - `context.go` — run/policy/action -> ops.ExecutionContext builder
-- `util.go` — Type conversions (timex.MS ↔ int64, money.Amount ↔ float64)
+- `util.go` — Type conversions (timex.MS ↔ int64, money.Amount ↔ decimal string)
 - `errors.go` — MappingError for failures
 
 ## Pattern
@@ -60,7 +60,7 @@ record := mappers.ActionToRecord(action)
 
 Automatic conversions for:
 - `timex.MS` ↔ `int64` (milliseconds since epoch)
-- `money.Amount` ↔ `float64` (USD boundary values)
+- `money.Amount` ↔ decimal string (canonical accounting values)
 - `runtime.ActionStatus` ↔ `string`
 - `runtime.RunStatus` ↔ `string`
 - `[]byte` ↔ `*[]byte` (nil-safe)

@@ -16,12 +16,12 @@ func RecordToPolicy(r *controlmodel.PolicyRecord) *policy.Policy {
 		ID:        r.ID,
 		ProjectID: r.ProjectID,
 		Name:      r.Name,
-		Mode:      r.Mode,
+		Mode:      policy.Mode(r.Mode),
 		CreatedAt: msToTimingValue(r.CreatedAt),
 		UpdatedAt: msToTimingValue(r.UpdatedAt),
 	}
 	if p.Mode == "" {
-		p.Mode = controlmodel.PolicyModeEnforce
+		p.Mode = policy.ModeEnforce
 	}
 
 	cfg := r.Config
@@ -30,7 +30,6 @@ func RecordToPolicy(r *controlmodel.PolicyRecord) *policy.Policy {
 	}
 
 	p.Auth = &policy.AuthPolicy{
-		PolicyID:          r.ID,
 		AllowedTypes:      r.AllowedTypes,
 		AllowedConnectors: r.AllowedConnectors,
 		AllowedMethods:    r.AllowedMethods,
@@ -42,17 +41,16 @@ func RecordToPolicy(r *controlmodel.PolicyRecord) *policy.Policy {
 		budgetCap = &cap
 	}
 
-	budgetPeriod := r.BudgetPeriod
+	budgetPeriod := policy.BudgetPeriod(r.BudgetPeriod)
 	if budgetPeriod == "" {
-		budgetPeriod = "run"
+		budgetPeriod = policy.BudgetPerRun
 	}
-	budgetBehavior := r.BudgetBehavior
+	budgetBehavior := policy.BudgetBehavior(r.BudgetBehavior)
 	if budgetBehavior == "" {
-		budgetBehavior = "block"
+		budgetBehavior = policy.BudgetBlock
 	}
 
 	p.Cost = &policy.CostPolicy{
-		PolicyID:       r.ID,
 		BudgetCap:      budgetCap,
 		BudgetPeriod:   budgetPeriod,
 		BudgetBehavior: budgetBehavior,
@@ -64,14 +62,12 @@ func RecordToPolicy(r *controlmodel.PolicyRecord) *policy.Policy {
 	}
 
 	p.Trace = &policy.TracePolicy{
-		PolicyID:      r.ID,
 		Input:         r.TraceInput,
 		Output:        r.TraceOutput,
 		RetentionDays: retentionDays,
 	}
 
 	p.Validation = &policy.ValidationPolicy{
-		PolicyID:  r.ID,
 		Enabled:   false,
 		Retryable: false,
 		Config:    cfg,
@@ -99,8 +95,8 @@ func PolicyToRecord(p *policy.Policy) *controlmodel.PolicyRecord {
 		if p.Cost.BudgetCap != nil {
 			budgetCap = *p.Cost.BudgetCap
 		}
-		budgetPeriod = p.Cost.BudgetPeriod
-		budgetBehavior = p.Cost.BudgetBehavior
+		budgetPeriod = string(p.Cost.BudgetPeriod)
+		budgetBehavior = string(p.Cost.BudgetBehavior)
 	}
 
 	var traceInput, traceOutput bool
@@ -120,7 +116,7 @@ func PolicyToRecord(p *policy.Policy) *controlmodel.PolicyRecord {
 
 	mode := p.Mode
 	if mode == "" {
-		mode = controlmodel.PolicyModeEnforce
+		mode = policy.ModeEnforce
 	}
 
 	return &controlmodel.PolicyRecord{
@@ -137,8 +133,8 @@ func PolicyToRecord(p *policy.Policy) *controlmodel.PolicyRecord {
 		TraceOutput:       traceOutput,
 		RetentionDays:     retentionDays,
 		Config:            cfg,
-		Mode:              mode,
-		Status:            controlmodel.PolicyStatusActive,
+		Mode:              string(mode),
+		Status:            string(controlmodel.PolicyStatusActive),
 		CreatedAt:         timingToMS(p.CreatedAt),
 		UpdatedAt:         timingToMS(p.UpdatedAt),
 	}

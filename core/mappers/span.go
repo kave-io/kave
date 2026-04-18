@@ -6,50 +6,51 @@ import (
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/ops/trace"
 	"github.com/kave-io/kave/core/pkg/money"
+	"github.com/kave-io/kave/core/runtime"
 )
 
 // SpanRowOptions carries optional storage-only fields that do not live on trace.Span.
 type SpanRowOptions struct {
-	Input               *[]byte
-	Output              *[]byte
-	Attrs               *map[string]trace.AttrVal
-	CacheReadTokens     *int
-	CacheWriteTokens    *int
-	ReasoningTokens     *int
-	AudioInputTokens    *int
-	AudioOutputTokens   *int
-	ImageUnits          *int
-	RequestCount        *int
-	ComputeMs           *int64
-	StorageBytes        *int64
-	BandwidthBytes      *int64
-	PriceVersion        *string
-	PriceSnapshot       *runtimemodel.PriceSnapshot
-	TraceID             string
-	RootSpanID          string
-	ValidationMeta      *trace.ValidationMeta
-	CreatedAt           *int64
+	Input             *[]byte
+	Output            *[]byte
+	Attrs             *map[string]trace.AttrVal
+	CacheReadTokens   *int
+	CacheWriteTokens  *int
+	ReasoningTokens   *int
+	AudioInputTokens  *int
+	AudioOutputTokens *int
+	ImageUnits        *int
+	RequestCount      *int
+	ComputeMs         *int64
+	StorageBytes      *int64
+	BandwidthBytes    *int64
+	PriceVersion      *string
+	PriceSnapshot     *runtimemodel.PriceSnapshot
+	TraceID           string
+	RootSpanID        string
+	ValidationMeta    *runtime.ValidationMeta
+	CreatedAt         *int64
 }
 
 // SpanEndOptions carries optional finalization fields that do not live on trace.Span.
 type SpanEndOptions struct {
-	Output              *[]byte
-	Attrs               *map[string]trace.AttrVal
-	CacheReadTokens     *int
-	CacheWriteTokens    *int
-	ReasoningTokens     *int
-	AudioInputTokens    *int
-	AudioOutputTokens   *int
-	ImageUnits          *int
-	RequestCount        *int
-	ComputeMs           *int64
-	StorageBytes        *int64
-	BandwidthBytes      *int64
-	PriceVersion        *string
-	PriceSnapshot       *runtimemodel.PriceSnapshot
-	TraceID             string
-	RootSpanID          string
-	ValidationMeta      *trace.ValidationMeta
+	Output            *[]byte
+	Attrs             *map[string]trace.AttrVal
+	CacheReadTokens   *int
+	CacheWriteTokens  *int
+	ReasoningTokens   *int
+	AudioInputTokens  *int
+	AudioOutputTokens *int
+	ImageUnits        *int
+	RequestCount      *int
+	ComputeMs         *int64
+	StorageBytes      *int64
+	BandwidthBytes    *int64
+	PriceVersion      *string
+	PriceSnapshot     *runtimemodel.PriceSnapshot
+	TraceID           string
+	RootSpanID        string
+	ValidationMeta    *runtime.ValidationMeta
 }
 
 // SpanToRow converts a trace span to its persisted row representation.
@@ -74,7 +75,7 @@ func SpanToRow(s *trace.Span, opts *SpanRowOptions) *runtimemodel.SpanRow {
 	var priceVersion *string
 	var priceSnapshot *runtimemodel.PriceSnapshot
 	var traceID, rootSpanID string
-	var validationMeta *trace.ValidationMeta
+	var validationMeta *runtime.ValidationMeta
 	if opts != nil {
 		if opts.Attrs != nil {
 			attrs = *opts.Attrs
@@ -121,44 +122,44 @@ func SpanToRow(s *trace.Span, opts *SpanRowOptions) *runtimemodel.SpanRow {
 	}
 
 	return &runtimemodel.SpanRow{
-		ID:                  s.ID,
-		ProjectID:           s.ProjectID,
-		EnvID:               s.EnvID,
-		AgentID:             s.AgentID,
-		RunID:               s.RunID,
-		ActionID:            s.ActionID,
-		ParentID:            s.ParentID,
-		Name:                s.Name,
-		Kind:                string(s.Kind),
-		Source:              string(s.Source),
-		Connector:           s.Connector,
-		StartedAt:           timingToMS(s.StartedAt),
-		EndedAt:             ptrMSFromTiming(s.EndedAt),
-		DurationMs:          duration,
-		Input:               input,
-		Output:              output,
-		Attrs:               encodeAttrs(attrs),
-		Error:               s.Error,
-		InputTokens:         s.InputTokens,
-		OutputTokens:        s.OutputTokens,
-		CacheReadTokens:     cacheReadTokens,
-		CacheWriteTokens:    cacheWriteTokens,
-		ReasoningTokens:     reasoningTokens,
-		AudioInputTokens:    audioInputTokens,
-		AudioOutputTokens:   audioOutputTokens,
-		ImageUnits:          imageUnits,
-		RequestCount:        requestCount,
-		ComputeMs:           computeMs,
-		StorageBytes:        storageBytes,
-		BandwidthBytes:      bandwidthBytes,
-		Model:               s.Model,
-		Cost:                cost,
-		PriceVersion:        priceVersion,
-		PriceSnapshot:       priceSnapshot,
-		TraceID:             traceID,
-		RootSpanID:          rootSpanID,
-		ValidationMeta:      encodeValidationMeta(validationMeta),
-		CreatedAt:           createdAt,
+		ID:                s.ID,
+		ProjectID:         s.ProjectID,
+		EnvID:             s.EnvID,
+		AgentID:           s.AgentID,
+		RunID:             s.RunID,
+		ActionID:          s.ActionID,
+		ParentID:          s.ParentID,
+		Name:              s.Name,
+		Kind:              string(s.Kind),
+		Source:            string(s.Source),
+		Connector:         s.Connector,
+		StartedAt:         timingToMS(s.StartedAt),
+		EndedAt:           ptrMSFromTiming(s.EndedAt),
+		DurationMs:        duration,
+		Input:             input,
+		Output:            output,
+		Attrs:             encodeAttrs(attrs),
+		Error:             s.Error,
+		InputTokens:       s.InputTokens,
+		OutputTokens:      s.OutputTokens,
+		CacheReadTokens:   cacheReadTokens,
+		CacheWriteTokens:  cacheWriteTokens,
+		ReasoningTokens:   reasoningTokens,
+		AudioInputTokens:  audioInputTokens,
+		AudioOutputTokens: audioOutputTokens,
+		ImageUnits:        imageUnits,
+		RequestCount:      requestCount,
+		ComputeMs:         computeMs,
+		StorageBytes:      storageBytes,
+		BandwidthBytes:    bandwidthBytes,
+		Model:             s.Model,
+		Cost:              cost,
+		PriceVersion:      priceVersion,
+		PriceSnapshot:     priceSnapshot,
+		TraceID:           traceID,
+		RootSpanID:        rootSpanID,
+		ValidationMeta:    encodeValidationMeta(validationMeta),
+		CreatedAt:         createdAt,
 	}
 }
 
@@ -210,7 +211,7 @@ func SpanToEnd(s *trace.Span, opts *SpanEndOptions) *runtimemodel.SpanEnd {
 	var priceVersion *string
 	var priceSnapshot *runtimemodel.PriceSnapshot
 	var traceID, rootSpanID string
-	var validationMeta *trace.ValidationMeta
+	var validationMeta *runtime.ValidationMeta
 	if opts != nil {
 		if opts.Attrs != nil {
 			attrs = *opts.Attrs
@@ -250,30 +251,30 @@ func SpanToEnd(s *trace.Span, opts *SpanEndOptions) *runtimemodel.SpanEnd {
 	}
 
 	return &runtimemodel.SpanEnd{
-		EndedAt:             ptrMSFromTiming(s.EndedAt),
-		DurationMs:          duration,
-		Output:              output,
-		Attrs:               encodeAttrs(attrs),
-		Error:               s.Error,
-		InputTokens:         s.InputTokens,
-		OutputTokens:        s.OutputTokens,
-		CacheReadTokens:     cacheReadTokens,
-		CacheWriteTokens:    cacheWriteTokens,
-		ReasoningTokens:     reasoningTokens,
-		AudioInputTokens:    audioInputTokens,
-		AudioOutputTokens:   audioOutputTokens,
-		ImageUnits:          imageUnits,
-		RequestCount:        requestCount,
-		ComputeMs:           computeMs,
-		StorageBytes:        storageBytes,
-		BandwidthBytes:      bandwidthBytes,
-		Model:               s.Model,
-		Cost:                s.Cost,
-		PriceVersion:        priceVersion,
-		PriceSnapshot:       priceSnapshot,
-		TraceID:             traceID,
-		RootSpanID:          rootSpanID,
-		ValidationMeta:      encodeValidationMeta(validationMeta),
+		EndedAt:           ptrMSFromTiming(s.EndedAt),
+		DurationMs:        duration,
+		Output:            output,
+		Attrs:             encodeAttrs(attrs),
+		Error:             s.Error,
+		InputTokens:       s.InputTokens,
+		OutputTokens:      s.OutputTokens,
+		CacheReadTokens:   cacheReadTokens,
+		CacheWriteTokens:  cacheWriteTokens,
+		ReasoningTokens:   reasoningTokens,
+		AudioInputTokens:  audioInputTokens,
+		AudioOutputTokens: audioOutputTokens,
+		ImageUnits:        imageUnits,
+		RequestCount:      requestCount,
+		ComputeMs:         computeMs,
+		StorageBytes:      storageBytes,
+		BandwidthBytes:    bandwidthBytes,
+		Model:             s.Model,
+		Cost:              s.Cost,
+		PriceVersion:      priceVersion,
+		PriceSnapshot:     priceSnapshot,
+		TraceID:           traceID,
+		RootSpanID:        rootSpanID,
+		ValidationMeta:    encodeValidationMeta(validationMeta),
 	}
 }
 
@@ -299,7 +300,7 @@ func decodeAttrs(attrs *[]byte) map[string]trace.AttrVal {
 	return out
 }
 
-func encodeValidationMeta(meta *trace.ValidationMeta) []byte {
+func encodeValidationMeta(meta *runtime.ValidationMeta) []byte {
 	if meta == nil {
 		return nil
 	}
@@ -310,11 +311,11 @@ func encodeValidationMeta(meta *trace.ValidationMeta) []byte {
 	return b
 }
 
-func decodeValidationMeta(data []byte) *trace.ValidationMeta {
+func decodeValidationMeta(data []byte) *runtime.ValidationMeta {
 	if len(data) == 0 {
 		return nil
 	}
-	var meta trace.ValidationMeta
+	var meta runtime.ValidationMeta
 	if err := json.Unmarshal(data, &meta); err != nil {
 		return nil
 	}

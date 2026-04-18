@@ -5,12 +5,38 @@ import (
 	"github.com/kave-io/kave/core/pkg/timex"
 )
 
+// Mode is how policy violations are handled at runtime.
+type Mode string
+
+const (
+	ModeEnforce Mode = "enforce" // violations block the action
+	ModeShadow  Mode = "shadow"  // violations are recorded but not blocked
+)
+
+// BudgetPeriod is the rollover window for a budget cap.
+type BudgetPeriod string
+
+const (
+	BudgetPerRun     BudgetPeriod = "run"
+	BudgetPerDaily   BudgetPeriod = "daily"
+	BudgetPerMonthly BudgetPeriod = "monthly"
+)
+
+// BudgetBehavior is what happens when a budget cap is exceeded.
+type BudgetBehavior string
+
+const (
+	BudgetBlock BudgetBehavior = "block"
+	BudgetWarn  BudgetBehavior = "warn"
+)
+
 // Policy is the runtime policy composition root.
+// Mode defaults to ModeEnforce when empty.
 type Policy struct {
 	ID        string
 	ProjectID string
 	Name      string
-	Mode      string // "enforce" | "shadow"; default enforce
+	Mode      Mode
 
 	Auth       *AuthPolicy
 	Cost       *CostPolicy
@@ -22,8 +48,8 @@ type Policy struct {
 }
 
 // AuthPolicy owns auth-specific allow/deny rules.
+// The owning Policy.ID provides identity; sub-policies carry only their fields.
 type AuthPolicy struct {
-	PolicyID          string
 	AllowedTypes      []string
 	AllowedConnectors []string
 	AllowedMethods    []string
@@ -31,15 +57,13 @@ type AuthPolicy struct {
 
 // CostPolicy owns budget and spending rules.
 type CostPolicy struct {
-	PolicyID       string
 	BudgetCap      *money.Amount
-	BudgetPeriod   string
-	BudgetBehavior string
+	BudgetPeriod   BudgetPeriod
+	BudgetBehavior BudgetBehavior
 }
 
 // TracePolicy owns trace capture and retention rules.
 type TracePolicy struct {
-	PolicyID      string
 	Input         bool
 	Output        bool
 	RetentionDays int
@@ -47,7 +71,6 @@ type TracePolicy struct {
 
 // ValidationPolicy owns validation-specific settings.
 type ValidationPolicy struct {
-	PolicyID  string
 	Enabled   bool
 	Retryable bool
 	Config    map[string]any

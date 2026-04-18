@@ -38,7 +38,7 @@ type AgentView struct {
 	Name          string
 	Description   string
 	PolicyID      *string
-	MonthlyBudget *float64 // USD; nil = no budget
+	MonthlyBudget *string
 	Status        string
 	Metadata      map[string]any
 	CreatedBy     string
@@ -105,10 +105,10 @@ func AgentToView(a *controlmodel.Agent) *AgentView {
 	if a == nil {
 		return nil
 	}
-	var budgetUSD *float64
+	var budget *string
 	if a.MonthlyBudget != nil {
-		v := a.MonthlyBudget.Dollars()
-		budgetUSD = &v
+		v := a.MonthlyBudget.String()
+		budget = &v
 	}
 	return &AgentView{
 		ID:            a.ID,
@@ -117,7 +117,7 @@ func AgentToView(a *controlmodel.Agent) *AgentView {
 		Name:          a.Name,
 		Description:   a.Description,
 		PolicyID:      a.PolicyID,
-		MonthlyBudget: budgetUSD,
+		MonthlyBudget: budget,
 		Status:        a.Status,
 		Metadata:      a.Metadata,
 		CreatedBy:     a.CreatedBy,

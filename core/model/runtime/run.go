@@ -2,43 +2,30 @@ package runtime
 
 import "github.com/kave-io/kave/core/pkg/money"
 
-// Run status constants.
-const (
-	RunStatusActive    = "active"
-	RunStatusCompleted = "completed"
-	RunStatusFailed    = "failed"
-	RunStatusCancelled = "cancelled"
-	RunStatusTimedOut  = "timed_out"
-	RunStatusBlocked   = "blocked"
-)
-
-// Trigger type constants.
-const (
-	TriggerAPI      = "api"
-	TriggerSchedule = "schedule"
-	TriggerWebhook  = "webhook"
-	TriggerManual   = "manual"
-)
+// Run status and trigger constants live in core/runtime (typed RunStatus
+// and TriggerType). Model fields remain plain strings.
 
 // RunRecord represents a persisted run record in the database.
 // This is the storage/API shape.
 // Compare with runtime.Run which is the live execution state used by handlers.
 type RunRecord struct {
-	ID        string
-	ProjectID string
-	EnvID     string
-	AgentID   string
-	PolicyID  *string
-	Name      string
-	Status    string
-	BudgetCap money.Amount // 0 = no cap
-	Spent     money.Amount
-	Metadata  map[string]any
+	ID               string
+	ProjectID        string
+	EnvID            string
+	AgentID          string
+	PolicyID         *string
+	Name             string
+	Status           string
+	BudgetCap        money.Amount // 0 = no cap
+	Spent            money.Amount
+	DisplayBudgetCap *DisplayMoney // derived/UI-only; never canonical
+	DisplaySpent     *DisplayMoney // derived/UI-only; never canonical
+	Metadata         map[string]any
 
 	ErrorMessage *string
 
-	// Provenance
-	TriggerType    string  // TriggerAPI | TriggerSchedule | TriggerWebhook | TriggerManual
+	// Provenance — see runtime.TriggerType for valid values
+	TriggerType    string
 	TriggerID      *string // schedule ID, webhook ID, etc.
 	CorrelationID  *string // external correlation (e.g. user session or request ID)
 	SessionID      *string // groups related runs (e.g. a conversation thread)
@@ -54,12 +41,14 @@ type RunRecord struct {
 type RunUpdate struct {
 	Status       *string
 	Spent        *money.Amount
+	DisplaySpent *DisplayMoney // derived/UI-only; never canonical
 	ErrorMessage *string
 	EndedAt      *int64
 	Metadata     map[string]any
 }
 
-// RunFilter filters ListRuns queries.
+// RunFilter narrows ListRuns queries. Pagination (limit, cursor) is passed
+// separately as a store.Page.
 type RunFilter struct {
 	ProjectID string
 	EnvID     string
@@ -67,5 +56,4 @@ type RunFilter struct {
 	Status    string
 	FromMs    *int64
 	ToMs      *int64
-	Limit     int
 }

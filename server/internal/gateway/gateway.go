@@ -80,8 +80,8 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 		ProjectID: agent.ProjectID,
 		EnvID:     agent.EnvID,
 		AgentID:   agent.ID,
-		Name:      call.Provider + "." + call.Action.Method,
-		Status:    runtimemodel.RunStatusActive,
+		Name:      call.Provider + "." + call.Action.InvocationTarget.Method,
+		Status:    string(coreruntime.RunActive),
 		Metadata:  map[string]any{},
 		StartedAt: now,
 		CreatedAt: now,
@@ -91,22 +91,25 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "create run failed", http.StatusInternalServerError)
 		return
 	}
-	call.Action.RunID = run.ID
-	call.Action.AgentID = agent.ID
-	call.Action.ProjectID = agent.ProjectID
-	call.Action.EnvID = agent.EnvID
+
+	// Set run/agent/project info on the action
+	call.Action.Invocation.InvocationRef.RunID = run.ID
+	call.Action.Invocation.InvocationRef.AgentID = agent.ID
+	call.Action.Invocation.InvocationRef.ProjectID = agent.ProjectID
+	call.Action.Invocation.InvocationRef.EnvID = agent.EnvID
+
 	if err := g.app.CreateAction(ctx, &runtimemodel.ActionRecord{
-		ID:         call.Action.ID,
+		ID:         call.Action.InvocationRef.ID,
 		RunID:      run.ID,
 		AgentID:    agent.ID,
 		ProjectID:  agent.ProjectID,
 		EnvID:      agent.EnvID,
-		ActionType: string(call.Action.Type),
-		Connector:  call.Action.Connector,
-		Method:     call.Action.Method,
-		Input:      call.Action.Input,
-		Status:     runtimemodel.ActionStatusRunning,
-		Source:     runtimemodel.ActionSourceIntercepted,
+		ActionType: string(call.Action.InvocationTarget.Type),
+		Connector:  call.Action.InvocationTarget.Connector,
+		Method:     call.Action.InvocationTarget.Method,
+		Input:      call.Action.InvocationData.Input,
+		Status:     string(coreruntime.StatusRunning),
+		Source:     string(coreruntime.ActionSourceIntercepted),
 		Metadata:   map[string]any{},
 		CreatedAt:  now,
 	}); err != nil {
@@ -120,7 +123,19 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	credential, _ := g.resolveCredential(ctx, agent.EnvID, call.Provider)
+	credential, credErr := g.resolveCredential(ctx, agent.EnvID, call.Provider)
+
+	// If no stored credential, fallback to client's Authorization header (passthrough mode)
+	if credential == "" && credErr != nil {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			// Extract token from Bearer scheme
+			if token := strings.TrimPrefix(auth, "Bearer "); token != auth {
+				credential = token
+			} else {
+				credential = auth
+			}
+		}
+	}
 
 	handler := func(ctx context.Context, action *coreruntime.Action) (*pipeline.Result, error) {
 		prepared, err := provider.PrepareRequest(call, credential)
@@ -158,6 +173,9 @@ func (g *FrameworkGateway) handleBuffered(w http.ResponseWriter, resp *http.Resp
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(body)
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
+	}
 	return provider.ParseResponse(body, resp.Header.Get("Content-Type"))
 }
 
@@ -169,6 +187,10 @@ func (g *FrameworkGateway) handleStream(w http.ResponseWriter, resp *http.Respon
 
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
+	}
 
 	var buf bytes.Buffer
 	tee := io.TeeReader(resp.Body, &buf)
@@ -241,10 +263,10 @@ func isUUID(s string) bool {
 
 func (g *FrameworkGateway) finishRun(ctx context.Context, runID string, runErr error) {
 	endedAt := int64(timex.Now())
-	status := runtimemodel.RunStatusCompleted
+	status := string(coreruntime.RunCompleted)
 	var message *string
 	if runErr != nil {
-		status = runtimemodel.RunStatusFailed
+		status = string(coreruntime.RunFailed)
 		text := runErr.Error()
 		message = &text
 	}

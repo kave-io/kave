@@ -7,10 +7,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kave-io/kave/core/mappers"
+	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/pkg/timex"
 	"github.com/kave-io/kave/core/store"
-	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 )
 
 //go:embed defaults.json
@@ -35,7 +36,7 @@ func (s *Service) Load(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if book == nil || len(book.Entries) == 0 {
+	if book == nil || len(book.Entries) == 0 || allZeroPricing(book) {
 		book, err = DefaultBook()
 		if err != nil {
 			return err
@@ -86,28 +87,41 @@ func (s *Service) Snapshot(provider, model string) *runtimemodel.PriceSnapshot {
 		}
 		if entryMatch == "" || strings.Contains(model, entryMatch) {
 			return &runtimemodel.PriceSnapshot{
-				Version:              book.Version,
-				Provider:             provider,
-				Model:                model,
-				Match:                entry.Match,
-				Source:               entry.Source,
-				InputPerMillion:      entry.InputPerMillion,
-				OutputPerMillion:     entry.OutputPerMillion,
-				CacheReadPerMillion:  entry.CacheReadPerMillion,
-				CacheWritePerMillion: entry.CacheWritePerMillion,
-				ReasoningPerMillion:  entry.ReasoningPerMillion,
-				AudioInputPerMillion: entry.AudioInputPerMillion,
+				Version:               book.Version,
+				Provider:              provider,
+				Model:                 model,
+				Match:                 entry.Match,
+				Source:                entry.Source,
+				Currency:              entry.Currency,
+				InputPerMillion:       entry.InputPerMillion,
+				OutputPerMillion:      entry.OutputPerMillion,
+				CacheReadPerMillion:   entry.CacheReadPerMillion,
+				CacheWritePerMillion:  entry.CacheWritePerMillion,
+				ReasoningPerMillion:   entry.ReasoningPerMillion,
+				AudioInputPerMillion:  entry.AudioInputPerMillion,
 				AudioOutputPerMillion: entry.AudioOutputPerMillion,
-				ImageUnitPrice:       entry.ImageUnitPrice,
-				PerRequest:           entry.PerRequest,
-				PerComputeMs:         entry.PerComputeMs,
-				PerGBStored:          entry.PerGBStored,
-				PerGBTransferred:     entry.PerGBTransferred,
-				ResolvedAt:           int64(timex.Now()),
+				ImageUnitPrice:        entry.ImageUnitPrice,
+				PerRequest:            entry.PerRequest,
+				PerComputeMs:          entry.PerComputeMs,
+				PerGBStored:           entry.PerGBStored,
+				PerGBTransferred:      entry.PerGBTransferred,
+				ResolvedAt:            int64(timex.Now()),
 			}
 		}
 	}
 	return nil
+}
+
+func allZeroPricing(book *runtimemodel.PriceBook) bool {
+	if book == nil {
+		return true
+	}
+	for _, e := range book.Entries {
+		if e.InputPerMillion != 0 || e.OutputPerMillion != 0 || e.PerRequest != 0 || e.ImageUnitPrice != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // Calculate computes cost from a snapshot and all billable token/usage dimensions.
@@ -115,34 +129,47 @@ func Calculate(snapshot *runtimemodel.PriceSnapshot, input, output, cacheRead, c
 	if snapshot == nil {
 		return 0
 	}
-	total := float64(input)*snapshot.InputPerMillion +
-		float64(output)*snapshot.OutputPerMillion +
-		float64(cacheRead)*snapshot.CacheReadPerMillion +
-		float64(cacheWrite)*snapshot.CacheWritePerMillion +
-		float64(reasoning)*snapshot.ReasoningPerMillion +
-		float64(audioIn)*snapshot.AudioInputPerMillion +
-		float64(audioOut)*snapshot.AudioOutputPerMillion +
-		float64(imageUnits)*snapshot.ImageUnitPrice
-	total /= 1_000_000
-	total += float64(requestCount) * snapshot.PerRequest
-	if computeMs > 0 {
-		total += float64(computeMs) * snapshot.PerComputeMs
+	total := money.Amount(0)
+	addScaled := func(price money.Amount, units, scale int64) {
+		if price == 0 || units == 0 {
+			return
+		}
+		v, err := price.MulRatio(units, scale, money.RoundHalfUp)
+		if err == nil {
+			total, _ = total.Add(v)
+		}
 	}
-	if storageBytes > 0 {
-		total += float64(storageBytes) / (1 << 30) * snapshot.PerGBStored
+	addExact := func(price money.Amount, units int64) {
+		if price == 0 || units == 0 {
+			return
+		}
+		v, err := price.Mul(units)
+		if err == nil {
+			total, _ = total.Add(v)
+		}
 	}
-	if bandwidthBytes > 0 {
-		total += float64(bandwidthBytes) / (1 << 30) * snapshot.PerGBTransferred
-	}
-	return money.FromDollars(total)
+	addScaled(snapshot.InputPerMillion, int64(input), 1_000_000)
+	addScaled(snapshot.OutputPerMillion, int64(output), 1_000_000)
+	addScaled(snapshot.CacheReadPerMillion, int64(cacheRead), 1_000_000)
+	addScaled(snapshot.CacheWritePerMillion, int64(cacheWrite), 1_000_000)
+	addScaled(snapshot.ReasoningPerMillion, int64(reasoning), 1_000_000)
+	addScaled(snapshot.AudioInputPerMillion, int64(audioIn), 1_000_000)
+	addScaled(snapshot.AudioOutputPerMillion, int64(audioOut), 1_000_000)
+	addExact(snapshot.ImageUnitPrice, int64(imageUnits))
+	addExact(snapshot.PerRequest, int64(requestCount))
+	addExact(snapshot.PerComputeMs, computeMs)
+	addScaled(snapshot.PerGBStored, storageBytes, 1<<30)
+	addScaled(snapshot.PerGBTransferred, bandwidthBytes, 1<<30)
+	return total
 }
 
 func DefaultBook() (*runtimemodel.PriceBook, error) {
-	var book runtimemodel.PriceBook
-	if err := json.Unmarshal(defaultBookJSON, &book); err != nil {
+	var appBook mappers.AppPriceBook
+	if err := json.Unmarshal(defaultBookJSON, &appBook); err != nil {
 		return nil, err
 	}
-	return normalizeBook(&book), nil
+	book := mappers.AppPriceBookToModel(&appBook)
+	return normalizeBook(book), nil
 }
 
 func normalizeBook(book *runtimemodel.PriceBook) *runtimemodel.PriceBook {
@@ -159,6 +186,9 @@ func normalizeBook(book *runtimemodel.PriceBook) *runtimemodel.PriceBook {
 	for i := range out.Entries {
 		out.Entries[i].Provider = strings.ToLower(strings.TrimSpace(out.Entries[i].Provider))
 		out.Entries[i].Match = strings.ToLower(strings.TrimSpace(out.Entries[i].Match))
+		if out.Entries[i].Currency == "" {
+			out.Entries[i].Currency = money.USD
+		}
 		if out.Entries[i].Source == "" {
 			out.Entries[i].Source = "custom"
 		}

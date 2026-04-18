@@ -1,20 +1,8 @@
 package runtime
 
-// Action source constants — distinguishes intercepted from observed actions.
-const (
-	ActionSourceIntercepted = "intercepted" // Kave is in the causal path; can block
-	ActionSourceObserved    = "observed"    // agent-reported after the fact; audit only
-)
-
-// Action status constants.
-const (
-	ActionStatusPending   = "pending"
-	ActionStatusRunning   = "running"
-	ActionStatusCompleted = "completed"
-	ActionStatusFailed    = "failed"
-	ActionStatusBlocked   = "blocked"
-	ActionStatusRetrying  = "retrying"
-)
+// Status and source constants for Action live in core/runtime (typed
+// ActionStatus, ObservedActionStatus, ActionSource). Model fields remain
+// plain strings; callers should cast the typed constants to string.
 
 // ActionRecord is the persisted representation of an intercepted or observed action.
 // Maps to a single table; Source discriminates intercepted from observed.
@@ -44,9 +32,9 @@ type ActionRecord struct {
 	Depth     int    // 0 = root
 	Seq       int    // sibling order
 
-	// Status and source
-	Status   string // ActionStatus* constants
-	Source   string // ActionSource* constants
+	// Status and source — see runtime.ActionStatus / runtime.ActionSource
+	Status   string
+	Source   string
 	Metadata map[string]any
 
 	// Retry/attempt metadata

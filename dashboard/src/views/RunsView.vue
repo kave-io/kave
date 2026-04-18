@@ -6,12 +6,14 @@ import RunStatusBadge from '../components/RunStatusBadge.vue'
 import DetailRow from '../components/DetailRow.vue'
 import type { Run } from '@/types/api'
 import { useRuns, useRunSpans } from '@/lib/queries'
-import { workspaceId } from '@/stores/workspace'
+import { projectId, envId } from '@/stores/workspace'
+import { useCurrencyStore } from '@/stores/currency'
 
 const { t } = useI18n()
+const currencyStore = useCurrencyStore()
 
 const limit = ref(100)
-const { data: runs, isLoading, error } = useRuns({ workspaceId, limit: limit.value })
+const { data: runs, isLoading, error } = useRuns({ projectId, envId, limit: limit.value })
 const search = ref('')
 const statusFilter = ref<'all' | 'completed' | 'failed' | 'pending' | 'active'>('all')
 
@@ -31,10 +33,10 @@ const filteredRuns = computed(() => {
       duration: r.ended_at && r.started_at
         ? `${Math.round((new Date(r.ended_at).getTime() - new Date(r.started_at).getTime()) / 1000)}s`
         : '—',
-      cost: r.spent_usd != null ? `$${r.spent_usd.toFixed(4)}` : '—',
+      cost: r.spent ? currencyStore.format(r.spent) : '—',
       started: new Date(r.started_at).toLocaleString(),
       error: r.error_message,
-      budget: r.budget_cap_usd,
+      budget: r.budget_cap,
     }))
 })
 
@@ -128,7 +130,7 @@ const { data: runSpans } = useRunSpans(computed(() => selectedRun.value?.run_id 
           <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Cost</h3>
           <div class="grid grid-cols-2 gap-3">
             <DetailRow label="Total Spend" :value="selectedRun.cost" large />
-            <DetailRow label="Budget Cap" :value="`$${selectedRun.budget.toFixed(2)}`" />
+            <DetailRow label="Budget Cap" :value="selectedRun.budget ? currencyStore.format(selectedRun.budget) : '—'" />
           </div>
         </section>
 
@@ -164,7 +166,7 @@ const { data: runSpans } = useRunSpans(computed(() => selectedRun.value?.run_id 
                 <span v-if="span.input_tokens" class="tabular-nums"
                   >{{ span.input_tokens }}{{ (span.cache_read_tokens ?? 0) > 0 ? '⚡' : '' }}→{{ span.output_tokens ?? 0 }}</span
                 >
-                <span class="tabular-nums">{{ span.cost_usd != null ? `$${span.cost_usd.toFixed(6)}` : '—' }}</span>
+                <span class="tabular-nums">{{ span.cost ? currencyStore.format(span.cost) : '—' }}</span>
               </div>
             </div>
           </div>

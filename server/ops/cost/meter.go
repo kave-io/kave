@@ -41,7 +41,7 @@ func (m *CostMeter) Budget(spent money.Amount, p *policy.CostPolicy) *coreCost.B
 	if p == nil {
 		return coreCost.NewBudgetStatus(spent, nil, "run")
 	}
-	return coreCost.NewBudgetStatus(spent, p.BudgetCap, p.BudgetPeriod)
+	return coreCost.NewBudgetStatus(spent, p.BudgetCap, string(p.BudgetPeriod))
 }
 
 // Record logs token usage to the budget ledger and updates run spend.

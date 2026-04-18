@@ -8,6 +8,8 @@ import (
 )
 
 // Decision is the structured result of policy evaluation.
+// PolicyID is optional and typically stamped by the caller from the owning Policy.ID
+// (the sub-policy itself no longer carries it).
 type Decision struct {
 	Allowed  bool
 	Reason   string
@@ -23,33 +25,13 @@ type PolicyEngine interface {
 // AllowAll is a PolicyEngine that permits everything.
 type AllowAll struct{}
 
-func (AllowAll) Evaluate(_ context.Context, action *runtime.Action, authPolicy *policy.AuthPolicy) (*Decision, error) {
-	var policyID *string
-	if authPolicy != nil && authPolicy.PolicyID != "" {
-		policyID = &authPolicy.PolicyID
-	}
-	_ = action
-	return &Decision{
-		Allowed:  true,
-		Reason:   "allowed",
-		PolicyID: policyID,
-		Code:     "allow_all",
-	}, nil
+func (AllowAll) Evaluate(_ context.Context, _ *runtime.Action, _ *policy.AuthPolicy) (*Decision, error) {
+	return &Decision{Allowed: true, Reason: "allowed", Code: "allow_all"}, nil
 }
 
 // DenyAll is a PolicyEngine that blocks everything.
 type DenyAll struct{}
 
-func (DenyAll) Evaluate(_ context.Context, action *runtime.Action, authPolicy *policy.AuthPolicy) (*Decision, error) {
-	var policyID *string
-	if authPolicy != nil && authPolicy.PolicyID != "" {
-		policyID = &authPolicy.PolicyID
-	}
-	_ = action
-	return &Decision{
-		Allowed:  false,
-		Reason:   "denied",
-		PolicyID: policyID,
-		Code:     "deny_all",
-	}, nil
+func (DenyAll) Evaluate(_ context.Context, _ *runtime.Action, _ *policy.AuthPolicy) (*Decision, error) {
+	return &Decision{Allowed: false, Reason: "denied", Code: "deny_all"}, nil
 }

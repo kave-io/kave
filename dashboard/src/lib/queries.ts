@@ -5,12 +5,12 @@ import type { Agent, Policy, Run, Span, SpendReport, CreateAgentRequest, CreateP
 
 // ── Agents ────────────────────────────────────────────────────────────────────
 
-export function useAgents(workspaceId: string | Ref<string>) {
+export function useAgents(envId: string | Ref<string>) {
   return useQuery({
-    queryKey: ['agents', workspaceId],
+    queryKey: ['agents', envId],
     queryFn: () => {
-      const id = typeof workspaceId === 'string' ? workspaceId : workspaceId.value
-      return api.get<Agent[]>(`/agents?workspace_id=${id}`)
+      const id = typeof envId === 'string' ? envId : envId.value
+      return api.get<Agent[]>(`/agents?env_id=${id}`)
     },
   })
 }
@@ -66,7 +66,8 @@ export function useCreatePolicy() {
 // ── Runs ──────────────────────────────────────────────────────────────────────
 
 export function useRuns(params: {
-  workspaceId?: string | Ref<string>
+  projectId?: string | Ref<string>
+  envId?: string | Ref<string>
   agentId?: string | Ref<string>
   status?: string
   limit?: number
@@ -75,9 +76,11 @@ export function useRuns(params: {
     queryKey: ['runs', params],
     queryFn: () => {
       const q = new URLSearchParams()
-      const wsId = typeof params.workspaceId === 'string' ? params.workspaceId : params.workspaceId?.value
+      const projId = typeof params.projectId === 'string' ? params.projectId : params.projectId?.value
+      const envIdVal = typeof params.envId === 'string' ? params.envId : params.envId?.value
       const agId = typeof params.agentId === 'string' ? params.agentId : params.agentId?.value
-      if (wsId) q.set('workspace_id', wsId)
+      if (projId) q.set('project_id', projId)
+      if (envIdVal) q.set('env_id', envIdVal)
       if (agId) q.set('agent_id', agId)
       if (params.status) q.set('status', params.status)
       if (params.limit) q.set('limit', String(params.limit))

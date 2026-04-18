@@ -11,7 +11,6 @@ type ctxKey int
 const (
 	policyKey ctxKey = iota
 	runKey
-	tokenUsageKey
 	usageKey
 	validationMetaKey
 )
@@ -23,10 +22,10 @@ type TokenUsage struct {
 	OutputTokens int
 	CacheRead    int
 	CacheWrite   int
-	Reasoning    int  // output reasoning tokens (OpenAI o1/o3, Claude thinking)
-	AudioInput   int  // audio input tokens (OpenAI audio models)
-	AudioOutput  int  // audio output tokens (OpenAI audio models)
-	ImageUnits   int  // provider-agnostic media unit count (OpenAI image_tokens, etc.)
+	Reasoning    int // output reasoning tokens (OpenAI o1/o3, Claude thinking)
+	AudioInput   int // audio input tokens (OpenAI audio models)
+	AudioOutput  int // audio output tokens (OpenAI audio models)
+	ImageUnits   int // provider-agnostic media unit count (OpenAI image_tokens, etc.)
 	Model        string
 }
 
@@ -58,41 +57,46 @@ func RunFrom(ctx context.Context) *Run {
 	return r
 }
 
-func WithTokenUsage(ctx context.Context, u *TokenUsage) context.Context {
-	return context.WithValue(ctx, tokenUsageKey, u)
-}
-
-func TokenUsageFrom(ctx context.Context) *TokenUsage {
-	u, _ := ctx.Value(tokenUsageKey).(*TokenUsage)
-	return u
-}
-
+// WithUsage attaches per-action billable usage to the context. Usage.Tokens carries
+// LLM token counts; use that rather than a separate TokenUsage context key.
 func WithUsage(ctx context.Context, u *Usage) context.Context {
 	return context.WithValue(ctx, usageKey, u)
 }
 
+// UsageFrom returns the Usage previously attached via WithUsage, or nil.
 func UsageFrom(ctx context.Context) *Usage {
 	u, _ := ctx.Value(usageKey).(*Usage)
 	return u
 }
 
-// ValidationResult carries validation summary for context propagation across interceptors.
-// The validation interceptor sets this; the trace interceptor reads it to populate span metadata.
-type ValidationResult struct {
+// TokenUsageFrom is a convenience for reading just the token portion of Usage.
+// Returns nil if no Usage is attached or if it has no token counts.
+func TokenUsageFrom(ctx context.Context) *TokenUsage {
+	if u := UsageFrom(ctx); u != nil {
+		return u.Tokens
+	}
+	return nil
+}
+
+// ValidationMeta is the canonical validation summary. It carries execution
+// provenance and is propagated across interceptors (validation → trace) and
+// persisted as part of the span record.
+type ValidationMeta struct {
 	Valid            bool
 	ViolationCount   int
-	EnforcementMode  string
+	EnforcementMode  string // "block" | "warn" | "audit"
 	ValidatorName    string
 	ValidatorVersion string
 	RuleVersion      string
 	DurationMs       int64
+	Retryable        bool
 }
 
-func WithValidationResult(ctx context.Context, v *ValidationResult) context.Context {
+func WithValidationMeta(ctx context.Context, v *ValidationMeta) context.Context {
 	return context.WithValue(ctx, validationMetaKey, v)
 }
 
-func ValidationResultFrom(ctx context.Context) *ValidationResult {
-	v, _ := ctx.Value(validationMetaKey).(*ValidationResult)
+func ValidationMetaFrom(ctx context.Context) *ValidationMeta {
+	v, _ := ctx.Value(validationMetaKey).(*ValidationMeta)
 	return v
 }

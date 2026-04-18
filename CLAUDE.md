@@ -120,9 +120,9 @@ All tables in `server/db/migrations/001_kave_core.sql`:
 - `workspaces` — multi-tenancy root (workspace_id on all other tables)
 - `agents` — agent identities (policy_id, metadata)
 - `policies` — permissions, budget cap, allowed connectors/methods
-- `runs` — agent executions (status, spent_usd, error_message)
+- `runs` — agent executions (status, spent_amount_nanos, error_message)
 - `actions` — individual actions within a run (action_type, connector, method)
-- `spans` — trace records (started_at, ended_at, tokens, cost_usd)
+- `spans` — trace records (started_at, ended_at, tokens, cost_amount_nanos)
 - `budget_ledger` — immutable append-only cost records
 
 All tables use `UUID` primary keys, `TIMESTAMPTZ` for timestamps, and appropriate B-tree/GIN indexes.

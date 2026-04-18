@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/kave-io/kave/core/bus"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/timex"
@@ -20,10 +21,11 @@ type SpanStoreResolver interface {
 type Tracer struct {
 	spans  SpanStoreResolver
 	prices *cost.Service
+	bus    *bus.Bus // may be nil
 }
 
-func New(spans SpanStoreResolver, prices *cost.Service) *Tracer {
-	return &Tracer{spans: spans, prices: prices}
+func New(spans SpanStoreResolver, prices *cost.Service, b *bus.Bus) *Tracer {
+	return &Tracer{spans: spans, prices: prices, bus: b}
 }
 
 // Before stamps the action start time.
@@ -93,7 +95,8 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 
 			if u.Model != "" {
 				row.Model = &u.Model
-				if snapshot := t.prices.Snapshot(action.Connector, u.Model); snapshot != nil {
+				snapshot := t.prices.Snapshot(action.Connector, u.Model)
+				if snapshot != nil {
 					c := cost.Calculate(snapshot,
 						u.InputTokens, u.OutputTokens, u.CacheRead, u.CacheWrite,
 						u.Reasoning, u.AudioInput, u.AudioOutput, u.ImageUnits,
@@ -106,7 +109,20 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 		}
 	}
 
-	return spanStore.OpenSpan(ctx, row)
+	if err := spanStore.OpenSpan(ctx, row); err != nil {
+		return err
+	}
+	if t.bus != nil {
+		t.bus.Publish(bus.RunEvent{
+			RunID:     action.RunID,
+			ProjectID: action.ProjectID,
+			EnvID:     action.EnvID,
+			AgentID:   action.AgentID,
+			Status:    "active",
+			SpanID:    spanID,
+		})
+	}
+	return nil
 }
 
 func (t *Tracer) Name() string { return "tracer" }

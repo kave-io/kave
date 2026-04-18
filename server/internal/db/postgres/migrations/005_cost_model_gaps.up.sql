@@ -23,14 +23,15 @@ ALTER TABLE budget_ledger
 
 -- Gap 17: PriceBook non-token pricing + temporal versioning
 ALTER TABLE price_book_entries
-    ADD COLUMN IF NOT EXISTS reasoning_per_million    NUMERIC(15,6) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS audio_input_per_million  NUMERIC(15,6) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS audio_output_per_million NUMERIC(15,6) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS image_unit_price         NUMERIC(15,6) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS per_request              NUMERIC(15,6) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS per_compute_ms           NUMERIC(15,9) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS per_gb_stored            NUMERIC(15,6) NOT NULL DEFAULT 0,
-    ADD COLUMN IF NOT EXISTS per_gb_transferred       NUMERIC(15,6) NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS currency                           TEXT NOT NULL DEFAULT 'USD',
+    ADD COLUMN IF NOT EXISTS reasoning_per_million_amount_nanos BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS audio_input_per_million_amount_nanos  BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS audio_output_per_million_amount_nanos BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS image_unit_price_amount_nanos         BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS per_request_amount_nanos              BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS per_compute_ms_amount_nanos           BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS per_gb_stored_amount_nanos            BIGINT NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS per_gb_transferred_amount_nanos       BIGINT NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS effective_from           BIGINT NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS effective_to             BIGINT,
     ADD COLUMN IF NOT EXISTS revision_note            TEXT;

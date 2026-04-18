@@ -163,10 +163,10 @@ func TestMSArithmetic(t *testing.T) {
 func TestMSOrdering(t *testing.T) {
 	a := MS(1000)
 	b := MS(2000)
-	if !(a < b) {
+	if a >= b {
 		t.Error("MS(1000) should be < MS(2000)")
 	}
-	if !(b > a) {
+	if b <= a {
 		t.Error("MS(2000) should be > MS(1000)")
 	}
 	if a == b {

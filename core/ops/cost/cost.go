@@ -22,7 +22,7 @@ func NewBudgetStatus(spent money.Amount, cap *money.Amount, period string) *Budg
 		Period: period,
 	}
 	if cap != nil {
-		remaining := *cap - spent
+		remaining, _ := (*cap).Sub(spent)
 		bs.Remaining = &remaining
 		bs.Exceeded = spent >= *cap
 	}

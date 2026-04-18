@@ -41,6 +41,12 @@ func (m *Manager) AppStore() store.AppStore {
 	return m.app
 }
 
+// DefaultSpanStore returns the span store for the default (unkeyed) agent.
+// Used by gRPC handlers that operate across all agents.
+func (m *Manager) DefaultSpanStore(ctx context.Context) (store.SpanStore, error) {
+	return m.SpanStore(ctx, "")
+}
+
 func (m *Manager) SpanStore(ctx context.Context, agentID string) (store.SpanStore, error) {
 	spec := m.storage.SpanForAgent(agentID)
 	key := spanStoreKey(spec)
@@ -102,28 +108,32 @@ func (m *Manager) allSpanStores(ctx context.Context) ([]store.SpanStore, error) 
 	return stores, nil
 }
 
-func (m *Manager) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error) {
+func (m *Manager) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter, page store.Page) (store.PageResult[*runtimemodel.SpanRow], error) {
 	stores, err := m.allSpanStores(ctx)
 	if err != nil {
-		return nil, err
+		return store.PageResult[*runtimemodel.SpanRow]{}, err
 	}
 
 	var spans []*runtimemodel.SpanRow
 	for _, spanStore := range stores {
-		rows, err := spanStore.QuerySpans(ctx, filter)
+		result, err := spanStore.QuerySpans(ctx, filter, page)
 		if err != nil {
-			return nil, err
+			return store.PageResult[*runtimemodel.SpanRow]{}, err
 		}
-		spans = append(spans, rows...)
+		spans = append(spans, result.Items...)
 	}
 
 	sort.Slice(spans, func(i, j int) bool {
 		return spans[i].StartedAt > spans[j].StartedAt
 	})
-	if filter.Limit > 0 && len(spans) > filter.Limit {
-		spans = spans[:filter.Limit]
+	limit := page.Limit
+	if limit <= 0 {
+		limit = 100
 	}
-	return spans, nil
+	if len(spans) > limit {
+		spans = spans[:limit]
+	}
+	return store.PageResult[*runtimemodel.SpanRow]{Items: spans}, nil
 }
 
 func (m *Manager) Migrate(ctx context.Context) error {

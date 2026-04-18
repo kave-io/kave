@@ -6,12 +6,14 @@ import RunStatusBadge from '../components/RunStatusBadge.vue'
 import DetailRow from '../components/DetailRow.vue'
 import type { Agent } from '@/types/api'
 import { useAgents, useRuns } from '@/lib/queries'
-import { workspaceId } from '@/stores/workspace'
+import { projectId, envId } from '@/stores/workspace'
+import { useCurrencyStore } from '@/stores/currency'
 
 const { t } = useI18n()
+const currencyStore = useCurrencyStore()
 
-const { data: agents, isLoading, error } = useAgents(workspaceId)
-const { data: allRuns } = useRuns({ workspaceId, limit: 50 })
+const { data: agents, isLoading, error } = useAgents(envId)
+const { data: allRuns } = useRuns({ projectId, envId, limit: 50 })
 const search = ref('')
 const selectedAgent = ref<Agent | null>(null)
 
@@ -22,7 +24,7 @@ const filteredAgents = computed(() =>
       id: a.id,
       name: a.name,
       description: a.description || '—',
-      budget: a.monthly_budget != null ? `$${a.monthly_budget.toFixed(2)}` : 'Unlimited',
+      budget: a.monthly_budget ? currencyStore.format(a.monthly_budget) : 'Unlimited',
       created: new Date(a.created_at).toLocaleDateString(),
       _agent: a,
     }))
@@ -36,7 +38,7 @@ const recentActivity = computed(() => {
     .map(r => ({
       status: r.status,
       time: new Date(r.started_at).toLocaleString(),
-      cost: r.spent_usd != null ? `$${r.spent_usd.toFixed(4)}` : '—',
+      cost: r.spent ? currencyStore.format(r.spent) : '—',
     }))
 })
 
@@ -107,7 +109,7 @@ const recentActivity = computed(() => {
             <DetailRow
               v-if="selectedAgent.monthly_budget"
               label="Monthly Budget"
-              :value="`$${selectedAgent.monthly_budget.toFixed(2)}`"
+              :value="currencyStore.format(selectedAgent.monthly_budget)"
               large
             />
           </div>

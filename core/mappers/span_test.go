@@ -10,7 +10,7 @@ import (
 )
 
 func TestSpanToRowAndBack(t *testing.T) {
-	cost := money.FromDollars(1.23)
+	cost := money.MustParseDollars("1.23")
 	modelName := "gpt-5.4"
 	inToks := 10
 	outToks := 20
@@ -48,7 +48,7 @@ func TestSpanToRowAndBack(t *testing.T) {
 	if row.DurationMs != 600 {
 		t.Fatalf("expected duration 600, got %d", row.DurationMs)
 	}
-	wantCost := money.FromDollars(1.23)
+	wantCost := money.MustParseDollars("1.23")
 	if row.Cost == nil || *row.Cost != wantCost {
 		t.Fatalf("expected cost %v, got %v", wantCost, row.Cost)
 	}
@@ -67,7 +67,7 @@ func TestSpanToRowAndBack(t *testing.T) {
 
 func TestSpanToEndUsesOptions(t *testing.T) {
 	ended := timex.MS(2000)
-	cost := money.FromDollars(2.5)
+	cost := money.MustParseDollars("2.5")
 	priceVersion := "v1"
 	cacheRead := 7
 	output := []byte(`{"ok":true}`)

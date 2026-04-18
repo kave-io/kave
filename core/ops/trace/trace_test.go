@@ -142,22 +142,22 @@ func TestAttrVal_UnmarshalBadInput(t *testing.T) {
 		{
 			name:      "empty object",
 			input:     "{}",
-			shouldErr: false, // silently produces zero value
+			shouldErr: true, // missing "type" is a decode error
 		},
 		{
 			name:      "missing value field",
 			input:     `{"type":"string"}`,
-			shouldErr: false, // silently produces zero value
+			shouldErr: true, // missing "value" is a decode error
 		},
 		{
 			name:      "unknown type",
 			input:     `{"type":"unknown","value":1}`,
-			shouldErr: false, // silently produces zero value
+			shouldErr: true, // unknown discriminator is a decode error
 		},
 		{
 			name:      "null input",
 			input:     "null",
-			shouldErr: false, // UnmarshalJSON doesn't panic; type check fails gracefully
+			shouldErr: true, // no map to read "type" from
 		},
 	}
 

@@ -25,25 +25,25 @@ type TokenIssue struct {
 
 // AgentTokenView is the response-safe shape for a token (shows prefix, not raw).
 type AgentTokenView struct {
-	ID          string
-	AgentID     string
-	ProjectID   string
-	Name        string
-	Description string
-	TokenPrefix string
-	IssuedFor   string
-	IssuedBy    string
-	Connectors  []string
-	Methods     []string
-	BudgetCapUSD *float64
-	Scopes      []string
-	NotBefore   int64
-	ExpiresAt   int64
-	LastUsedAt  *int64
-	RevokedAt   *int64
-	RevokedBy   string
+	ID           string
+	AgentID      string
+	ProjectID    string
+	Name         string
+	Description  string
+	TokenPrefix  string
+	IssuedFor    string
+	IssuedBy     string
+	Connectors   []string
+	Methods      []string
+	BudgetCap    *string
+	Scopes       []string
+	NotBefore    int64
+	ExpiresAt    int64
+	LastUsedAt   *int64
+	RevokedAt    *int64
+	RevokedBy    string
 	RevokeReason string
-	CreatedAt   int64
+	CreatedAt    int64
 }
 
 // TokenIssueToModel converts token issue input to controlmodel.AgentToken.
@@ -80,10 +80,10 @@ func AgentTokenToView(token *controlmodel.AgentToken) *AgentTokenView {
 	if token == nil {
 		return nil
 	}
-	var capUSD *float64
+	var capAmount *string
 	if token.BudgetCap != nil {
-		v := token.BudgetCap.Dollars()
-		capUSD = &v
+		v := token.BudgetCap.String()
+		capAmount = &v
 	}
 	return &AgentTokenView{
 		ID:           token.ID,
@@ -96,7 +96,7 @@ func AgentTokenToView(token *controlmodel.AgentToken) *AgentTokenView {
 		IssuedBy:     token.IssuedBy,
 		Connectors:   token.Connectors,
 		Methods:      token.Methods,
-		BudgetCapUSD: capUSD,
+		BudgetCap:    capAmount,
 		Scopes:       token.Scopes,
 		NotBefore:    token.NotBefore,
 		ExpiresAt:    token.ExpiresAt,

@@ -35,7 +35,7 @@ type DuckDBSpanStore struct {
 }
 
 type writeReq struct {
-	spanID string               // set for CloseSpan
+	spanID string                // set for CloseSpan
 	open   *runtimemodel.SpanRow // set for OpenSpan
 	end    *runtimemodel.SpanEnd // set for CloseSpan
 	respCh chan error
@@ -136,7 +136,7 @@ func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimem
 		input, output, attrs []byte
 		endedAt              sql.NullInt64
 		model                sql.NullString
-		costUSD              sql.NullFloat64
+		costAmount           sql.NullInt64
 		priceVersion         sql.NullString
 		snapshotJSON         sql.NullString
 		validationMeta       sql.NullString
@@ -157,14 +157,14 @@ func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimem
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		       model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		       model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		       reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		       compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta
 		FROM spans WHERE id = $1
 	`, spanID).Scan(
 		&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &endedAt, &row.DurationMs,
 		&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
-		&model, &costUSD, &priceVersion, &snapshotJSON, &attrs, &row.CreatedAt,
+		&model, &costAmount, &priceVersion, &snapshotJSON, &attrs, &row.CreatedAt,
 		&reasoningTokens, &audioInputTokens, &audioOutputTokens, &imageUnits, &requestCount,
 		&computeMs, &storageBytes, &bandwidthBytes, &row.TraceID, &row.RootSpanID, &validationMeta,
 	)
@@ -190,8 +190,8 @@ func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimem
 	if model.Valid {
 		row.Model = &model.String
 	}
-	if costUSD.Valid {
-		amt := money.FromDollars(costUSD.Float64)
+	if costAmount.Valid {
+		amt := amountFromDB(costAmount.Int64)
 		row.Cost = &amt
 	}
 	if priceVersion.Valid {
@@ -228,18 +228,22 @@ func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimem
 }
 
 // QuerySpans retrieves spans matching a filter.
-func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error) {
+func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter, page store.Page) (store.PageResult[*runtimemodel.SpanRow], error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	query := `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		       model, cost_usd, attrs, created_at
+		       model, cost_amount_nanos, attrs, created_at
 		FROM spans WHERE 1=1
 	`
 	var args []any
 
+	if filter.ID != "" {
+		query += ` AND id = $` + fmt.Sprint(len(args)+1)
+		args = append(args, filter.ID)
+	}
 	if filter.RunID != "" {
 		query += ` AND run_id = $` + fmt.Sprint(len(args)+1)
 		args = append(args, filter.RunID)
@@ -264,15 +268,16 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 		}
 	}
 
-	query += ` ORDER BY started_at DESC`
-	if filter.Limit > 0 {
-		query += ` LIMIT $` + fmt.Sprint(len(args)+1)
-		args = append(args, filter.Limit)
+	limit := page.Limit
+	if limit <= 0 {
+		limit = 100
 	}
+	query += ` ORDER BY started_at DESC LIMIT $` + fmt.Sprint(len(args)+1)
+	args = append(args, limit)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return store.PageResult[*runtimemodel.SpanRow]{}, err
 	}
 	defer rows.Close()
 
@@ -283,7 +288,7 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 			input, output, attrs []byte
 			endedAt              sql.NullInt64
 			model                sql.NullString
-			costUSD              sql.NullFloat64
+			costAmount           sql.NullInt64
 			inputTokens          sql.NullInt32
 			outputTokens         sql.NullInt32
 			cacheReadTokens      sql.NullInt32
@@ -292,9 +297,9 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 		if err := rows.Scan(
 			&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &endedAt, &row.DurationMs,
 			&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
-			&model, &costUSD, &attrs, &row.CreatedAt,
+			&model, &costAmount, &attrs, &row.CreatedAt,
 		); err != nil {
-			return nil, err
+			return store.PageResult[*runtimemodel.SpanRow]{}, err
 		}
 		if endedAt.Valid {
 			row.EndedAt = &endedAt.Int64
@@ -311,8 +316,8 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 		if model.Valid {
 			row.Model = &model.String
 		}
-		if costUSD.Valid {
-			amt := money.FromDollars(costUSD.Float64)
+		if costAmount.Valid {
+			amt := amountFromDB(costAmount.Int64)
 			row.Cost = &amt
 		}
 		setNullInt32(&row.InputTokens, inputTokens)
@@ -321,7 +326,7 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 		setNullInt32(&row.CacheWriteTokens, cacheWriteTokens)
 		spans = append(spans, row)
 	}
-	return spans, rows.Err()
+	return store.PageResult[*runtimemodel.SpanRow]{Items: spans}, rows.Err()
 }
 
 // SpendByDimension aggregates cost by the given dimension.
@@ -335,7 +340,7 @@ func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, 
 	}
 
 	query := fmt.Sprintf(`
-		SELECT %s, COALESCE(SUM(cost_usd), 0)
+		SELECT %s, COALESCE(SUM(cost_amount_nanos), 0)
 		FROM spans WHERE 1=1
 	`, col)
 	var args []any
@@ -352,7 +357,7 @@ func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, 
 		query += ` AND started_at <= $` + fmt.Sprint(len(args)+1)
 		args = append(args, *filter.ToMs)
 	}
-	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_usd) DESC`, col)
+	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_amount_nanos) DESC`, col)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -363,11 +368,11 @@ func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, 
 	result := make(map[string]money.Amount)
 	for rows.Next() {
 		var dimension string
-		var cost float64
+		var cost int64
 		if err := rows.Scan(&dimension, &cost); err != nil {
 			return nil, err
 		}
-		result[dimension] = money.FromDollars(cost)
+		result[dimension] = amountFromDB(cost)
 	}
 	return result, rows.Err()
 }
@@ -424,11 +429,7 @@ func (s *DuckDBSpanStore) writerLoop() {
 }
 
 func insertSpan(tx *sql.Tx, span *runtimemodel.SpanRow) error {
-	var costUSD *float64
-	if span.Cost != nil {
-		v := span.Cost.Dollars()
-		costUSD = &v
-	}
+	costAmount := ptrAmountToDB(span.Cost)
 	var snapshotJSON *string
 	if span.PriceSnapshot != nil {
 		b, _ := json.Marshal(span.PriceSnapshot)
@@ -444,7 +445,7 @@ func insertSpan(tx *sql.Tx, span *runtimemodel.SpanRow) error {
 	_, err := tx.Exec(`
 		INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
 		                   input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		                   model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		                   model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		                   reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		                   compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -452,7 +453,7 @@ func insertSpan(tx *sql.Tx, span *runtimemodel.SpanRow) error {
 		span.ID, span.RunID, span.ActionID, span.ParentID, span.Name, span.StartedAt, span.EndedAt, span.DurationMs,
 		derefBytes(span.Input), derefBytes(span.Output), span.Error,
 		span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens,
-		span.Model, costUSD, span.PriceVersion, snapshotJSON, derefBytes(span.Attrs), time.Now().UnixMilli(),
+		span.Model, costAmount, span.PriceVersion, snapshotJSON, derefBytes(span.Attrs), time.Now().UnixMilli(),
 		span.ReasoningTokens, span.AudioInputTokens, span.AudioOutputTokens, span.ImageUnits, span.RequestCount,
 		span.ComputeMs, span.StorageBytes, span.BandwidthBytes, span.TraceID, span.RootSpanID, validationMeta,
 	)
@@ -460,11 +461,7 @@ func insertSpan(tx *sql.Tx, span *runtimemodel.SpanRow) error {
 }
 
 func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
-	var costUSD *float64
-	if end.Cost != nil {
-		v := end.Cost.Dollars()
-		costUSD = &v
-	}
+	costAmount := ptrAmountToDB(end.Cost)
 	var snapshotJSON *string
 	if end.PriceSnapshot != nil {
 		b, _ := json.Marshal(end.PriceSnapshot)
@@ -504,7 +501,7 @@ func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
 			storage_bytes     = COALESCE(?, storage_bytes),
 			bandwidth_bytes   = COALESCE(?, bandwidth_bytes),
 			model             = COALESCE(?, model),
-			cost_usd          = COALESCE(?, cost_usd),
+			cost_amount_nanos = COALESCE(?, cost_amount_nanos),
 			price_version     = COALESCE(?, price_version),
 			price_snapshot    = COALESCE(?, price_snapshot),
 			trace_id          = COALESCE(?, trace_id),
@@ -517,7 +514,7 @@ func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
 		end.InputTokens, end.OutputTokens, end.CacheReadTokens, end.CacheWriteTokens,
 		end.ReasoningTokens, end.AudioInputTokens, end.AudioOutputTokens, end.ImageUnits, end.RequestCount,
 		end.ComputeMs, end.StorageBytes, end.BandwidthBytes,
-		end.Model, costUSD, end.PriceVersion, snapshotJSON,
+		end.Model, costAmount, end.PriceVersion, snapshotJSON,
 		traceID, rootSpanID, validationMeta,
 		spanID,
 	)
@@ -546,3 +543,15 @@ func setNullInt32(dst **int, v sql.NullInt32) {
 		*dst = &i
 	}
 }
+
+func amountToDB(v money.Amount) int64 { return v.Nano() }
+
+func ptrAmountToDB(v *money.Amount) *int64 {
+	if v == nil {
+		return nil
+	}
+	n := v.Nano()
+	return &n
+}
+
+func amountFromDB(v int64) money.Amount { return money.Amount(v) }

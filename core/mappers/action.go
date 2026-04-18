@@ -33,7 +33,7 @@ func ActionToRecord(a *runtime.Action) *runtimemodel.ActionRecord {
 		Seq:       a.Seq,
 
 		Status:   string(a.Status),
-		Source:   runtimemodel.ActionSourceIntercepted,
+		Source:   string(runtime.ActionSourceIntercepted),
 		Attempt:  1,
 		Metadata: outcomeToMetadata(a.Outcome),
 
@@ -69,7 +69,7 @@ func ObservedActionToRecord(a *runtime.ObservedAction) *runtimemodel.ActionRecor
 		Seq:       a.Seq,
 
 		Status:  string(a.Status),
-		Source:  runtimemodel.ActionSourceObserved,
+		Source:  string(runtime.ActionSourceObserved),
 		Attempt: 1,
 
 		CreatedAt: msSinceEpoch(),

@@ -365,7 +365,7 @@ type Span struct {
     DurationMS   int64
     InputTokens  *int
     OutputTokens *int
-    CostUSD      *float64
+    Cost         *money.Amount
     Error        *string
     Tags         map[string]string
 }
@@ -388,19 +388,19 @@ Cost and budget module.
 ```go
 // cost.go
 type BudgetStatus struct {
-    Spent     float64
-    Cap       *float64
+    Spent     money.Amount
+    Cap       *money.Amount
     Period    string
-    Remaining *float64  // nil if no cap
+    Remaining *money.Amount  // nil if no cap
     Exceeded  bool
 }
 
 type Pricer interface {
-    Cost(connector, model string, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int) float64
+    Cost(connector, model string, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens int) money.Amount
 }
 
 type BudgetEvaluator interface {
-    Budget(spent float64, policy *policy.CostPolicy) *BudgetStatus
+    Budget(spent money.Amount, policy *policy.CostPolicy) *BudgetStatus
 }
 
 type Meter interface {

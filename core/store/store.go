@@ -5,6 +5,7 @@ package store
 import (
 	"context"
 
+	auditmodel "github.com/kave-io/kave/core/model/audit"
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pkg/money"
@@ -29,7 +30,7 @@ type UserStore interface {
 type MembershipStore interface {
 	AddMember(ctx context.Context, m *controlmodel.Membership) error
 	GetMembership(ctx context.Context, orgID, userID string) (*controlmodel.Membership, error)
-	ListMembers(ctx context.Context, orgID string) ([]*controlmodel.Membership, error)
+	ListMembers(ctx context.Context, orgID string, page Page) (PageResult[*controlmodel.Membership], error)
 	RemoveMember(ctx context.Context, orgID, userID string) error
 }
 
@@ -37,7 +38,7 @@ type MembershipStore interface {
 type ProjectStore interface {
 	CreateProject(ctx context.Context, p *controlmodel.Project) error
 	GetProject(ctx context.Context, id string) (*controlmodel.Project, error)
-	ListProjects(ctx context.Context, orgID string) ([]*controlmodel.Project, error)
+	ListProjects(ctx context.Context, orgID string, page Page) (PageResult[*controlmodel.Project], error)
 }
 
 // EnvironmentStore owns environment persistence.
@@ -45,24 +46,29 @@ type EnvironmentStore interface {
 	CreateEnvironment(ctx context.Context, e *controlmodel.Environment) error
 	GetEnvironment(ctx context.Context, id string) (*controlmodel.Environment, error)
 	GetEnvironmentBySlug(ctx context.Context, projectID, slug string) (*controlmodel.Environment, error)
-	ListEnvironments(ctx context.Context, projectID string) ([]*controlmodel.Environment, error)
+	ListEnvironments(ctx context.Context, projectID string, page Page) (PageResult[*controlmodel.Environment], error)
 }
 
 // AgentStore owns agent persistence.
+// DeleteAgent is a soft delete: it sets DeletedAt and excludes the agent from
+// default listings. RestoreAgent clears DeletedAt.
 type AgentStore interface {
 	CreateAgent(ctx context.Context, a *controlmodel.Agent) error
 	GetAgentByID(ctx context.Context, id string) (*controlmodel.Agent, error)
 	GetAgentByName(ctx context.Context, envID, name string) (*controlmodel.Agent, error)
 	UpdateAgent(ctx context.Context, id string, update *controlmodel.AgentUpdate) error
-	ListAgents(ctx context.Context, envID string) ([]*controlmodel.Agent, error)
+	ListAgents(ctx context.Context, envID string, page Page) (PageResult[*controlmodel.Agent], error)
+	DeleteAgent(ctx context.Context, id, deletedBy string) error
+	RestoreAgent(ctx context.Context, id, restoredBy string) error
 }
 
 // PolicyStore owns policy persistence.
 type PolicyStore interface {
 	CreatePolicy(ctx context.Context, p *controlmodel.PolicyRecord) error
 	GetPolicy(ctx context.Context, id string) (*controlmodel.PolicyRecord, error)
+	UpdatePolicy(ctx context.Context, id string, update *controlmodel.PolicyUpdate) error
 	GetAgentPolicy(ctx context.Context, agentID string) (*controlmodel.PolicyRecord, error)
-	ListPolicies(ctx context.Context, envID string) ([]*controlmodel.PolicyRecord, error)
+	ListPolicies(ctx context.Context, envID string, page Page) (PageResult[*controlmodel.PolicyRecord], error)
 }
 
 // RunStore owns run persistence.
@@ -71,20 +77,25 @@ type RunStore interface {
 	GetRunByID(ctx context.Context, id string) (*runtimemodel.RunRecord, error)
 	GetRunByIdempotencyKey(ctx context.Context, envID, key string) (*runtimemodel.RunRecord, error)
 	UpdateRun(ctx context.Context, id string, update *runtimemodel.RunUpdate) error
-	ListRuns(ctx context.Context, filter *runtimemodel.RunFilter) ([]*runtimemodel.RunRecord, error)
+	ListRuns(ctx context.Context, filter *runtimemodel.RunFilter, page Page) (PageResult[*runtimemodel.RunRecord], error)
 }
 
 // ActionStore owns action persistence.
 type ActionStore interface {
 	CreateAction(ctx context.Context, a *runtimemodel.ActionRecord) error
 	GetAction(ctx context.Context, id string) (*runtimemodel.ActionRecord, error)
-	ListActionsByRun(ctx context.Context, runID string) ([]*runtimemodel.ActionRecord, error)
+	ListActionsByRun(ctx context.Context, runID string, page Page) (PageResult[*runtimemodel.ActionRecord], error)
 }
 
 // CostStore owns price book and budget ledger persistence.
 type CostStore interface {
 	GetPriceBook(ctx context.Context) (*runtimemodel.PriceBook, error)
 	SavePriceBook(ctx context.Context, book *runtimemodel.PriceBook) error
+	ListFXRates(ctx context.Context) ([]runtimemodel.FXRateRecord, error)
+	GetFXRate(ctx context.Context, base, quote money.CurrencyCode) (*runtimemodel.FXRateRecord, error)
+	UpsertFXRates(ctx context.Context, rates []runtimemodel.FXRateRecord) error
+	ListFXCurrencies(ctx context.Context) ([]runtimemodel.FXCurrencyRecord, error)
+	UpsertFXCurrencies(ctx context.Context, currencies []runtimemodel.FXCurrencyRecord) error
 	InsertBudgetEntry(ctx context.Context, entry *runtimemodel.BudgetEntry) error
 	AddRunSpend(ctx context.Context, runID string, cost money.Amount) error
 	SumAgentSpend(ctx context.Context, agentID string, sinceMs int64) (money.Amount, error)
@@ -97,17 +108,14 @@ type TokenStore interface {
 	// Issuance
 	InsertAgentToken(ctx context.Context, token *controlmodel.AgentToken) error
 
-	// Lookup by hash (never by raw token)
+	// Lookup
 	GetTokenByHash(ctx context.Context, hash string) (*controlmodel.AgentToken, error)
+	GetToken(ctx context.Context, id string) (*controlmodel.AgentToken, error)
+	ListTokens(ctx context.Context, agentID string, page Page) (PageResult[*controlmodel.AgentToken], error)
 
 	// Lifecycle
 	RevokeToken(ctx context.Context, tokenID, revokedBy, reason string) error
 	TouchToken(ctx context.Context, tokenID string) error // updates last_used_at; async-safe
-
-	// Legacy: deny-list for fast JWT rejection (optional optimization, internal to store implementation)
-	// Deprecated: use RevokedAt field on AgentToken instead.
-	IsTokenRevoked(ctx context.Context, tokenID string) (bool, error)
-	InsertRevokedToken(ctx context.Context, tokenID string) error
 }
 
 // CredentialStore owns outbound connector secret persistence.
@@ -117,7 +125,7 @@ type CredentialStore interface {
 	GetCredential(ctx context.Context, id string) (*controlmodel.ConnectorCredential, error)
 	StoreCredential(ctx context.Context, c *controlmodel.ConnectorCredential) error
 	DeleteCredential(ctx context.Context, id string) error
-	ListCredentials(ctx context.Context, envID string) ([]*controlmodel.ConnectorCredential, error)
+	ListCredentials(ctx context.Context, envID string, page Page) (PageResult[*controlmodel.ConnectorCredential], error)
 
 	// Lookup: policy-driven resolution (not singleton by connector).
 	// Fallback chain: exact label match → "primary" label → any active credential for this connector.
@@ -160,7 +168,7 @@ type SpanStore interface {
 	OpenSpan(ctx context.Context, span *runtimemodel.SpanRow) error
 	CloseSpan(ctx context.Context, spanID string, end *runtimemodel.SpanEnd) error
 	GetSpan(ctx context.Context, spanID string) (*runtimemodel.SpanRow, error)
-	QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error)
+	QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter, page Page) (PageResult[*runtimemodel.SpanRow], error)
 	SpendByDimension(ctx context.Context, groupBy string, filter *runtimemodel.SpanFilter) (map[string]money.Amount, error)
 	Migrate(ctx context.Context) error
 	Close() error
@@ -170,8 +178,8 @@ type SpanStore interface {
 // Separated from AppStore: different backend may be preferred for compliance, and the
 // write-only append pattern is distinct from the mutable control-plane data.
 type AuditStore interface {
-	AppendAudit(ctx context.Context, entry *controlmodel.AuditLog) error
-	QueryAudits(ctx context.Context, filter *controlmodel.AuditFilter) ([]*controlmodel.AuditLog, error)
+	AppendAudit(ctx context.Context, entry *auditmodel.AuditLog) error
+	QueryAudits(ctx context.Context, filter *auditmodel.AuditFilter, page Page) (PageResult[*auditmodel.AuditLog], error)
 	Migrate(ctx context.Context) error
 	Close() error
 }

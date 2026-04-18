@@ -10,7 +10,7 @@ import (
 
 func TestValidationResult_RoundTrip(t *testing.T) {
 	ctx := context.Background()
-	vr := &runtime.ValidationResult{
+	vr := &runtime.ValidationMeta{
 		Valid:            true,
 		ViolationCount:   5,
 		EnforcementMode:  "block",
@@ -20,11 +20,11 @@ func TestValidationResult_RoundTrip(t *testing.T) {
 		DurationMs:       150,
 	}
 
-	ctx = runtime.WithValidationResult(ctx, vr)
-	got := runtime.ValidationResultFrom(ctx)
+	ctx = runtime.WithValidationMeta(ctx, vr)
+	got := runtime.ValidationMetaFrom(ctx)
 
 	if got == nil {
-		t.Fatal("ValidationResultFrom returned nil, expected ValidationResult")
+		t.Fatal("ValidationMetaFrom returned nil, expected ValidationResult")
 	}
 	if got.Valid != vr.Valid {
 		t.Errorf("Valid: got %v, want %v", got.Valid, vr.Valid)
@@ -51,18 +51,18 @@ func TestValidationResult_RoundTrip(t *testing.T) {
 
 func TestValidationResult_NilReturnedFromEmpty(t *testing.T) {
 	ctx := context.Background()
-	got := runtime.ValidationResultFrom(ctx)
+	got := runtime.ValidationMetaFrom(ctx)
 	if got != nil {
-		t.Fatalf("ValidationResultFrom on empty context should return nil, got %v", got)
+		t.Fatalf("ValidationMetaFrom on empty context should return nil, got %v", got)
 	}
 }
 
 func TestValidationResult_NilStored(t *testing.T) {
 	ctx := context.Background()
-	ctx = runtime.WithValidationResult(ctx, nil)
-	got := runtime.ValidationResultFrom(ctx)
+	ctx = runtime.WithValidationMeta(ctx, nil)
+	got := runtime.ValidationMetaFrom(ctx)
 	if got != nil {
-		t.Fatalf("ValidationResultFrom after storing nil should return nil, got %v", got)
+		t.Fatalf("ValidationMetaFrom after storing nil should return nil, got %v", got)
 	}
 }
 
@@ -76,14 +76,14 @@ func TestValidationResult_CoexistsWithOtherKeys(t *testing.T) {
 	r := &runtime.Run{ID: "r-1"}
 	ctx = runtime.WithRun(ctx, r)
 
-	tu := &runtime.TokenUsage{InputTokens: 10, OutputTokens: 20}
-	ctx = runtime.WithTokenUsage(ctx, tu)
-
-	u := &runtime.Usage{RequestCount: 5}
+	u := &runtime.Usage{
+		RequestCount: 5,
+		Tokens:       &runtime.TokenUsage{InputTokens: 10, OutputTokens: 20},
+	}
 	ctx = runtime.WithUsage(ctx, u)
 
-	vr := &runtime.ValidationResult{Valid: true, ValidatorName: "test"}
-	ctx = runtime.WithValidationResult(ctx, vr)
+	vr := &runtime.ValidationMeta{Valid: true, ValidatorName: "test"}
+	ctx = runtime.WithValidationMeta(ctx, vr)
 
 	// Verify all coexist
 	if pGot := runtime.PolicyFrom(ctx); pGot == nil || pGot.ID != "p-1" {
@@ -98,7 +98,7 @@ func TestValidationResult_CoexistsWithOtherKeys(t *testing.T) {
 	if uGot := runtime.UsageFrom(ctx); uGot == nil || uGot.RequestCount != 5 {
 		t.Fatalf("Usage lost: got %v", uGot)
 	}
-	if vrGot := runtime.ValidationResultFrom(ctx); vrGot == nil || vrGot.ValidatorName != "test" {
+	if vrGot := runtime.ValidationMetaFrom(ctx); vrGot == nil || vrGot.ValidatorName != "test" {
 		t.Fatalf("ValidationResult lost: got %v", vrGot)
 	}
 }
@@ -106,15 +106,15 @@ func TestValidationResult_CoexistsWithOtherKeys(t *testing.T) {
 func TestValidationResult_OverwriteReplacesPrevious(t *testing.T) {
 	ctx := context.Background()
 
-	vr1 := &runtime.ValidationResult{Valid: true, ValidatorName: "v1"}
-	ctx = runtime.WithValidationResult(ctx, vr1)
+	vr1 := &runtime.ValidationMeta{Valid: true, ValidatorName: "v1"}
+	ctx = runtime.WithValidationMeta(ctx, vr1)
 
-	vr2 := &runtime.ValidationResult{Valid: false, ValidatorName: "v2"}
-	ctx = runtime.WithValidationResult(ctx, vr2)
+	vr2 := &runtime.ValidationMeta{Valid: false, ValidatorName: "v2"}
+	ctx = runtime.WithValidationMeta(ctx, vr2)
 
-	got := runtime.ValidationResultFrom(ctx)
+	got := runtime.ValidationMetaFrom(ctx)
 	if got == nil {
-		t.Fatal("ValidationResultFrom returned nil")
+		t.Fatal("ValidationMetaFrom returned nil")
 	}
 	if got.ValidatorName != "v2" {
 		t.Errorf("expected second ValidationResult, got ValidatorName %q", got.ValidatorName)
@@ -127,11 +127,11 @@ func TestValidationResult_OverwriteReplacesPrevious(t *testing.T) {
 func TestValidationResult_Fields(t *testing.T) {
 	tests := []struct {
 		name string
-		vr   *runtime.ValidationResult
+		vr   *runtime.ValidationMeta
 	}{
 		{
 			name: "all fields set",
-			vr: &runtime.ValidationResult{
+			vr: &runtime.ValidationMeta{
 				Valid:            true,
 				ViolationCount:   3,
 				EnforcementMode:  "warn",
@@ -143,25 +143,25 @@ func TestValidationResult_Fields(t *testing.T) {
 		},
 		{
 			name: "minimal fields",
-			vr: &runtime.ValidationResult{
+			vr: &runtime.ValidationMeta{
 				Valid: false,
 			},
 		},
 		{
 			name: "zero DurationMs",
-			vr: &runtime.ValidationResult{
-				Valid:            true,
-				DurationMs:       0,
-				ValidatorName:    "test",
-				EnforcementMode:  "block",
+			vr: &runtime.ValidationMeta{
+				Valid:           true,
+				DurationMs:      0,
+				ValidatorName:   "test",
+				EnforcementMode: "block",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := runtime.WithValidationResult(context.Background(), tt.vr)
-			got := runtime.ValidationResultFrom(ctx)
+			ctx := runtime.WithValidationMeta(context.Background(), tt.vr)
+			got := runtime.ValidationMetaFrom(ctx)
 
 			if got == nil {
 				t.Fatal("round-trip returned nil")

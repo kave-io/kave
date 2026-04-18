@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package kave.control.v1;
+
+import "google/protobuf/struct.proto";
+import "kave/common/v1/common.proto";
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/control/v1;control";
+
+// AgentStatus is the lifecycle status of an agent.
+enum AgentStatus {
+  AGENT_STATUS_UNSPECIFIED = 0;
+  AGENT_STATUS_ACTIVE = 1;
+  AGENT_STATUS_DISABLED = 2;
+}
+
+// Agent is a registered AI agent identity.
+message Agent {
+  string id = 1;
+  string project_id = 2;
+  string env_id = 3;
+  string name = 4;
+  string description = 5;
+  optional string policy_id = 6;
+  optional kave.common.v1.Amount monthly_budget = 7;
+  AgentStatus status = 8;
+  google.protobuf.Struct metadata = 9;
+  string created_by = 10; // user ID or "system"
+  string updated_by = 11; // user ID or "system"
+  optional int64 deleted_at_ms = 12; // UnixMilli; nil = not deleted
+  int64 created_at_ms = 13; // UnixMilli
+  int64 updated_at_ms = 14; // UnixMilli
+}
+
+// AgentUpdate holds partial update fields for an agent. Nil fields are not updated.
+message AgentUpdate {
+  optional string description = 1;
+  optional string policy_id = 2;
+  optional kave.common.v1.Amount monthly_budget = 3;
+  optional AgentStatus status = 4;
+  google.protobuf.Struct metadata = 5;
+  optional string updated_by = 6;
+}

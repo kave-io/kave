@@ -75,13 +75,22 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 			continue
 		}
 
-		sql, err := fs.ReadFile(migrationsFS, migration)
+		sqlBytes, err := fs.ReadFile(migrationsFS, migration)
 		if err != nil {
 			return fmt.Errorf("sqlite: read migration %s: %w", migration, err)
 		}
 
-		if _, err := db.ExecContext(ctx, string(sql)); err != nil {
-			return fmt.Errorf("sqlite: execute migration %s: %w", migration, err)
+		// Split by semicolon and execute each statement separately
+		sqlStr := string(sqlBytes)
+		statements := strings.Split(sqlStr, ";")
+		for i, stmt := range statements {
+			stmt = strings.TrimSpace(stmt)
+			if stmt == "" {
+				continue
+			}
+			if _, err := db.ExecContext(ctx, stmt); err != nil {
+				return fmt.Errorf("sqlite: execute migration %s statement %d: %w", migration, i, err)
+			}
 		}
 
 		// Record migration as applied

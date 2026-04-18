@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package kave.control.v1;
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/control/v1;control";
+
+// MembershipRole defines what a user can do within an organization.
+enum MembershipRole {
+  MEMBERSHIP_ROLE_UNSPECIFIED = 0;
+  MEMBERSHIP_ROLE_ADMIN = 1; // full control
+  MEMBERSHIP_ROLE_DEV = 2; // create/edit agents and policies; no billing
+  MEMBERSHIP_ROLE_VIEWER = 3; // read-only
+  MEMBERSHIP_ROLE_BILLING = 4; // cost and budget views only
+}
+
+// UserStatus is the lifecycle status of a user account.
+enum UserStatus {
+  USER_STATUS_UNSPECIFIED = 0;
+  USER_STATUS_ACTIVE = 1;
+  USER_STATUS_SUSPENDED = 2;
+}
+
+// PlanTier is the billing plan level for an organization.
+enum PlanTier {
+  PLAN_TIER_UNSPECIFIED = 0;
+  PLAN_TIER_FREE = 1;
+  PLAN_TIER_TEAM = 2;
+  PLAN_TIER_ENTERPRISE = 3;
+}
+
+// Organization is the top-level container for all Kave resources.
+// In single-org deployments (default) exactly one organization exists.
+message Organization {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  PlanTier plan = 4;
+  int64 created_at_ms = 5; // UnixMilli
+  int64 updated_at_ms = 6; // UnixMilli
+}
+
+// User is a human identity that authenticates to the control plane.
+// v1: local email+password only. SSO/OAuth deferred.
+message User {
+  string id = 1;
+  string org_id = 2;
+  string email = 3;
+  string name = 4;
+  string password_hash = 5; // bcrypt
+  UserStatus status = 6;
+  optional int64 last_login_at_ms = 7; // UnixMilli; nil = never logged in
+  int64 created_at_ms = 8; // UnixMilli
+  int64 updated_at_ms = 9; // UnixMilli
+}
+
+// Membership links a User to an Organization with a role.
+message Membership {
+  string id = 1;
+  string org_id = 2;
+  string user_id = 3;
+  MembershipRole role = 4;
+  optional string invited_by = 5; // user ID of inviter; nil = bootstrapped
+  int64 created_at_ms = 6; // UnixMilli
+}

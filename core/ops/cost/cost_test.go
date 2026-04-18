@@ -7,8 +7,8 @@ import (
 )
 
 func TestNewBudgetStatus(t *testing.T) {
-	cap10 := money.FromDollars(10)
-	cap5 := money.FromDollars(5)
+	cap10 := money.MustParseDollars("10")
+	cap5 := money.MustParseDollars("5")
 
 	tests := []struct {
 		name          string
@@ -20,15 +20,15 @@ func TestNewBudgetStatus(t *testing.T) {
 	}{
 		{
 			name:          "under budget",
-			spent:         money.FromDollars(3),
+			spent:         money.MustParseDollars("3"),
 			cap:           &cap10,
 			period:        "run",
 			wantExceeded:  false,
-			wantRemaining: ptr(money.FromDollars(7)),
+			wantRemaining: ptr(money.MustParseDollars("7")),
 		},
 		{
 			name:          "exactly at cap",
-			spent:         money.FromDollars(10),
+			spent:         money.MustParseDollars("10"),
 			cap:           &cap10,
 			period:        "daily",
 			wantExceeded:  true,
@@ -36,15 +36,15 @@ func TestNewBudgetStatus(t *testing.T) {
 		},
 		{
 			name:          "over budget",
-			spent:         money.FromDollars(12),
+			spent:         money.MustParseDollars("12"),
 			cap:           &cap10,
 			period:        "monthly",
 			wantExceeded:  true,
-			wantRemaining: ptr(money.FromDollars(-2)),
+			wantRemaining: ptr(money.MustParseDollars("-2")),
 		},
 		{
 			name:          "no cap (unlimited)",
-			spent:         money.FromDollars(100),
+			spent:         money.MustParseDollars("100"),
 			cap:           nil,
 			period:        "run",
 			wantExceeded:  false,
@@ -90,7 +90,7 @@ func TestNewBudgetStatus(t *testing.T) {
 
 func TestNewBudgetStatus_ZeroCap(t *testing.T) {
 	cap := money.Amount(0) // $0 cap
-	spent := money.FromDollars(1)
+	spent := money.MustParseDollars("1")
 
 	bs := NewBudgetStatus(spent, &cap, "run")
 
@@ -101,7 +101,7 @@ func TestNewBudgetStatus_ZeroCap(t *testing.T) {
 		t.Fatal("Remaining: expected non-nil pointer")
 	}
 	// spent (1 dollar = 1_000_000_000 nanos) - cap (0) = remaining 1_000_000_000 (negative in absolute terms)
-	expectedRemaining := money.FromDollars(0) - spent
+	expectedRemaining, _ := money.MustParseDollars("0").Sub(spent)
 	if *bs.Remaining != expectedRemaining {
 		t.Errorf("Remaining: got %v, want %v", *bs.Remaining, expectedRemaining)
 	}

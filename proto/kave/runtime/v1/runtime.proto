@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package kave.runtime.v1;
+
+import "kave/runtime/v1/action.proto";
+import "kave/runtime/v1/cost.proto";
+import "kave/runtime/v1/run.proto";
+import "kave/runtime/v1/span.proto";
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/runtime/v1;runtime";
+
+// RuntimeAPI exposes run, action, span, and cost operations.
+// v1: gRPC only. HTTP transcoding deferred to v1.1+.
+service RuntimeService {
+  // Run operations
+  rpc CreateRun(CreateRunRequest) returns (RunRecord);
+  rpc GetRun(GetRunRequest) returns (RunRecord);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  rpc UpdateRun(UpdateRunRequest) returns (RunRecord);
+  rpc CancelRun(CancelRunRequest) returns (RunRecord);
+  rpc WatchRuns(WatchRunsRequest) returns (stream RunRecord);
+
+  // Action operations
+  rpc CreateAction(CreateActionRequest) returns (ActionRecord);
+  rpc GetAction(GetActionRequest) returns (ActionRecord);
+  rpc ListActions(ListActionsRequest) returns (ListActionsResponse);
+
+  // Span operations
+  rpc OpenSpan(OpenSpanRequest) returns (SpanRow);
+  rpc CloseSpan(CloseSpanRequest) returns (SpanRow);
+  rpc GetSpan(GetSpanRequest) returns (SpanRow);
+  rpc QuerySpans(QuerySpansRequest) returns (QuerySpansResponse);
+
+  // Cost operations
+  rpc GetPriceBook(GetPriceBookRequest) returns (PriceBook);
+  rpc GetSpendReport(GetSpendReportRequest) returns (SpendReport);
+}
+
+// --- Run ---
+
+message CreateRunRequest {
+  string project_id = 1;
+  string env_id = 2;
+  string agent_id = 3;
+  optional string policy_id = 4;
+  string name = 5;
+}
+
+message GetRunRequest {
+  string id = 1;
+}
+
+message ListRunsRequest {
+  RunFilter filter = 1;
+  int32 limit = 2;
+  string page_token = 3;
+}
+
+message ListRunsResponse {
+  repeated RunRecord runs = 1;
+  string next_page_token = 2;
+}
+
+message UpdateRunRequest {
+  string id = 1;
+  RunUpdate update = 2;
+}
+
+message CancelRunRequest {
+  string id = 1;
+  optional string reason = 2;
+}
+
+// WatchRunsRequest streams RunRecord events for the given scope.
+message WatchRunsRequest {
+  string env_id = 1;
+  optional string agent_id = 2;
+  repeated RunStatus statuses = 3; // empty = all statuses
+}
+
+// --- Action ---
+
+message CreateActionRequest {
+  string run_id = 1;
+  string agent_id = 2;
+  string project_id = 3;
+  string env_id = 4;
+  ActionType action_type = 5;
+  string connector = 6;
+  string method = 7;
+}
+
+message GetActionRequest {
+  string id = 1;
+}
+
+message ListActionsRequest {
+  ActionFilter filter = 1;
+  int32 limit = 2;
+  string page_token = 3;
+}
+
+message ListActionsResponse {
+  repeated ActionRecord actions = 1;
+  string next_page_token = 2;
+}
+
+// --- Span ---
+
+message OpenSpanRequest {
+  SpanInput span = 1;
+}
+
+message CloseSpanRequest {
+  string span_id = 1;
+  SpanEnd end = 2;
+}
+
+message GetSpanRequest {
+  string id = 1;
+}
+
+message QuerySpansRequest {
+  SpanFilter filter = 1;
+  int32 limit = 2;
+  string page_token = 3;
+}
+
+message QuerySpansResponse {
+  repeated SpanRow spans = 1;
+  string next_page_token = 2;
+}
+
+// --- Cost ---
+
+message GetPriceBookRequest {}
+
+message GetSpendReportRequest {
+  SpendFilter filter = 1;
+}

@@ -29,6 +29,15 @@ const (
 	ObservedActionFailed    ObservedActionStatus = "failed"
 )
 
+// ActionSource distinguishes intercepted (Kave in the causal path) from
+// observed (agent-reported after the fact) actions.
+type ActionSource string
+
+const (
+	ActionSourceIntercepted ActionSource = "intercepted"
+	ActionSourceObserved    ActionSource = "observed"
+)
+
 // Outcome carries structured decision detail so auth/validate/cost can explain
 // why an action was blocked, warned, denied, retried, or otherwise altered.
 type Outcome struct {

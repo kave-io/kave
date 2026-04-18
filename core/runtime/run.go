@@ -16,6 +16,16 @@ const (
 	RunBlocked   RunStatus = "blocked"
 )
 
+// TriggerType is the origin of a Run.
+type TriggerType string
+
+const (
+	TriggerAPI      TriggerType = "api"
+	TriggerSchedule TriggerType = "schedule"
+	TriggerWebhook  TriggerType = "webhook"
+	TriggerManual   TriggerType = "manual"
+)
+
 type Run struct {
 	ID        string
 	ProjectID string
@@ -31,7 +41,7 @@ type Run struct {
 	Metadata  map[string]any
 
 	// Provenance — set once at run creation, never updated
-	TriggerType   string
+	TriggerType   TriggerType
 	CorrelationID *string
 	SessionID     *string
 }

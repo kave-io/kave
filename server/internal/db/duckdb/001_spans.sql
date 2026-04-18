@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS spans (
     cache_read_tokens   INTEGER,
     cache_write_tokens  INTEGER,
     model               VARCHAR,
-    cost_usd            DOUBLE,
+    cost_amount_nanos   BIGINT,
     tags                VARCHAR,
     created_at          BIGINT NOT NULL
 );
@@ -33,7 +33,7 @@ SELECT
     cast(started_at / (1000.0 * 3600 * 24) as BIGINT) AS day_key,
     model,
     count(*)                        AS span_count,
-    sum(cost_usd)                   AS total_cost_usd,
+    sum(cost_amount_nanos)          AS total_cost_amount_nanos,
     sum(input_tokens)               AS total_input_tokens,
     sum(output_tokens)              AS total_output_tokens,
     avg(duration_ms)                AS avg_duration_ms

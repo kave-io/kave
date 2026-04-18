@@ -5,6 +5,13 @@ modules:
 lint:
   use:
     - STANDARD
+  except:
+    # RPCs return entity types directly (Agent, RunRecord, SpanRow, etc.) rather than
+    # dedicated XxxResponse wrappers. This is intentional — it keeps the API surface lean
+    # and the entity type IS the canonical read model. Revisit for v2 if we need
+    # per-RPC response metadata (e.g., ETag, warnings).
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
 breaking:
   use:
     - FILE

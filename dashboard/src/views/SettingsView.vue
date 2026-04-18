@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
 import { useLocaleStore, ALL_LOCALES } from '../stores/locale'
 import { useCurrencyStore, ALL_CURRENCIES } from '../stores/currency'
-import { workspaceId } from '@/stores/workspace'
+import { projectId, envId } from '@/stores/workspace'
 import { usePricingBook, useSavePricingBook } from '@/lib/queries'
 
 const { locale, t } = useI18n()
@@ -79,19 +79,35 @@ async function savePricingBook() {
       </div>
 
       <UCard class="rounded-xl">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <p class="text-xs text-muted">{{ t('pages.settings.workspace_id') }}</p>
-            <p class="text-sm font-mono mt-1">{{ workspaceId }}</p>
+        <div class="space-y-4">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-xs text-muted">{{ t('pages.settings.project_id') || 'Project ID' }}</p>
+              <p class="text-sm font-mono mt-1">{{ projectId }}</p>
+            </div>
+            <UButton
+              icon="i-lucide-copy"
+              color="gray"
+              variant="ghost"
+              size="sm"
+              @click="copyUrl(projectId)"
+              :title="`${t('common.copy')} project ID`"
+            />
           </div>
-          <UButton
-            icon="i-lucide-copy"
-            color="gray"
-            variant="ghost"
-            size="sm"
-            @click="copyUrl(workspaceId)"
-            :title="`${t('common.copy')} workspace ID`"
-          />
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <p class="text-xs text-muted">{{ t('pages.settings.env_id') || 'Environment ID' }}</p>
+              <p class="text-sm font-mono mt-1">{{ envId }}</p>
+            </div>
+            <UButton
+              icon="i-lucide-copy"
+              color="gray"
+              variant="ghost"
+              size="sm"
+              @click="copyUrl(envId)"
+              :title="`${t('common.copy')} environment ID`"
+            />
+          </div>
         </div>
       </UCard>
     </section>

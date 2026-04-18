@@ -137,7 +137,7 @@ This is purely observability + post-hoc analysis.
 **What Kave does:**
 - Receives OTLP spans (gRPC or HTTP)
 - Maps OTel span attributes to Kave's Span model
-- Enriches: computes cost_usd from token attributes + pricing table
+- Enriches: computes canonical cost from token attributes + pricing table (no float contracts)
 - Writes to SpanStore
 - Does NOT create Action records (no lifecycle to manage)
 - Surfaces in dashboard alongside intercepted runs

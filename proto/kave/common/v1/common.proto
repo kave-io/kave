@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package kave.common.v1;
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/common/v1;common";
+
+// Amount is a canonical decimal monetary quantity encoded as text.
+// It never uses float/double and does not carry currency by itself.
+// The enclosing contract defines the currency context.
+message Amount {
+  string decimal = 1;
+}

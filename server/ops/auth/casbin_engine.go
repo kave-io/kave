@@ -30,7 +30,7 @@ func (e *PolicyEvaluator) Evaluate(ctx context.Context, action *runtime.Action, 
 		return &coreAuth.Decision{
 			Allowed:  false,
 			Reason:   fmt.Sprintf("action type %q not in allowed list", action.Type),
-			PolicyID: &authPolicy.PolicyID,
+			PolicyID: nil,
 			Code:     "type_denied",
 		}, nil
 	}
@@ -38,7 +38,7 @@ func (e *PolicyEvaluator) Evaluate(ctx context.Context, action *runtime.Action, 
 		return &coreAuth.Decision{
 			Allowed:  false,
 			Reason:   fmt.Sprintf("connector %q not in allowed list", action.Connector),
-			PolicyID: &authPolicy.PolicyID,
+			PolicyID: nil,
 			Code:     "connector_denied",
 		}, nil
 	}
@@ -46,7 +46,7 @@ func (e *PolicyEvaluator) Evaluate(ctx context.Context, action *runtime.Action, 
 		return &coreAuth.Decision{
 			Allowed:  false,
 			Reason:   fmt.Sprintf("method %q not in allowed list", action.Method),
-			PolicyID: &authPolicy.PolicyID,
+			PolicyID: nil,
 			Code:     "method_denied",
 		}, nil
 	}
@@ -54,7 +54,7 @@ func (e *PolicyEvaluator) Evaluate(ctx context.Context, action *runtime.Action, 
 	return &coreAuth.Decision{
 		Allowed:  true,
 		Reason:   "allowed by policy",
-		PolicyID: &authPolicy.PolicyID,
+		PolicyID: nil,
 		Code:     "allowed",
 	}, nil
 }

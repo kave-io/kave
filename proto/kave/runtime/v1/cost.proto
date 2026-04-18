@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package kave.runtime.v1;
+
+import "google/protobuf/struct.proto";
+import "kave/common/v1/common.proto";
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/runtime/v1;runtime";
+
+// PriceSnapshot captures the exact price inputs used to compute a cost.
+// All monetary values are canonical decimal strings via Amount and must remain
+// in the source/accounting currency recorded in currency. Converted display
+// values belong in read models, not in this persisted contract.
+message PriceSnapshot {
+  string version = 1;
+  string provider = 2;
+  string model = 3;
+  string match = 4;
+  string source = 5;
+  kave.common.v1.Amount input_per_million = 6;
+  kave.common.v1.Amount output_per_million = 7;
+  kave.common.v1.Amount cache_read_per_million = 8;
+  kave.common.v1.Amount cache_write_per_million = 9;
+  kave.common.v1.Amount reasoning_per_million = 10;
+  kave.common.v1.Amount audio_input_per_million = 11;
+  kave.common.v1.Amount audio_output_per_million = 12;
+  kave.common.v1.Amount image_unit_price = 13;
+  kave.common.v1.Amount per_request = 14;
+  kave.common.v1.Amount per_compute_ms = 15;
+  kave.common.v1.Amount per_gb_stored = 16;
+  kave.common.v1.Amount per_gb_transferred = 17;
+  int64 resolved_at_ms = 18; // UnixMilli
+  string currency = 19; // accounting/source currency for all price fields
+}
+
+// PriceModel defines one provider/model pricing rule.
+// Prices are canonical decimal strings via Amount, not float/double values.
+message PriceModel {
+  string provider = 1;
+  string match = 2;
+  string source = 3;
+  kave.common.v1.Amount input_per_million = 4;
+  kave.common.v1.Amount output_per_million = 5;
+  kave.common.v1.Amount cache_read_per_million = 6;
+  kave.common.v1.Amount cache_write_per_million = 7;
+  kave.common.v1.Amount reasoning_per_million = 8;
+  kave.common.v1.Amount audio_input_per_million = 9;
+  kave.common.v1.Amount audio_output_per_million = 10;
+  kave.common.v1.Amount image_unit_price = 11;
+  kave.common.v1.Amount per_request = 12;
+  kave.common.v1.Amount per_compute_ms = 13;
+  kave.common.v1.Amount per_gb_stored = 14;
+  kave.common.v1.Amount per_gb_transferred = 15;
+  int64 effective_from_ms = 16; // UnixMilli; 0 = from beginning of time
+  optional int64 effective_to_ms = 17; // UnixMilli; nil = currently active
+  string revision_note = 18; // brief change description
+  string currency = 19; // accounting/source currency for all price fields
+}
+
+// PriceBook is the active pricing configuration used for metering.
+message PriceBook {
+  string version = 1;
+  repeated PriceModel entries = 2;
+}
+
+// BudgetEntry is one record in the append-only budget ledger.
+message BudgetEntry {
+  string id = 1;
+  string project_id = 2;
+  string env_id = 3;
+  string policy_id = 4; // which policy governed this spend
+  string agent_id = 5;
+  string run_id = 6;
+  optional string action_id = 7;
+  optional string span_id = 8;
+  string connector = 9;
+  string model = 10;
+  int32 input_tokens = 11;
+  int32 output_tokens = 12;
+  int32 cache_read_tokens = 13;
+  int32 cache_write_tokens = 14;
+  int32 reasoning_tokens = 15;
+  int32 audio_input_tokens = 16;
+  int32 audio_output_tokens = 17;
+  int32 image_units = 18;
+  int32 request_count = 19;
+  int64 compute_ms = 20;
+  int64 storage_bytes = 21;
+  int64 bandwidth_bytes = 22;
+  kave.common.v1.Amount cost = 23;
+  optional PriceSnapshot price_snapshot = 24;
+  google.protobuf.Struct usage_detail = 25; // serialized Usage struct
+  google.protobuf.Struct metadata = 26;
+  int64 created_at_ms = 27; // UnixMilli
+}
+
+// SpendFilter filters spend queries.
+message SpendFilter {
+  string project_id = 1; // at least one scope filter required for meaningful results
+  string env_id = 2;
+  string policy_id = 3;
+  string agent_id = 4;
+  string connector = 5;
+  string model = 6;
+  optional int64 from_ms = 7;
+  optional int64 to_ms = 8;
+}
+
+// SpendReport is the result of an aggregated spend query.
+message SpendReport {
+  kave.common.v1.Amount total = 1;
+
+  map<string, kave.common.v1.Amount> by_project = 2;
+  map<string, kave.common.v1.Amount> by_env = 3;
+  map<string, kave.common.v1.Amount> by_policy = 4;
+  map<string, kave.common.v1.Amount> by_agent = 5;
+  map<string, kave.common.v1.Amount> by_connector = 6;
+  map<string, kave.common.v1.Amount> by_model = 7;
+
+  int64 period_start_ms = 8; // UnixMilli
+  int64 period_end_ms = 9; // UnixMilli
+}

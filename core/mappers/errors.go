@@ -10,9 +10,5 @@ type MappingError struct {
 }
 
 func (e *MappingError) Error() string {
-	return fmt.Sprintf("mapper: %s %s → %s failed: %s", e.Domain, e.Type, e.Type, e.Reason)
-}
-
-func newError(domain, typ, reason string) *MappingError {
-	return &MappingError{Domain: domain, Type: typ, Reason: reason}
+	return fmt.Sprintf("mapper: %s %s failed: %s", e.Domain, e.Type, e.Reason)
 }

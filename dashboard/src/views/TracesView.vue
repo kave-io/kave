@@ -5,8 +5,10 @@ import PageHeader from '../components/PageHeader.vue'
 import type { Span } from '@/types/api'
 import { useSpans } from '@/lib/queries'
 import { useSpanStream } from '@/composables/useSpanStream'
+import { useCurrencyStore } from '@/stores/currency'
 
 const { t } = useI18n()
+const currencyStore = useCurrencyStore()
 
 // Show total context (input + cache hits) → output.
 // Cache hits are marked with ⚡ to indicate they were cheap.
@@ -35,7 +37,7 @@ const rows = computed(() => {
     model: s.model ?? '—',
     duration: s.duration_ms != null ? `${s.duration_ms}ms` : '—',
     tokens: formatTokens(s),
-    cost: s.cost_usd != null ? `$${s.cost_usd.toFixed(6)}` : '—',
+    cost: s.cost ? currencyStore.format(s.cost) : '—',
     cached: (s.cache_read_tokens ?? 0) > 0,
     status: s.error ? 'error' : 'ok',
     started: new Date(s.started_at).toLocaleTimeString(),

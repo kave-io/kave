@@ -5,11 +5,13 @@ import PageHeader from '../components/PageHeader.vue'
 import DetailRow from '../components/DetailRow.vue'
 import type { Policy } from '@/types/api'
 import { useAgents, usePolicy } from '@/lib/queries'
-import { workspaceId } from '@/stores/workspace'
+import { envId } from '@/stores/workspace'
+import { useCurrencyStore } from '@/stores/currency'
 
 const { t } = useI18n()
+const currencyStore = useCurrencyStore()
 
-const { data: agents, isLoading } = useAgents(workspaceId)
+const { data: agents, isLoading } = useAgents(envId)
 const selectedPolicyId = ref<string | null>(null)
 
 // Collect unique policy IDs from agents
@@ -84,9 +86,9 @@ const policiesWithUsage = computed(() => {
           <h3 class="text-xs font-medium uppercase tracking-wide text-muted">Restrictions</h3>
           <div class="space-y-3">
             <DetailRow
-              v-if="selectedPolicy.budget_cap_usd"
+              v-if="selectedPolicy.budget_cap"
               label="Budget Cap"
-              :value="`$${selectedPolicy.budget_cap_usd.toFixed(2)}`"
+              :value="currencyStore.format(selectedPolicy.budget_cap)"
               large
             />
             <div v-if="selectedPolicy.allowed_connectors?.length" class="border border-default/60 rounded-lg px-3 py-2.5">

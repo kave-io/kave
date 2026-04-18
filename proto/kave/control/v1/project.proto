@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package kave.control.v1;
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/control/v1;control";
+
+// Project is the tenancy workspace. Everything belongs to a project.
+// A project belongs to one organization.
+message Project {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  string slug = 4;
+  string description = 5;
+  int64 created_at_ms = 6; // UnixMilli
+  int64 updated_at_ms = 7; // UnixMilli
+}

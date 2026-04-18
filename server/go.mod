@@ -9,9 +9,9 @@ require (
 	github.com/casbin/redis-watcher/v2 v2.8.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.1
+	github.com/kave-io/kave/app v0.0.0
 	github.com/kave-io/kave/connectors v0.0.0
 	github.com/kave-io/kave/core v0.0.0
-	github.com/kave-io/kave/proto v0.0.0
 	github.com/marcboeker/go-duckdb v1.8.4
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/noho-digital/casbin-pgx-adapter v1.1.1
@@ -36,6 +36,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/kave-io/kave/proto/gen v0.0.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
@@ -64,10 +65,14 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20241104194629-dd2ea8efbc28 // indirect
+	google.golang.org/protobuf v1.36.1 // indirect
 )
 
 replace (
+	github.com/kave-io/kave/app => ../app
 	github.com/kave-io/kave/connectors => ../connectors
 	github.com/kave-io/kave/core => ../core
 	github.com/kave-io/kave/proto => ../proto
+	github.com/kave-io/kave/proto/gen => ../proto/gen
 )

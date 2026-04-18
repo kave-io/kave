@@ -112,7 +112,7 @@ allowed_connectors  []string    ← ["*"] or ["openai","stripe"]
 allowed_methods     []string    ← ["*"] or ["chat.completions"]
 
 // budget
-budget_cap_usd    *float64      ← nil = unlimited
+budget_cap        *money.Amount ← nil = unlimited
 budget_period     string        ← "run" | "daily" | "monthly"
 budget_behavior   string        ← "block" | "warn"
 
@@ -141,7 +141,7 @@ policy_id    string      ← locked at run start, does not change mid-run
 status       string      ← "active" | "completed" | "failed"
 started_at   int64
 ended_at     *int64
-spent_usd    float64     ← running total, incremented on each llm action
+spent        money.Amount ← running total, incremented on each llm action
 error        *string
 metadata     map[string]any
 ```
@@ -182,7 +182,7 @@ ended_at        int64
 duration_ms     int64
 input_tokens    *int
 output_tokens   *int
-cost_usd        *float64
+cost           *money.Amount
 error           *string
 tags            map[string]string
 ```
@@ -342,7 +342,7 @@ proxy
   │             pass → continue
   │
   ├─ [SYNC] BUDGET CHECK  (only if policy.cost.budget_cap != nil)
-  │           run.spent_usd >= policy.cost.budget_cap?
+  │           run.spent >= policy.cost.budget_cap?
   │             block  → return 429 to client
   │             warn   → continue, attach warning header to response
   │
@@ -362,7 +362,7 @@ proxy
   │           status=completed, output=response body, ended_at=now
   │
   ├─ [SYNC] update Run
-  │           spent_usd += cost  (atomic increment)
+  │           spent += cost  (atomic increment)
   │
   ├─ [ASYNC] open Span  ← non-blocking, buffered channel → SpanStore
   │           later close/finalize with end data

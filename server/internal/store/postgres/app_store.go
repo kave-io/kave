@@ -63,8 +63,8 @@ func (p *PostgresAppStore) AddMember(_ context.Context, _ *control.Membership) e
 func (p *PostgresAppStore) GetMembership(_ context.Context, _, _ string) (*control.Membership, error) {
 	return nil, nil
 }
-func (p *PostgresAppStore) ListMembers(_ context.Context, _ string) ([]*control.Membership, error) {
-	return nil, nil
+func (p *PostgresAppStore) ListMembers(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Membership], error) {
+	return store.PageResult[*control.Membership]{}, nil
 }
 func (p *PostgresAppStore) RemoveMember(_ context.Context, _, _ string) error { return nil }
 
@@ -95,8 +95,8 @@ func (p *PostgresAppStore) GetProject(ctx context.Context, id string) (*control.
 	return &proj, nil
 }
 
-func (p *PostgresAppStore) ListProjects(_ context.Context, _ string) ([]*control.Project, error) {
-	return nil, nil
+func (p *PostgresAppStore) ListProjects(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Project], error) {
+	return store.PageResult[*control.Project]{}, nil
 }
 
 // ── EnvironmentStore stubs ────────────────────────────────────────────────────
@@ -116,41 +116,37 @@ func (p *PostgresAppStore) GetEnvironmentBySlug(_ context.Context, projectID, sl
 	}
 	return nil, nil
 }
-func (p *PostgresAppStore) ListEnvironments(_ context.Context, _ string) ([]*control.Environment, error) {
-	return []*control.Environment{{ID: "default", ProjectID: "default", Name: "Default", Slug: "default"}}, nil
+func (p *PostgresAppStore) ListEnvironments(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Environment], error) {
+	return store.PageResult[*control.Environment]{Items: []*control.Environment{{ID: "default", ProjectID: "default", Name: "Default", Slug: "default"}}}, nil
 }
 
 // ── AgentStore ────────────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) CreateAgent(ctx context.Context, a *control.Agent) error {
 	metaJSON, _ := json.Marshal(a.Metadata)
-	var budgetDollars *float64
-	if a.MonthlyBudget != nil {
-		d := a.MonthlyBudget.Dollars()
-		budgetDollars = &d
-	}
+	budgetAmount := ptrAmountToDB(a.MonthlyBudget)
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO agents (id, workspace_id, name, description, policy_id, monthly_budget, metadata, created_at, updated_at)
+		INSERT INTO agents (id, workspace_id, name, description, policy_id, monthly_budget_amount_nanos, metadata, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	`, a.ID, a.ProjectID, a.Name, a.Description, a.PolicyID, budgetDollars, metaJSON, toTime(a.CreatedAt), toTime(a.UpdatedAt))
+	`, a.ID, a.ProjectID, a.Name, a.Description, a.PolicyID, budgetAmount, metaJSON, toTime(a.CreatedAt), toTime(a.UpdatedAt))
 	return err
 }
 
 func (p *PostgresAppStore) GetAgentByID(ctx context.Context, id string) (*control.Agent, error) {
-	return p.getAgent(ctx, `SELECT id, workspace_id, name, description, policy_id, monthly_budget, metadata, created_at, updated_at FROM agents WHERE id = $1`, id)
+	return p.getAgent(ctx, `SELECT id, workspace_id, name, description, policy_id, monthly_budget_amount_nanos, metadata, created_at, updated_at FROM agents WHERE id = $1`, id)
 }
 
 func (p *PostgresAppStore) GetAgentByName(ctx context.Context, envID, name string) (*control.Agent, error) {
-	return p.getAgent(ctx, `SELECT id, workspace_id, name, description, policy_id, monthly_budget, metadata, created_at, updated_at FROM agents WHERE workspace_id = $1 AND name = $2`, envID, name)
+	return p.getAgent(ctx, `SELECT id, workspace_id, name, description, policy_id, monthly_budget_amount_nanos, metadata, created_at, updated_at FROM agents WHERE workspace_id = $1 AND name = $2`, envID, name)
 }
 
 func (p *PostgresAppStore) getAgent(ctx context.Context, query string, args ...any) (*control.Agent, error) {
 	var a control.Agent
 	var metaJSON []byte
 	var createdAt, updatedAt time.Time
-	var budgetDollars *float64
+	var budgetAmount *int64
 	err := p.pool.QueryRow(ctx, query, args...).Scan(
-		&a.ID, &a.ProjectID, &a.Name, &a.Description, &a.PolicyID, &budgetDollars, &metaJSON, &createdAt, &updatedAt,
+		&a.ID, &a.ProjectID, &a.Name, &a.Description, &a.PolicyID, &budgetAmount, &metaJSON, &createdAt, &updatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -158,10 +154,7 @@ func (p *PostgresAppStore) getAgent(ctx context.Context, query string, args ...a
 	if err != nil {
 		return nil, err
 	}
-	if budgetDollars != nil {
-		amt := money.FromDollars(*budgetDollars)
-		a.MonthlyBudget = &amt
-	}
+	a.MonthlyBudget = ptrAmountFromDB(budgetAmount)
 	if err := json.Unmarshal(metaJSON, &a.Metadata); err != nil {
 		a.Metadata = make(map[string]any)
 	}
@@ -175,30 +168,38 @@ func (p *PostgresAppStore) getAgent(ctx context.Context, query string, args ...a
 func (p *PostgresAppStore) UpdateAgent(ctx context.Context, id string, update *control.AgentUpdate) error {
 	now := time.Now()
 	metaJSON, _ := json.Marshal(update.Metadata)
-	var budgetDollars *float64
-	if update.MonthlyBudget != nil {
-		d := update.MonthlyBudget.Dollars()
-		budgetDollars = &d
-	}
+	budgetAmount := ptrAmountToDB(update.MonthlyBudget)
 	_, err := p.pool.Exec(ctx, `
 		UPDATE agents
 		SET description = COALESCE($1, description),
 		    policy_id = COALESCE($2, policy_id),
-		    monthly_budget = COALESCE($3, monthly_budget),
+		    monthly_budget_amount_nanos = COALESCE($3, monthly_budget_amount_nanos),
 		    metadata = COALESCE($4, metadata),
 		    updated_at = $5
 		WHERE id = $6
-	`, update.Description, update.PolicyID, budgetDollars, metaJSON, now, id)
+	`, update.Description, update.PolicyID, budgetAmount, metaJSON, now, id)
 	return err
 }
 
-func (p *PostgresAppStore) ListAgents(ctx context.Context, envID string) ([]*control.Agent, error) {
+func (p *PostgresAppStore) DeleteAgent(ctx context.Context, id, deletedBy string) error {
+	now := time.Now()
+	_, err := p.pool.Exec(ctx, `UPDATE agents SET deleted_at = $1, updated_at = $1 WHERE id = $2`, now, id)
+	return err
+}
+
+func (p *PostgresAppStore) RestoreAgent(ctx context.Context, id, restoredBy string) error {
+	now := time.Now()
+	_, err := p.pool.Exec(ctx, `UPDATE agents SET deleted_at = NULL, updated_at = $1 WHERE id = $2`, now, id)
+	return err
+}
+
+func (p *PostgresAppStore) ListAgents(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.Agent], error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT id, workspace_id, name, description, policy_id, monthly_budget, metadata, created_at, updated_at
+		SELECT id, workspace_id, name, description, policy_id, monthly_budget_amount_nanos, metadata, created_at, updated_at
 		FROM agents WHERE workspace_id = $1 ORDER BY name
 	`, envID)
 	if err != nil {
-		return nil, err
+		return store.PageResult[*control.Agent]{}, err
 	}
 	defer rows.Close()
 
@@ -207,14 +208,11 @@ func (p *PostgresAppStore) ListAgents(ctx context.Context, envID string) ([]*con
 		var a control.Agent
 		var metaJSON []byte
 		var createdAt, updatedAt time.Time
-		var budgetDollars *float64
-		if err := rows.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Description, &a.PolicyID, &budgetDollars, &metaJSON, &createdAt, &updatedAt); err != nil {
-			return nil, err
+		var budgetAmount *int64
+		if err := rows.Scan(&a.ID, &a.ProjectID, &a.Name, &a.Description, &a.PolicyID, &budgetAmount, &metaJSON, &createdAt, &updatedAt); err != nil {
+			return store.PageResult[*control.Agent]{}, err
 		}
-		if budgetDollars != nil {
-			amt := money.FromDollars(*budgetDollars)
-			a.MonthlyBudget = &amt
-		}
+		a.MonthlyBudget = ptrAmountFromDB(budgetAmount)
 		if err := json.Unmarshal(metaJSON, &a.Metadata); err != nil {
 			a.Metadata = make(map[string]any)
 		}
@@ -224,39 +222,39 @@ func (p *PostgresAppStore) ListAgents(ctx context.Context, envID string) ([]*con
 		a.Status = control.AgentStatusActive
 		agents = append(agents, &a)
 	}
-	return agents, rows.Err()
+	return store.PageResult[*control.Agent]{Items: agents}, rows.Err()
 }
 
 // ── PolicyStore ───────────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) CreatePolicy(ctx context.Context, pol *control.PolicyRecord) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO policies (id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_usd, config, created_at, updated_at)
+		INSERT INTO policies (id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_amount_nanos, config, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, pol.ID, pol.ProjectID, pol.Name, pol.Description, pol.AllowedConnectors, pol.AllowedMethods, pol.BudgetCap.Dollars(), pol.Config, toTime(pol.CreatedAt), toTime(pol.UpdatedAt))
+	`, pol.ID, pol.ProjectID, pol.Name, pol.Description, pol.AllowedConnectors, pol.AllowedMethods, amountToDB(pol.BudgetCap), pol.Config, toTime(pol.CreatedAt), toTime(pol.UpdatedAt))
 	return err
 }
 
 func (p *PostgresAppStore) GetPolicy(ctx context.Context, id string) (*control.PolicyRecord, error) {
 	var pol control.PolicyRecord
 	var createdAt, updatedAt time.Time
-	var budgetDollars float64
+	var budgetAmount int64
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_usd, config, created_at, updated_at
+		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_amount_nanos, config, created_at, updated_at
 		FROM policies WHERE id = $1
-	`, id).Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &budgetDollars, &pol.Config, &createdAt, &updatedAt)
+	`, id).Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &budgetAmount, &pol.Config, &createdAt, &updatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	pol.BudgetCap = money.FromDollars(budgetDollars)
+	pol.BudgetCap = amountFromDB(budgetAmount)
 	pol.CreatedAt = createdAt.UnixMilli()
 	pol.UpdatedAt = updatedAt.UnixMilli()
 	pol.EnvID = "default"
-	pol.Mode = control.PolicyModeEnforce
-	pol.Status = control.PolicyStatusActive
+	pol.Mode = "enforce"
+	pol.Status = "active"
 	return &pol, nil
 }
 
@@ -269,13 +267,13 @@ func (p *PostgresAppStore) GetAgentPolicy(ctx context.Context, agentID string) (
 	return p.GetPolicy(ctx, *policyID)
 }
 
-func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string) ([]*control.PolicyRecord, error) {
+func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.PolicyRecord], error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_usd, config, created_at, updated_at
+		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_amount_nanos, config, created_at, updated_at
 		FROM policies WHERE workspace_id = $1 ORDER BY name
 	`, envID)
 	if err != nil {
-		return nil, err
+		return store.PageResult[*control.PolicyRecord]{}, err
 	}
 	defer rows.Close()
 
@@ -283,34 +281,34 @@ func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string) ([]*c
 	for rows.Next() {
 		var pol control.PolicyRecord
 		var createdAt, updatedAt time.Time
-		var budgetDollars float64
-		if err := rows.Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &budgetDollars, &pol.Config, &createdAt, &updatedAt); err != nil {
-			return nil, err
+		var budgetAmount int64
+		if err := rows.Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &budgetAmount, &pol.Config, &createdAt, &updatedAt); err != nil {
+			return store.PageResult[*control.PolicyRecord]{}, err
 		}
-		pol.BudgetCap = money.FromDollars(budgetDollars)
+		pol.BudgetCap = amountFromDB(budgetAmount)
 		pol.CreatedAt = createdAt.UnixMilli()
 		pol.UpdatedAt = updatedAt.UnixMilli()
 		pol.EnvID = "default"
-		pol.Mode = control.PolicyModeEnforce
-		pol.Status = control.PolicyStatusActive
+		pol.Mode = "enforce"
+		pol.Status = "active"
 		policies = append(policies, &pol)
 	}
-	return policies, rows.Err()
+	return store.PageResult[*control.PolicyRecord]{Items: policies}, rows.Err()
 }
 
 // ── RunStore ──────────────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) CreateRun(ctx context.Context, r *runtimemodel.RunRecord) error {
 	metaJSON, _ := json.Marshal(r.Metadata)
-	var budgetDollars *float64
+	var budgetAmount *int64
 	if r.BudgetCap != 0 {
-		d := r.BudgetCap.Dollars()
-		budgetDollars = &d
+		v := amountToDB(r.BudgetCap)
+		budgetAmount = &v
 	}
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO runs (id, workspace_id, agent_id, policy_id, name, status, budget_cap_usd, spent_usd, metadata, error_message, started_at, ended_at, created_at, updated_at)
+		INSERT INTO runs (id, workspace_id, agent_id, policy_id, name, status, budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message, started_at, ended_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-	`, r.ID, r.ProjectID, r.AgentID, r.PolicyID, r.Name, r.Status, budgetDollars, r.Spent.Dollars(),
+	`, r.ID, r.ProjectID, r.AgentID, r.PolicyID, r.Name, r.Status, budgetAmount, amountToDB(r.Spent),
 		metaJSON, r.ErrorMessage, toTime(r.StartedAt), ptrToTime(r.EndedAt), toTime(r.CreatedAt), toTime(r.UpdatedAt))
 	return err
 }
@@ -320,12 +318,12 @@ func (p *PostgresAppStore) GetRunByID(ctx context.Context, id string) (*runtimem
 	var metaJSON []byte
 	var startedAt, createdAt, updatedAt time.Time
 	var endedAt *time.Time
-	var budgetDollars *float64
-	var spentDollars float64
+	var budgetAmount *int64
+	var spentAmount int64
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, workspace_id, agent_id, policy_id, name, status, budget_cap_usd, spent_usd, metadata, error_message, started_at, ended_at, created_at, updated_at
+		SELECT id, workspace_id, agent_id, policy_id, name, status, budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message, started_at, ended_at, created_at, updated_at
 		FROM runs WHERE id = $1
-	`, id).Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.PolicyID, &r.Name, &r.Status, &budgetDollars, &spentDollars,
+	`, id).Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.PolicyID, &r.Name, &r.Status, &budgetAmount, &spentAmount,
 		&metaJSON, &r.ErrorMessage, &startedAt, &endedAt, &createdAt, &updatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -333,10 +331,10 @@ func (p *PostgresAppStore) GetRunByID(ctx context.Context, id string) (*runtimem
 	if err != nil {
 		return nil, err
 	}
-	if budgetDollars != nil {
-		r.BudgetCap = money.FromDollars(*budgetDollars)
+	if budgetAmount != nil {
+		r.BudgetCap = amountFromDB(*budgetAmount)
 	}
-	r.Spent = money.FromDollars(spentDollars)
+	r.Spent = amountFromDB(spentAmount)
 	if err := json.Unmarshal(metaJSON, &r.Metadata); err != nil {
 		r.Metadata = make(map[string]any)
 	}
@@ -358,26 +356,22 @@ func (p *PostgresAppStore) GetRunByIdempotencyKey(_ context.Context, _, _ string
 func (p *PostgresAppStore) UpdateRun(ctx context.Context, id string, update *runtimemodel.RunUpdate) error {
 	now := time.Now()
 	metaJSON, _ := json.Marshal(update.Metadata)
-	var spentDollars *float64
-	if update.Spent != nil {
-		d := update.Spent.Dollars()
-		spentDollars = &d
-	}
+	spentAmount := ptrAmountToDB(update.Spent)
 	_, err := p.pool.Exec(ctx, `
 		UPDATE runs
 		SET status = COALESCE($1, status),
-		    spent_usd = COALESCE($2, spent_usd),
+		    spent_amount_nanos = COALESCE($2, spent_amount_nanos),
 		    error_message = COALESCE($3, error_message),
 		    ended_at = COALESCE($4, ended_at),
 		    metadata = COALESCE($5, metadata),
 		    updated_at = $6
 		WHERE id = $7
-	`, update.Status, spentDollars, update.ErrorMessage, ptrToTime(update.EndedAt), metaJSON, now, id)
+	`, update.Status, spentAmount, update.ErrorMessage, ptrToTime(update.EndedAt), metaJSON, now, id)
 	return err
 }
 
-func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.RunFilter) ([]*runtimemodel.RunRecord, error) {
-	query := `SELECT id, workspace_id, agent_id, policy_id, name, status, budget_cap_usd, spent_usd, metadata, error_message, started_at, ended_at, created_at, updated_at FROM runs WHERE 1=1`
+func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.RunFilter, page store.Page) (store.PageResult[*runtimemodel.RunRecord], error) {
+	query := `SELECT id, workspace_id, agent_id, policy_id, name, status, budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message, started_at, ended_at, created_at, updated_at FROM runs WHERE 1=1`
 	var args []any
 	n := 1
 
@@ -406,15 +400,16 @@ func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.Ru
 		args = append(args, toTime(*filter.ToMs))
 		n++
 	}
-	query += ` ORDER BY started_at DESC`
-	if filter.Limit > 0 {
-		query += fmt.Sprintf(` LIMIT $%d`, n)
-		args = append(args, filter.Limit)
+	limit := page.Limit
+	if limit <= 0 {
+		limit = 100
 	}
+	query += fmt.Sprintf(` ORDER BY started_at DESC LIMIT $%d`, n)
+	args = append(args, limit)
 
 	rows, err := p.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return store.PageResult[*runtimemodel.RunRecord]{}, err
 	}
 	defer rows.Close()
 
@@ -424,16 +419,16 @@ func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.Ru
 		var metaJSON []byte
 		var startedAt, createdAt, updatedAt time.Time
 		var endedAt *time.Time
-		var budgetDollars *float64
-		var spentDollars float64
-		if err := rows.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.PolicyID, &r.Name, &r.Status, &budgetDollars, &spentDollars,
+		var budgetAmount *int64
+		var spentAmount int64
+		if err := rows.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.PolicyID, &r.Name, &r.Status, &budgetAmount, &spentAmount,
 			&metaJSON, &r.ErrorMessage, &startedAt, &endedAt, &createdAt, &updatedAt); err != nil {
-			return nil, err
+			return store.PageResult[*runtimemodel.RunRecord]{}, err
 		}
-		if budgetDollars != nil {
-			r.BudgetCap = money.FromDollars(*budgetDollars)
+		if budgetAmount != nil {
+			r.BudgetCap = amountFromDB(*budgetAmount)
 		}
-		r.Spent = money.FromDollars(spentDollars)
+		r.Spent = amountFromDB(spentAmount)
 		if err := json.Unmarshal(metaJSON, &r.Metadata); err != nil {
 			r.Metadata = make(map[string]any)
 		}
@@ -447,7 +442,7 @@ func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.Ru
 		r.EnvID = "default"
 		runs = append(runs, &r)
 	}
-	return runs, rows.Err()
+	return store.PageResult[*runtimemodel.RunRecord]{Items: runs}, rows.Err()
 }
 
 // ── ActionStore ───────────────────────────────────────────────────────────────
@@ -488,17 +483,17 @@ func (p *PostgresAppStore) GetAction(ctx context.Context, id string) (*runtimemo
 		a.Metadata = make(map[string]any)
 	}
 	a.CreatedAt = createdAt.UnixMilli()
-	a.Source = runtimemodel.ActionSourceIntercepted
-	a.Status = runtimemodel.ActionStatusCompleted
+	a.Source = "intercepted"
+	a.Status = "completed"
 	return &a, nil
 }
 
-func (p *PostgresAppStore) ListActionsByRun(ctx context.Context, runID string) ([]*runtimemodel.ActionRecord, error) {
+func (p *PostgresAppStore) ListActionsByRun(ctx context.Context, runID string, page store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
 	rows, err := p.pool.Query(ctx, `
 		SELECT id, run_id, action_type, connector, method, input, metadata, created_at FROM actions WHERE run_id = $1 ORDER BY created_at ASC
 	`, runID)
 	if err != nil {
-		return nil, err
+		return store.PageResult[*runtimemodel.ActionRecord]{}, err
 	}
 	defer rows.Close()
 
@@ -509,7 +504,7 @@ func (p *PostgresAppStore) ListActionsByRun(ctx context.Context, runID string) (
 		var inputStr *string
 		var createdAt time.Time
 		if err := rows.Scan(&a.ID, &a.RunID, &a.ActionType, &a.Connector, &a.Method, &inputStr, &metaJSON, &createdAt); err != nil {
-			return nil, err
+			return store.PageResult[*runtimemodel.ActionRecord]{}, err
 		}
 		if inputStr != nil {
 			b := []byte(*inputStr)
@@ -519,18 +514,25 @@ func (p *PostgresAppStore) ListActionsByRun(ctx context.Context, runID string) (
 			a.Metadata = make(map[string]any)
 		}
 		a.CreatedAt = createdAt.UnixMilli()
-		a.Source = runtimemodel.ActionSourceIntercepted
-		a.Status = runtimemodel.ActionStatusCompleted
+		a.Source = "intercepted"
+		a.Status = "completed"
 		actions = append(actions, &a)
 	}
-	return actions, rows.Err()
+	return store.PageResult[*runtimemodel.ActionRecord]{Items: actions}, rows.Err()
 }
 
 // ── CostStore ─────────────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) GetPriceBook(ctx context.Context) (*runtimemodel.PriceBook, error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT version, provider, match, source, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million
+		SELECT version, provider, match, source, currency,
+		       input_per_million_amount_nanos, output_per_million_amount_nanos,
+		       cache_read_per_million_amount_nanos, cache_write_per_million_amount_nanos,
+		       reasoning_per_million_amount_nanos, audio_input_per_million_amount_nanos,
+		       audio_output_per_million_amount_nanos, image_unit_price_amount_nanos,
+		       per_request_amount_nanos, per_compute_ms_amount_nanos,
+		       per_gb_stored_amount_nanos, per_gb_transferred_amount_nanos,
+		       effective_from, effective_to, revision_note
 		FROM price_book_entries ORDER BY sort_order ASC
 	`)
 	if err != nil {
@@ -542,9 +544,20 @@ func (p *PostgresAppStore) GetPriceBook(ctx context.Context) (*runtimemodel.Pric
 	for rows.Next() {
 		var version string
 		var entry runtimemodel.PriceModel
-		if err := rows.Scan(&version, &entry.Provider, &entry.Match, &entry.Source, &entry.InputPerMillion, &entry.OutputPerMillion, &entry.CacheReadPerMillion, &entry.CacheWritePerMillion); err != nil {
+		var effectiveTo *int64
+		if err := rows.Scan(
+			&version, &entry.Provider, &entry.Match, &entry.Source, &entry.Currency,
+			&entry.InputPerMillion, &entry.OutputPerMillion,
+			&entry.CacheReadPerMillion, &entry.CacheWritePerMillion,
+			&entry.ReasoningPerMillion, &entry.AudioInputPerMillion,
+			&entry.AudioOutputPerMillion, &entry.ImageUnitPrice,
+			&entry.PerRequest, &entry.PerComputeMs,
+			&entry.PerGBStored, &entry.PerGBTransferred,
+			&entry.EffectiveFrom, &effectiveTo, &entry.RevisionNote,
+		); err != nil {
 			return nil, err
 		}
+		entry.EffectiveTo = effectiveTo
 		if book.Version == "" {
 			book.Version = version
 		}
@@ -571,10 +584,125 @@ func (p *PostgresAppStore) SavePriceBook(ctx context.Context, book *runtimemodel
 	}
 	for i, entry := range book.Entries {
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO price_book_entries (id, version, provider, match, source, input_per_million, output_per_million, cache_read_per_million, cache_write_per_million, sort_order)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`, uuid.NewString(), book.Version, entry.Provider, entry.Match, entry.Source,
-			entry.InputPerMillion, entry.OutputPerMillion, entry.CacheReadPerMillion, entry.CacheWritePerMillion, i); err != nil {
+			INSERT INTO price_book_entries (
+				id, version, provider, match, source, currency,
+				input_per_million_amount_nanos, output_per_million_amount_nanos,
+				cache_read_per_million_amount_nanos, cache_write_per_million_amount_nanos,
+				reasoning_per_million_amount_nanos, audio_input_per_million_amount_nanos,
+				audio_output_per_million_amount_nanos, image_unit_price_amount_nanos,
+				per_request_amount_nanos, per_compute_ms_amount_nanos,
+				per_gb_stored_amount_nanos, per_gb_transferred_amount_nanos,
+				effective_from, effective_to, revision_note, sort_order
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+		`, uuid.NewString(), book.Version, entry.Provider, entry.Match, entry.Source, entry.Currency,
+			amountToDB(entry.InputPerMillion), amountToDB(entry.OutputPerMillion),
+			amountToDB(entry.CacheReadPerMillion), amountToDB(entry.CacheWritePerMillion),
+			amountToDB(entry.ReasoningPerMillion), amountToDB(entry.AudioInputPerMillion),
+			amountToDB(entry.AudioOutputPerMillion), amountToDB(entry.ImageUnitPrice),
+			amountToDB(entry.PerRequest), amountToDB(entry.PerComputeMs),
+			amountToDB(entry.PerGBStored), amountToDB(entry.PerGBTransferred),
+			entry.EffectiveFrom, entry.EffectiveTo, entry.RevisionNote, i); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (p *PostgresAppStore) ListFXRates(ctx context.Context) ([]runtimemodel.FXRateRecord, error) {
+	rows, err := p.pool.Query(ctx, `SELECT base_currency, quote_currency, rate, provider, as_of_date::text, fetched_at FROM fx_rates ORDER BY base_currency, quote_currency`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []runtimemodel.FXRateRecord
+	for rows.Next() {
+		var item runtimemodel.FXRateRecord
+		var fetchedAt time.Time
+		if err := rows.Scan(&item.BaseCurrency, &item.QuoteCurrency, &item.Rate, &item.Provider, &item.AsOfDate, &fetchedAt); err != nil {
+			return nil, err
+		}
+		item.FetchedAt = fetchedAt.UnixMilli()
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (p *PostgresAppStore) GetFXRate(ctx context.Context, base, quote money.CurrencyCode) (*runtimemodel.FXRateRecord, error) {
+	var item runtimemodel.FXRateRecord
+	var fetchedAt time.Time
+	err := p.pool.QueryRow(ctx, `SELECT base_currency, quote_currency, rate, provider, as_of_date::text, fetched_at FROM fx_rates WHERE base_currency = $1 AND quote_currency = $2`, string(base), string(quote)).
+		Scan(&item.BaseCurrency, &item.QuoteCurrency, &item.Rate, &item.Provider, &item.AsOfDate, &fetchedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	item.FetchedAt = fetchedAt.UnixMilli()
+	return &item, nil
+}
+
+func (p *PostgresAppStore) UpsertFXRates(ctx context.Context, rates []runtimemodel.FXRateRecord) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, rate := range rates {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO fx_rates (base_currency, quote_currency, rate, provider, as_of_date, fetched_at)
+			VALUES ($1, $2, $3, $4, $5::date, $6)
+			ON CONFLICT (base_currency, quote_currency) DO UPDATE SET
+				rate = EXCLUDED.rate,
+				provider = EXCLUDED.provider,
+				as_of_date = EXCLUDED.as_of_date,
+				fetched_at = EXCLUDED.fetched_at
+		`, string(rate.BaseCurrency), string(rate.QuoteCurrency), rate.Rate, rate.Provider, rate.AsOfDate, toTime(rate.FetchedAt)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (p *PostgresAppStore) ListFXCurrencies(ctx context.Context) ([]runtimemodel.FXCurrencyRecord, error) {
+	rows, err := p.pool.Query(ctx, `SELECT code, name, symbol, fetched_at FROM fx_currencies ORDER BY code`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []runtimemodel.FXCurrencyRecord
+	for rows.Next() {
+		var item runtimemodel.FXCurrencyRecord
+		var fetchedAt time.Time
+		if err := rows.Scan(&item.Code, &item.Name, &item.Symbol, &fetchedAt); err != nil {
+			return nil, err
+		}
+		item.FetchedAt = fetchedAt.UnixMilli()
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (p *PostgresAppStore) UpsertFXCurrencies(ctx context.Context, currencies []runtimemodel.FXCurrencyRecord) error {
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, item := range currencies {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO fx_currencies (code, name, symbol, fetched_at)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (code) DO UPDATE SET
+				name = EXCLUDED.name,
+				symbol = EXCLUDED.symbol,
+				fetched_at = EXCLUDED.fetched_at
+		`, string(item.Code), item.Name, item.Symbol, toTime(item.FetchedAt)); err != nil {
 			return err
 		}
 	}
@@ -585,39 +713,39 @@ func (p *PostgresAppStore) InsertBudgetEntry(ctx context.Context, entry *runtime
 	metaJSON, _ := json.Marshal(entry.Metadata)
 	snapshotJSON, _ := json.Marshal(entry.PriceSnapshot)
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO budget_ledger (workspace_id, agent_id, run_id, action_id, span_id, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, price_version, price_snapshot, metadata, created_at)
+		INSERT INTO budget_ledger (workspace_id, agent_id, run_id, action_id, span_id, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_amount_nanos, price_version, price_snapshot, metadata, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`, entry.ProjectID, entry.AgentID, nullIfEmpty(entry.RunID), entry.ActionID, entry.SpanID,
 		entry.Connector, entry.Model, entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheWriteTokens,
-		entry.Cost.Dollars(), nullIfEmpty(entry.PriceVersion), snapshotJSON, metaJSON, toTime(entry.CreatedAt))
+		amountToDB(entry.Cost), nullIfEmpty(entry.PriceVersion), snapshotJSON, metaJSON, toTime(entry.CreatedAt))
 	return err
 }
 
 func (p *PostgresAppStore) AddRunSpend(ctx context.Context, runID string, cost money.Amount) error {
-	_, err := p.pool.Exec(ctx, `UPDATE runs SET spent_usd = spent_usd + $1 WHERE id = $2`, cost.Dollars(), runID)
+	_, err := p.pool.Exec(ctx, `UPDATE runs SET spent_amount_nanos = spent_amount_nanos + $1 WHERE id = $2`, amountToDB(cost), runID)
 	return err
 }
 
 func (p *PostgresAppStore) SumAgentSpend(ctx context.Context, agentID string, sinceMs int64) (money.Amount, error) {
-	var total float64
+	var total int64
 	err := p.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(cost_usd), 0) FROM budget_ledger WHERE agent_id = $1 AND created_at >= $2
+		SELECT COALESCE(SUM(cost_amount_nanos), 0) FROM budget_ledger WHERE agent_id = $1 AND created_at >= $2
 	`, agentID, toTime(sinceMs)).Scan(&total)
-	return money.FromDollars(total), err
+	return amountFromDB(total), err
 }
 
 func (p *PostgresAppStore) GetSpendReport(ctx context.Context, filter *runtimemodel.SpendFilter) (*runtimemodel.SpendReport, error) {
 	where, args, _ := pgSpendWhere(filter, 1)
 
-	var totalDollars float64
+	var totalAmount int64
 	var maxTime, minTime *time.Time
-	err := p.pool.QueryRow(ctx, `SELECT COALESCE(SUM(cost_usd), 0), MAX(created_at), MIN(created_at) FROM budget_ledger `+where, args...).Scan(&totalDollars, &maxTime, &minTime)
+	err := p.pool.QueryRow(ctx, `SELECT COALESCE(SUM(cost_amount_nanos), 0), MAX(created_at), MIN(created_at) FROM budget_ledger `+where, args...).Scan(&totalAmount, &maxTime, &minTime)
 	if err != nil {
 		return nil, err
 	}
 
 	report := &runtimemodel.SpendReport{
-		Total:       money.FromDollars(totalDollars),
+		Total:       amountFromDB(totalAmount),
 		ByProject:   make(map[string]money.Amount),
 		ByEnv:       make(map[string]money.Amount),
 		ByPolicy:    make(map[string]money.Amount),
@@ -641,16 +769,16 @@ func (p *PostgresAppStore) GetSpendReport(ctx context.Context, filter *runtimemo
 }
 
 func (p *PostgresAppStore) pgAggregateDim(ctx context.Context, dest map[string]money.Amount, dim, where string, args []any) {
-	rows, err := p.pool.Query(ctx, `SELECT `+dim+`, SUM(cost_usd) FROM budget_ledger `+where+` GROUP BY `+dim, args...)
+	rows, err := p.pool.Query(ctx, `SELECT `+dim+`, SUM(cost_amount_nanos) FROM budget_ledger `+where+` GROUP BY `+dim, args...)
 	if err != nil {
 		return
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id string
-		var cost float64
+		var cost int64
 		if err := rows.Scan(&id, &cost); err == nil {
-			dest[id] = money.FromDollars(cost)
+			dest[id] = amountFromDB(cost)
 		}
 	}
 }
@@ -658,23 +786,28 @@ func (p *PostgresAppStore) pgAggregateDim(ctx context.Context, dest map[string]m
 // ── TokenStore ────────────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) InsertAgentToken(ctx context.Context, token *control.AgentToken) error {
-	var budgetDollars *float64
-	if token.BudgetCap != nil {
-		d := token.BudgetCap.Dollars()
-		budgetDollars = &d
-	}
+	budgetAmount := ptrAmountToDB(token.BudgetCap)
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO agent_tokens (id, agent_id, connectors, methods, budget_cap_usd, expires_at, created_at)
+		INSERT INTO agent_tokens (id, agent_id, connectors, methods, budget_cap_amount_nanos, expires_at, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, token.ID, token.AgentID, token.Connectors, token.Methods, budgetDollars, toTime(token.ExpiresAt), toTime(token.CreatedAt))
+	`, token.ID, token.AgentID, token.Connectors, token.Methods, budgetAmount, toTime(token.ExpiresAt), toTime(token.CreatedAt))
 	return err
 }
 
 func (p *PostgresAppStore) GetTokenByHash(_ context.Context, _ string) (*control.AgentToken, error) {
 	return nil, nil
 }
+func (p *PostgresAppStore) GetToken(_ context.Context, _ string) (*control.AgentToken, error) {
+	return nil, nil
+}
+func (p *PostgresAppStore) ListTokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.AgentToken], error) {
+	return store.PageResult[*control.AgentToken]{}, nil
+}
+func (p *PostgresAppStore) UpdatePolicy(_ context.Context, _ string, _ *control.PolicyUpdate) error {
+	return nil
+}
 func (p *PostgresAppStore) RevokeToken(_ context.Context, _, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchToken(_ context.Context, _ string) error         { return nil }
+func (p *PostgresAppStore) TouchToken(_ context.Context, _ string) error        { return nil }
 
 func (p *PostgresAppStore) IsTokenRevoked(ctx context.Context, tokenID string) (bool, error) {
 	var count int
@@ -726,8 +859,8 @@ func (p *PostgresAppStore) DeleteCredential(ctx context.Context, id string) erro
 	return err
 }
 
-func (p *PostgresAppStore) ListCredentials(_ context.Context, _ string) ([]*control.ConnectorCredential, error) {
-	return nil, nil
+func (p *PostgresAppStore) ListCredentials(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.ConnectorCredential], error) {
+	return store.PageResult[*control.ConnectorCredential]{}, nil
 }
 
 func (p *PostgresAppStore) ResolveCredential(ctx context.Context, filter *control.CredentialFilter) (*control.ConnectorCredential, error) {
@@ -755,7 +888,7 @@ func (p *PostgresAppStore) RotateCredential(_ context.Context, _ string, _ []byt
 	return nil
 }
 func (p *PostgresAppStore) RevokeCredential(_ context.Context, _, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchCredential(_ context.Context, _ string) error         { return nil }
+func (p *PostgresAppStore) TouchCredential(_ context.Context, _ string) error        { return nil }
 
 // ── Transaction ───────────────────────────────────────────────────────────────
 
@@ -802,7 +935,7 @@ func pgSpendWhere(f *runtimemodel.SpendFilter, startN int) (string, []any, int) 
 	return where, args, n
 }
 
-func toTime(ms int64) time.Time       { return time.UnixMilli(ms) }
+func toTime(ms int64) time.Time { return time.UnixMilli(ms) }
 func ptrToTime(ms *int64) *time.Time {
 	if ms == nil {
 		return nil
@@ -815,6 +948,26 @@ func nullIfEmpty(value string) any {
 		return nil
 	}
 	return value
+}
+
+func amountToDB(v money.Amount) int64 { return v.Nano() }
+
+func ptrAmountToDB(v *money.Amount) *int64 {
+	if v == nil {
+		return nil
+	}
+	n := v.Nano()
+	return &n
+}
+
+func amountFromDB(v int64) money.Amount { return money.Amount(v) }
+
+func ptrAmountFromDB(v *int64) *money.Amount {
+	if v == nil {
+		return nil
+	}
+	a := amountFromDB(*v)
+	return &a
 }
 
 var _ store.AppStore = (*PostgresAppStore)(nil)

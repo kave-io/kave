@@ -2,11 +2,11 @@ package control
 
 // Credential source type constants — which tier of the four-tier model.
 const (
-	CredSourceEncrypted   = "encrypted"    // Tier 2: encrypted-at-rest in Kave
-	CredSourceVaultRef    = "vault_ref"    // Tier 1: external secret manager (Vault, AWS Secrets, etc.)
-	CredSourceOAuth       = "oauth"        // Tier 3: ephemeral via OAuth refresh token
-	CredSourceSTS         = "sts"          // Tier 3: ephemeral via cloud STS/AssumeRole
-	CredSourcePassthrough = "passthrough"  // Tier 4: no stored secret; caller supplies per-request
+	CredSourceEncrypted   = "encrypted"   // Tier 2: encrypted-at-rest in Kave
+	CredSourceVaultRef    = "vault_ref"   // Tier 1: external secret manager (Vault, AWS Secrets, etc.)
+	CredSourceOAuth       = "oauth"       // Tier 3: ephemeral via OAuth refresh token
+	CredSourceSTS         = "sts"         // Tier 3: ephemeral via cloud STS/AssumeRole
+	CredSourcePassthrough = "passthrough" // Tier 4: no stored secret; caller supplies per-request
 )
 
 // Credential status constants.
@@ -21,9 +21,9 @@ const (
 // Kave uses this to call external systems on behalf of an agent.
 // Supports all four tiers: external reference, encrypted local, ephemeral, pass-through.
 type ConnectorCredential struct {
-	ID          string
-	ProjectID   string
-	EnvID       string
+	ID        string
+	ProjectID string
+	EnvID     string
 
 	// What this credential covers
 	ConnectorType string // "openai" | "github" | "postgres" | "stripe" | ...
@@ -44,13 +44,13 @@ type ConnectorCredential struct {
 	SecretVersion string // version at the source; may be empty
 
 	// Lifecycle
-	Status          string  // CredStatus* constants
-	Version         int     // incremented on rotation
-	ExpiresAt       *int64  // UnixMilli; nil = no expiry
-	RotatedAt       *int64  // UnixMilli; nil = never rotated
-	RotatedBy       string  // user ID or "system"
-	LastUsedAt      *int64  // UnixMilli
-	LastValidatedAt *int64  // UnixMilli
+	Status          string // CredStatus* constants
+	Version         int    // incremented on rotation
+	ExpiresAt       *int64 // UnixMilli; nil = no expiry
+	RotatedAt       *int64 // UnixMilli; nil = never rotated
+	RotatedBy       string // user ID or "system"
+	LastUsedAt      *int64 // UnixMilli
+	LastValidatedAt *int64 // UnixMilli
 
 	// Provenance
 	CreatedBy string

@@ -64,8 +64,8 @@ func TestActionToRecord_SourceIsIntercepted(t *testing.T) {
 
 	rec := ActionToRecord(action)
 
-	if rec.Source != runtimemodel.ActionSourceIntercepted {
-		t.Errorf("Source: got %q, want %q", rec.Source, runtimemodel.ActionSourceIntercepted)
+	if rec.Source != string(runtime.ActionSourceIntercepted) {
+		t.Errorf("Source: got %q, want %q", rec.Source, string(runtime.ActionSourceIntercepted))
 	}
 }
 
@@ -122,8 +122,8 @@ func TestObservedActionToRecord_SourceIsObserved(t *testing.T) {
 
 	rec := ObservedActionToRecord(action)
 
-	if rec.Source != runtimemodel.ActionSourceObserved {
-		t.Errorf("Source: got %q, want %q", rec.Source, runtimemodel.ActionSourceObserved)
+	if rec.Source != string(runtime.ActionSourceObserved) {
+		t.Errorf("Source: got %q, want %q", rec.Source, string(runtime.ActionSourceObserved))
 	}
 }
 
@@ -188,13 +188,13 @@ func TestRecordToAction_NoBlockedStatusFromObserved(t *testing.T) {
 	// RecordToAction doesn't enforce that observed actions can't have blocked status.
 	// The type system enforces this at the runtime.ObservedAction level, not in the mapper.
 	rec := &runtimemodel.ActionRecord{
-		ID:        "act-1",
-		RunID:     "run-1",
+		ID:         "act-1",
+		RunID:      "run-1",
 		ActionType: "llm",
 		Connector:  "openai",
 		Method:     "chat.completions",
-		Status:    "blocked", // Technically invalid for observed, but mapper allows it
-		Source:    runtimemodel.ActionSourceObserved,
+		Status:     "blocked", // Technically invalid for observed, but mapper allows it
+		Source:     string(runtime.ActionSourceObserved),
 	}
 
 	action := RecordToAction(rec)
@@ -208,5 +208,5 @@ func TestRecordToAction_NoBlockedStatusFromObserved(t *testing.T) {
 
 // --- helpers ---
 
-func strPtr(s string) *string    { return &s }
-func bytePtr(b []byte) *[]byte   { return &b }
+func strPtr(s string) *string  { return &s }
+func bytePtr(b []byte) *[]byte { return &b }

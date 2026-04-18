@@ -38,7 +38,9 @@ func (m *mockAppStore) ListAgents(_ context.Context, _ string) ([]*controlmodel.
 }
 
 // PolicyStore
-func (m *mockAppStore) CreatePolicy(_ context.Context, _ *controlmodel.PolicyRecord) error { return nil }
+func (m *mockAppStore) CreatePolicy(_ context.Context, _ *controlmodel.PolicyRecord) error {
+	return nil
+}
 func (m *mockAppStore) GetPolicy(_ context.Context, _ string) (*controlmodel.PolicyRecord, error) {
 	return nil, nil
 }
@@ -65,7 +67,9 @@ func (m *mockAppStore) ListRuns(_ context.Context, _ *runtimemodel.RunFilter) ([
 }
 
 // ActionStore
-func (m *mockAppStore) CreateAction(_ context.Context, _ *runtimemodel.ActionRecord) error { return nil }
+func (m *mockAppStore) CreateAction(_ context.Context, _ *runtimemodel.ActionRecord) error {
+	return nil
+}
 func (m *mockAppStore) GetAction(_ context.Context, _ string) (*runtimemodel.ActionRecord, error) {
 	return nil, nil
 }
@@ -74,8 +78,25 @@ func (m *mockAppStore) ListActionsByRun(_ context.Context, _ string) ([]*runtime
 }
 
 // CostStore
-func (m *mockAppStore) GetPriceBook(_ context.Context) (*runtimemodel.PriceBook, error) { return nil, nil }
+func (m *mockAppStore) GetPriceBook(_ context.Context) (*runtimemodel.PriceBook, error) {
+	return nil, nil
+}
 func (m *mockAppStore) SavePriceBook(_ context.Context, _ *runtimemodel.PriceBook) error { return nil }
+func (m *mockAppStore) ListFXRates(_ context.Context) ([]runtimemodel.FXRateRecord, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetFXRate(_ context.Context, _, _ money.CurrencyCode) (*runtimemodel.FXRateRecord, error) {
+	return nil, nil
+}
+func (m *mockAppStore) UpsertFXRates(_ context.Context, _ []runtimemodel.FXRateRecord) error {
+	return nil
+}
+func (m *mockAppStore) ListFXCurrencies(_ context.Context) ([]runtimemodel.FXCurrencyRecord, error) {
+	return nil, nil
+}
+func (m *mockAppStore) UpsertFXCurrencies(_ context.Context, _ []runtimemodel.FXCurrencyRecord) error {
+	return nil
+}
 func (m *mockAppStore) InsertBudgetEntry(_ context.Context, _ *runtimemodel.BudgetEntry) error {
 	return nil
 }
@@ -88,12 +109,14 @@ func (m *mockAppStore) GetSpendReport(_ context.Context, _ *runtimemodel.SpendFi
 }
 
 // TokenStore
-func (m *mockAppStore) InsertAgentToken(_ context.Context, _ *controlmodel.AgentToken) error { return nil }
+func (m *mockAppStore) InsertAgentToken(_ context.Context, _ *controlmodel.AgentToken) error {
+	return nil
+}
 func (m *mockAppStore) GetTokenByHash(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
 	return nil, nil
 }
 func (m *mockAppStore) RevokeToken(_ context.Context, _, _, _ string) error      { return nil }
-func (m *mockAppStore) TouchToken(_ context.Context, _ string) error              { return nil }
+func (m *mockAppStore) TouchToken(_ context.Context, _ string) error             { return nil }
 func (m *mockAppStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) { return false, nil }
 func (m *mockAppStore) InsertRevokedToken(_ context.Context, _ string) error     { return nil }
 

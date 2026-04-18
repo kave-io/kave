@@ -13,7 +13,7 @@ CREATE TABLE agent_tokens (
     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
     connectors TEXT[] DEFAULT ARRAY['*'],
     methods TEXT[] DEFAULT ARRAY['*'],
-    budget_cap_usd NUMERIC(15, 2),
+    budget_cap_amount_nanos BIGINT,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

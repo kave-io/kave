@@ -2,17 +2,16 @@ package control
 
 import "github.com/kave-io/kave/core/pkg/money"
 
-// Policy mode constants.
+// PolicyStatus is the archival lifecycle of a PolicyRecord.
+type PolicyStatus string
+
 const (
-	PolicyModeEnforce = "enforce" // violations block the action
-	PolicyModeShadow  = "shadow"  // violations are recorded but not blocked
+	PolicyStatusActive   PolicyStatus = "active"
+	PolicyStatusArchived PolicyStatus = "archived"
 )
 
-// Policy status constants.
-const (
-	PolicyStatusActive   = "active"
-	PolicyStatusArchived = "archived"
-)
+// Policy mode constants live in core/runtime/policy (typed policy.Mode).
+// Model fields remain plain strings.
 
 // PolicyRecord defines what an agent is allowed to do.
 type PolicyRecord struct {
@@ -27,8 +26,8 @@ type PolicyRecord struct {
 
 	// Budget and cost control
 	BudgetCap      money.Amount // 0 = no cap
-	BudgetPeriod   string        // "run" | "daily" | "monthly"; default "run"
-	BudgetBehavior string        // "block" | "warn"; default "block"
+	BudgetPeriod   string       // "run" | "daily" | "monthly"; default "run"
+	BudgetBehavior string       // "block" | "warn"; default "block"
 
 	// Trace capture and retention
 	TraceInput    bool // capture inputs; default true
@@ -39,10 +38,29 @@ type PolicyRecord struct {
 	Config map[string]any
 
 	Version   int    // incremented on every update; used for optimistic concurrency
-	Mode      string // PolicyModeEnforce | PolicyModeShadow
-	Status    string // PolicyStatusActive | PolicyStatusArchived
+	Mode      string // see policy.Mode for valid values
+	Status    string // see PolicyStatus for valid values
 	CreatedBy string // user ID or "system"
 	UpdatedBy string // user ID or "system"
 	CreatedAt int64  // UnixMilli
 	UpdatedAt int64  // UnixMilli
+}
+
+// PolicyUpdate holds partial update fields for a policy. Nil/zero fields are not updated.
+type PolicyUpdate struct {
+	Description       *string
+	AllowedTypes      []string
+	AllowedConnectors []string
+	AllowedMethods    []string
+	BudgetCap         *money.Amount // nil = no change; use ClearBudgetCap to remove
+	ClearBudgetCap    bool
+	BudgetPeriod      *string
+	BudgetBehavior    *string
+	TraceInput        *bool
+	TraceOutput       *bool
+	RetentionDays     *int
+	Config            map[string]any
+	Mode              *string
+	Status            *string
+	UpdatedBy         *string
 }

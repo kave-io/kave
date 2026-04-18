@@ -39,11 +39,7 @@ func (p *PostgresSpanStore) Migrate(ctx context.Context) error {
 
 // OpenSpan inserts a new span.
 func (p *PostgresSpanStore) OpenSpan(ctx context.Context, span *runtimemodel.SpanRow) error {
-	var costUSD *float64
-	if span.Cost != nil {
-		v := span.Cost.Dollars()
-		costUSD = &v
-	}
+	costAmount := ptrAmountToDB(span.Cost)
 	var snapshotJSON []byte
 	if span.PriceSnapshot != nil {
 		snapshotJSON, _ = json.Marshal(span.PriceSnapshot)
@@ -56,7 +52,7 @@ func (p *PostgresSpanStore) OpenSpan(ctx context.Context, span *runtimemodel.Spa
 	_, err := p.pool.Exec(ctx, `
 		INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
 		                   input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		                   model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		                   model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		                   reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		                   compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
@@ -65,7 +61,7 @@ func (p *PostgresSpanStore) OpenSpan(ctx context.Context, span *runtimemodel.Spa
 		pgTime(span.StartedAt), ptrPgTime(span.EndedAt), span.DurationMs,
 		derefBytesP(span.Input), derefBytesP(span.Output), span.Error,
 		span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens,
-		span.Model, costUSD, span.PriceVersion, snapshotJSON, derefBytesP(span.Attrs),
+		span.Model, costAmount, span.PriceVersion, snapshotJSON, derefBytesP(span.Attrs),
 		time.Now(),
 		span.ReasoningTokens, span.AudioInputTokens, span.AudioOutputTokens, span.ImageUnits, span.RequestCount,
 		span.ComputeMs, span.StorageBytes, span.BandwidthBytes,
@@ -76,11 +72,7 @@ func (p *PostgresSpanStore) OpenSpan(ctx context.Context, span *runtimemodel.Spa
 
 // CloseSpan updates an existing span with its final fields.
 func (p *PostgresSpanStore) CloseSpan(ctx context.Context, spanID string, end *runtimemodel.SpanEnd) error {
-	var costUSD *float64
-	if end.Cost != nil {
-		v := end.Cost.Dollars()
-		costUSD = &v
-	}
+	costAmount := ptrAmountToDB(end.Cost)
 	var snapshotJSON []byte
 	if end.PriceSnapshot != nil {
 		snapshotJSON, _ = json.Marshal(end.PriceSnapshot)
@@ -117,7 +109,7 @@ func (p *PostgresSpanStore) CloseSpan(ctx context.Context, spanID string, end *r
 			storage_bytes      = COALESCE($17, storage_bytes),
 			bandwidth_bytes    = COALESCE($18, bandwidth_bytes),
 			model              = COALESCE($19, model),
-			cost_usd           = COALESCE($20, cost_usd),
+			cost_amount_nanos  = COALESCE($20, cost_amount_nanos),
 			price_version      = COALESCE($21, price_version),
 			price_snapshot     = COALESCE($22, price_snapshot),
 			trace_id           = COALESCE($23, trace_id),
@@ -130,7 +122,7 @@ func (p *PostgresSpanStore) CloseSpan(ctx context.Context, spanID string, end *r
 		end.InputTokens, end.OutputTokens, end.CacheReadTokens, end.CacheWriteTokens,
 		end.ReasoningTokens, end.AudioInputTokens, end.AudioOutputTokens, end.ImageUnits, end.RequestCount,
 		end.ComputeMs, end.StorageBytes, end.BandwidthBytes,
-		end.Model, costUSD, end.PriceVersion, snapshotJSON,
+		end.Model, costAmount, end.PriceVersion, snapshotJSON,
 		traceID, rootSpanID, validationMeta,
 	)
 	return err
@@ -140,39 +132,39 @@ func (p *PostgresSpanStore) CloseSpan(ctx context.Context, spanID string, end *r
 func (p *PostgresSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimemodel.SpanRow, error) {
 	row := &runtimemodel.SpanRow{}
 	var (
-		startedAt, createdAt   time.Time
-		endedAt                *time.Time
-		model                  *string
-		costUSD                *float64
-		priceVersion           *string
-		snapshotJSON           []byte
-		validationMeta         []byte
-		input, output, attrs   []byte
-		inputTokens            *int32
-		outputTokens           *int32
-		cacheReadTokens        *int32
-		cacheWriteTokens       *int32
-		reasoningTokens        *int32
-		audioInputTokens       *int32
-		audioOutputTokens      *int32
-		imageUnits             *int32
-		requestCount           *int32
-		computeMs              *int64
-		storageBytes           *int64
-		bandwidthBytes         *int64
+		startedAt, createdAt time.Time
+		endedAt              *time.Time
+		model                *string
+		costAmount           *int64
+		priceVersion         *string
+		snapshotJSON         []byte
+		validationMeta       []byte
+		input, output, attrs []byte
+		inputTokens          *int32
+		outputTokens         *int32
+		cacheReadTokens      *int32
+		cacheWriteTokens     *int32
+		reasoningTokens      *int32
+		audioInputTokens     *int32
+		audioOutputTokens    *int32
+		imageUnits           *int32
+		requestCount         *int32
+		computeMs            *int64
+		storageBytes         *int64
+		bandwidthBytes       *int64
 	)
 
 	err := p.pool.QueryRow(ctx, `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		       model, cost_usd, price_version, price_snapshot, attrs, created_at,
+		       model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		       reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		       compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta
 		FROM spans WHERE id = $1
 	`, spanID).Scan(
 		&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &startedAt, &endedAt, &row.DurationMs,
 		&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
-		&model, &costUSD, &priceVersion, &snapshotJSON, &attrs, &createdAt,
+		&model, &costAmount, &priceVersion, &snapshotJSON, &attrs, &createdAt,
 		&reasoningTokens, &audioInputTokens, &audioOutputTokens, &imageUnits, &requestCount,
 		&computeMs, &storageBytes, &bandwidthBytes, &row.TraceID, &row.RootSpanID, &validationMeta,
 	)
@@ -200,10 +192,7 @@ func (p *PostgresSpanStore) GetSpan(ctx context.Context, spanID string) (*runtim
 	}
 	row.Model = model
 	row.PriceVersion = priceVersion
-	if costUSD != nil {
-		amt := money.FromDollars(*costUSD)
-		row.Cost = &amt
-	}
+	row.Cost = ptrAmountFromDB(costAmount)
 	if len(snapshotJSON) > 0 {
 		var ps runtimemodel.PriceSnapshot
 		_ = json.Unmarshal(snapshotJSON, &ps)
@@ -229,16 +218,21 @@ func (p *PostgresSpanStore) GetSpan(ctx context.Context, spanID string) (*runtim
 }
 
 // QuerySpans retrieves spans matching a filter.
-func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter) ([]*runtimemodel.SpanRow, error) {
+func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter, page store.Page) (store.PageResult[*runtimemodel.SpanRow], error) {
 	query := `
 		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-		       model, cost_usd, attrs, created_at
+		       model, cost_amount_nanos, attrs, created_at
 		FROM spans WHERE 1=1
 	`
 	var args []any
 	argNum := 1
 
+	if filter.ID != "" {
+		query += fmt.Sprintf(` AND id = $%d`, argNum)
+		args = append(args, filter.ID)
+		argNum++
+	}
 	if filter.RunID != "" {
 		query += fmt.Sprintf(` AND run_id = $%d`, argNum)
 		args = append(args, filter.RunID)
@@ -267,15 +261,16 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 		}
 	}
 
-	query += ` ORDER BY started_at DESC`
-	if filter.Limit > 0 {
-		query += fmt.Sprintf(` LIMIT $%d`, argNum)
-		args = append(args, filter.Limit)
+	limit := page.Limit
+	if limit <= 0 {
+		limit = 100
 	}
+	query += fmt.Sprintf(` ORDER BY started_at DESC LIMIT $%d`, argNum)
+	args = append(args, limit)
 
 	rows, err := p.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return store.PageResult[*runtimemodel.SpanRow]{}, err
 	}
 	defer rows.Close()
 
@@ -286,7 +281,7 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 			startedAt, createdAt time.Time
 			endedAt              *time.Time
 			model                *string
-			costUSD              *float64
+			costAmount           *int64
 			input, output, attrs []byte
 			inputTokens          *int32
 			outputTokens         *int32
@@ -296,9 +291,9 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 		if err := rows.Scan(
 			&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &startedAt, &endedAt, &row.DurationMs,
 			&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
-			&model, &costUSD, &attrs, &createdAt,
+			&model, &costAmount, &attrs, &createdAt,
 		); err != nil {
-			return nil, err
+			return store.PageResult[*runtimemodel.SpanRow]{}, err
 		}
 		row.StartedAt = startedAt.UnixMilli()
 		row.CreatedAt = createdAt.UnixMilli()
@@ -316,17 +311,14 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 			row.Attrs = &attrs
 		}
 		row.Model = model
-		if costUSD != nil {
-			amt := money.FromDollars(*costUSD)
-			row.Cost = &amt
-		}
+		row.Cost = ptrAmountFromDB(costAmount)
 		setPtrInt32(&row.InputTokens, inputTokens)
 		setPtrInt32(&row.OutputTokens, outputTokens)
 		setPtrInt32(&row.CacheReadTokens, cacheReadTokens)
 		setPtrInt32(&row.CacheWriteTokens, cacheWriteTokens)
 		spans = append(spans, row)
 	}
-	return spans, rows.Err()
+	return store.PageResult[*runtimemodel.SpanRow]{Items: spans}, rows.Err()
 }
 
 // SpendByDimension aggregates cost by the given dimension.
@@ -337,12 +329,17 @@ func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string
 	}
 
 	query := fmt.Sprintf(`
-		SELECT COALESCE(%s, 'unknown'), COALESCE(SUM(cost_usd), 0)
+		SELECT COALESCE(%s, 'unknown'), COALESCE(SUM(cost_amount_nanos), 0)
 		FROM spans WHERE 1=1
 	`, col)
 	var args []any
 	argNum := 1
 
+	if filter.ID != "" {
+		query += fmt.Sprintf(` AND id = $%d`, argNum)
+		args = append(args, filter.ID)
+		argNum++
+	}
 	if filter.RunID != "" {
 		query += fmt.Sprintf(` AND run_id = $%d`, argNum)
 		args = append(args, filter.RunID)
@@ -358,7 +355,7 @@ func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string
 		args = append(args, pgTime(*filter.ToMs))
 		argNum++
 	}
-	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_usd) DESC`, col)
+	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_amount_nanos) DESC`, col)
 
 	rows, err := p.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -369,11 +366,11 @@ func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string
 	result := make(map[string]money.Amount)
 	for rows.Next() {
 		var dimension string
-		var cost float64
+		var cost int64
 		if err := rows.Scan(&dimension, &cost); err != nil {
 			return nil, err
 		}
-		result[dimension] = money.FromDollars(cost)
+		result[dimension] = amountFromDB(cost)
 	}
 	return result, rows.Err()
 }

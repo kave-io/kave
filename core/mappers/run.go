@@ -25,7 +25,7 @@ func RunToRecord(r *runtime.Run, budgetCap money.Amount) *runtimemodel.RunRecord
 		BudgetCap: budgetCap,
 		Spent:     r.Spent,
 
-		TriggerType:   r.TriggerType,
+		TriggerType:   string(r.TriggerType),
 		CorrelationID: r.CorrelationID,
 		SessionID:     r.SessionID,
 
@@ -57,7 +57,7 @@ func RecordToRun(r *runtimemodel.RunRecord) *runtime.Run {
 		EndedAt:       ptrMSToTimingValue(r.EndedAt),
 		Spent:         r.Spent,
 		Error:         r.ErrorMessage,
-		TriggerType:   r.TriggerType,
+		TriggerType:   runtime.TriggerType(r.TriggerType),
 		CorrelationID: r.CorrelationID,
 		SessionID:     r.SessionID,
 		Metadata:      r.Metadata,

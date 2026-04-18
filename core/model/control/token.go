@@ -5,9 +5,9 @@ import "github.com/kave-io/kave/core/pkg/money"
 // AgentToken is an authorization token issued to an agent.
 // Raw token is shown once at creation, then only the hash is stored.
 type AgentToken struct {
-	ID          string
-	AgentID     string
-	ProjectID   string // for index queries
+	ID        string
+	AgentID   string
+	ProjectID string // for index queries
 
 	// UX / identification
 	Name        string // human name; "prod CLI key"

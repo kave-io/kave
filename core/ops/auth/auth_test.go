@@ -20,7 +20,6 @@ func TestAllowAll(t *testing.T) {
 		},
 	}
 	authPolicy := &policy.AuthPolicy{
-		PolicyID:          "p-1",
 		AllowedTypes:      []string{"llm"},
 		AllowedConnectors: []string{"openai"},
 		AllowedMethods:    []string{"chat.completions"},
@@ -35,9 +34,6 @@ func TestAllowAll(t *testing.T) {
 	}
 	if decision.Code != "allow_all" {
 		t.Fatalf("unexpected code: %q", decision.Code)
-	}
-	if decision.PolicyID == nil || *decision.PolicyID != authPolicy.PolicyID {
-		t.Fatalf("unexpected policy id: %v", decision.PolicyID)
 	}
 }
 

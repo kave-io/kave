@@ -16,9 +16,9 @@ func TestRecordToPolicy_UsesAllowedTypesAndBudgetCap(t *testing.T) {
 		AllowedTypes:      []string{"llm"},
 		AllowedConnectors: []string{"openai"},
 		AllowedMethods:    []string{"responses.create"},
-		BudgetCap:         money.FromDollars(12.75),
-		Mode:              controlmodel.PolicyModeEnforce,
-		Status:            controlmodel.PolicyStatusActive,
+		BudgetCap:         money.MustParseDollars("12.75"),
+		Mode:              string(policy.ModeEnforce),
+		Status:            string(controlmodel.PolicyStatusActive),
 	}
 
 	out := RecordToPolicy(rec)
@@ -29,14 +29,14 @@ func TestRecordToPolicy_UsesAllowedTypesAndBudgetCap(t *testing.T) {
 		t.Fatalf("expected allowed types from record, got %+v", out.Auth.AllowedTypes)
 	}
 
-	want := money.FromDollars(12.75)
+	want := money.MustParseDollars("12.75")
 	if out.Cost.BudgetCap == nil || *out.Cost.BudgetCap != want {
 		t.Fatalf("expected budget cap %v, got %v", want, out.Cost.BudgetCap)
 	}
 }
 
 func TestPolicyToRecord_PreservesAllowedTypesAndBudgetCap(t *testing.T) {
-	cap := money.FromDollars(3.5)
+	cap := money.MustParseDollars("3.5")
 	p := &policy.Policy{
 		ID:        "p-2",
 		ProjectID: "proj-2",
@@ -58,7 +58,7 @@ func TestPolicyToRecord_PreservesAllowedTypesAndBudgetCap(t *testing.T) {
 	if len(rec.AllowedTypes) != 1 || rec.AllowedTypes[0] != "api" {
 		t.Fatalf("expected allowed types, got %+v", rec.AllowedTypes)
 	}
-	if rec.BudgetCap != money.FromDollars(3.5) {
-		t.Fatalf("expected budget cap %v, got %v", money.FromDollars(3.5), rec.BudgetCap)
+	if rec.BudgetCap != money.MustParseDollars("3.5") {
+		t.Fatalf("expected budget cap %v, got %v", money.MustParseDollars("3.5"), rec.BudgetCap)
 	}
 }

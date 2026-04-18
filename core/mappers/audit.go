@@ -3,7 +3,7 @@ package mappers
 import (
 	"encoding/json"
 
-	controlmodel "github.com/kave-io/kave/core/model/control"
+	auditmodel "github.com/kave-io/kave/core/model/audit"
 )
 
 // AuditEntryInput is the control-plane input for appending an audit log entry.
@@ -17,14 +17,15 @@ type AuditEntryInput struct {
 	Event        string
 	ResourceType string
 	ResourceID   string
-	Before       any    // serialized as Diff.before; nil for creates
-	After        any    // serialized as Diff.after; nil for deletes
+	Before       any // serialized as DiffBefore; nil for creates
+	After        any // serialized as DiffAfter; nil for deletes
+	Provenance   any // serialized as Provenance; nil when no FX/display provenance applies
 	IP           *string
 	CreatedAt    *int64
 }
 
-// AuditEntryToModel converts app-layer input to a controlmodel.AuditLog entry.
-func AuditEntryToModel(in *AuditEntryInput) *controlmodel.AuditLog {
+// AuditEntryToModel converts app-layer input to an auditmodel.AuditLog entry.
+func AuditEntryToModel(in *AuditEntryInput) *auditmodel.AuditLog {
 	if in == nil {
 		return nil
 	}
@@ -34,9 +35,7 @@ func AuditEntryToModel(in *AuditEntryInput) *controlmodel.AuditLog {
 		now = *in.CreatedAt
 	}
 
-	diff := encodeDiff(in.Before, in.After)
-
-	return &controlmodel.AuditLog{
+	return &auditmodel.AuditLog{
 		ID:           in.ID,
 		OrgID:        in.OrgID,
 		ProjectID:    in.ProjectID,
@@ -46,22 +45,19 @@ func AuditEntryToModel(in *AuditEntryInput) *controlmodel.AuditLog {
 		Event:        in.Event,
 		ResourceType: in.ResourceType,
 		ResourceID:   in.ResourceID,
-		Diff:         diff,
+		DiffBefore:   encodeJSON(in.Before),
+		DiffAfter:    encodeJSON(in.After),
+		Provenance:   encodeJSON(in.Provenance),
 		IP:           in.IP,
 		CreatedAt:    now,
 	}
 }
 
-// encodeDiff serializes before/after into a JSON diff blob.
-func encodeDiff(before, after any) []byte {
-	if before == nil && after == nil {
+func encodeJSON(v any) []byte {
+	if v == nil {
 		return nil
 	}
-	payload := map[string]any{
-		"before": before,
-		"after":  after,
-	}
-	b, err := json.Marshal(payload)
+	b, err := json.Marshal(v)
 	if err != nil {
 		return nil
 	}
