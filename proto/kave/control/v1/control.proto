@@ -4,6 +4,7 @@ package kave.control.v1;
 
 import "google/protobuf/empty.proto";
 import "kave/control/v1/agent.proto";
+import "kave/control/v1/budget.proto";
 import "kave/control/v1/credential.proto";
 import "kave/control/v1/environment.proto";
 import "kave/control/v1/org.proto";
@@ -37,12 +38,16 @@ service ControlPlaneService {
   rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
   rpc UpdateAgent(UpdateAgentRequest) returns (Agent);
   rpc DeleteAgent(DeleteAgentRequest) returns (google.protobuf.Empty);
+  rpc RestoreAgent(RestoreAgentRequest) returns (Agent);
 
   // Policy operations
   rpc CreatePolicy(CreatePolicyRequest) returns (PolicyRecord);
   rpc GetPolicy(GetPolicyRequest) returns (PolicyRecord);
   rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
   rpc UpdatePolicy(UpdatePolicyRequest) returns (PolicyRecord);
+  rpc DeletePolicy(DeletePolicyRequest) returns (google.protobuf.Empty);
+  rpc ExportPolicy(ExportPolicyRequest) returns (PolicyYAML);
+  rpc ValidatePolicy(ValidatePolicyRequest) returns (ValidatePolicyResponse);
 
   // Token operations
   rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse);
@@ -57,6 +62,12 @@ service ControlPlaneService {
   rpc UpdateCredential(UpdateCredentialRequest) returns (ConnectorCredential);
   rpc RotateCredential(RotateCredentialRequest) returns (ConnectorCredential);
   rpc RevokeCredential(RevokeCredentialRequest) returns (google.protobuf.Empty);
+  rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
+
+  // Budget operations
+  rpc CreateBudget(CreateBudgetRequest) returns (Budget);
+  rpc GetBudget(GetBudgetRequest) returns (Budget);
+  rpc DeleteBudget(DeleteBudgetRequest) returns (google.protobuf.Empty);
 }
 
 // --- Organization ---
@@ -72,12 +83,12 @@ message GetOrganizationRequest {
 
 message ListOrganizationsRequest {
   int32 limit = 1;
-  string page_token = 2;
+  string cursor = 2;
 }
 
 message ListOrganizationsResponse {
   repeated Organization organizations = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 // --- Project ---
@@ -95,12 +106,12 @@ message GetProjectRequest {
 message ListProjectsRequest {
   string org_id = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListProjectsResponse {
   repeated Project projects = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 // --- Environment ---
@@ -119,12 +130,12 @@ message GetEnvironmentRequest {
 message ListEnvironmentsRequest {
   string project_id = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListEnvironmentsResponse {
   repeated Environment environments = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 // --- Agent ---
@@ -143,12 +154,12 @@ message GetAgentRequest {
 message ListAgentsRequest {
   string env_id = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListAgentsResponse {
   repeated Agent agents = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 message UpdateAgentRequest {
@@ -157,6 +168,10 @@ message UpdateAgentRequest {
 }
 
 message DeleteAgentRequest {
+  string id = 1;
+}
+
+message RestoreAgentRequest {
   string id = 1;
 }
 
@@ -176,12 +191,12 @@ message GetPolicyRequest {
 message ListPoliciesRequest {
   string env_id = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListPoliciesResponse {
   repeated PolicyRecord policies = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 message UpdatePolicyRequest {
@@ -208,12 +223,12 @@ message GetTokenRequest {
 message ListTokensRequest {
   string agent_id = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListTokensResponse {
   repeated AgentToken tokens = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 message RevokeTokenRequest {
@@ -237,12 +252,12 @@ message GetCredentialRequest {
 message ListCredentialsRequest {
   CredentialFilter filter = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListCredentialsResponse {
   repeated ConnectorCredential credentials = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 message UpdateCredentialRequest {
@@ -258,4 +273,8 @@ message RotateCredentialRequest {
 message RevokeCredentialRequest {
   string id = 1;
   string reason = 2;
+}
+
+message DeleteCredentialRequest {
+  string id = 1;
 }

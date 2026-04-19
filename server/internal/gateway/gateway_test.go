@@ -55,6 +55,14 @@ func (m *mockAppStore) ListPolicies(_ context.Context, _ string, _ store.Page) (
 func (m *mockAppStore) UpdatePolicy(_ context.Context, _ string, _ *controlmodel.PolicyUpdate) error {
 	return nil
 }
+func (m *mockAppStore) DeletePolicy(_ context.Context, _ string) error { return nil }
+
+// BudgetStore
+func (m *mockAppStore) CreateBudget(_ context.Context, _ *controlmodel.Budget) error { return nil }
+func (m *mockAppStore) GetBudget(_ context.Context, _ string) (*controlmodel.Budget, error) {
+	return nil, nil
+}
+func (m *mockAppStore) DeleteBudget(_ context.Context, _ string) error { return nil }
 
 // RunStore
 func (m *mockAppStore) CreateRun(_ context.Context, _ *runtimemodel.RunRecord) error { return nil }
@@ -156,6 +164,9 @@ func (m *mockAppStore) GetOrg(_ context.Context, _ string) (*controlmodel.Organi
 }
 func (m *mockAppStore) GetOrgBySlug(_ context.Context, _ string) (*controlmodel.Organization, error) {
 	return nil, nil
+}
+func (m *mockAppStore) ListOrgs(_ context.Context, _ store.Page) (store.PageResult[*controlmodel.Organization], error) {
+	return store.PageResult[*controlmodel.Organization]{}, nil
 }
 
 // UserStore

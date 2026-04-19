@@ -66,7 +66,7 @@ func (s *Server) GetRun(ctx context.Context, req *runtimev1.GetRunRequest) (*run
 
 func (s *Server) ListRuns(ctx context.Context, req *runtimev1.ListRunsRequest) (*runtimev1.ListRunsResponse, error) {
 	filter := runFilterFromProto(req.Filter)
-	page := pageFromProto(req.Limit)
+	page := pageFromProto(req.Limit, req.Cursor)
 	result, err := s.appStore.ListRuns(ctx, filter, page)
 	if err != nil {
 		return nil, err
@@ -75,6 +75,7 @@ func (s *Server) ListRuns(ctx context.Context, req *runtimev1.ListRunsRequest) (
 	for _, r := range result.Items {
 		resp.Runs = append(resp.Runs, runToProto(r))
 	}
+	resp.NextCursor = result.NextCursor
 	return resp, nil
 }
 
@@ -100,6 +101,28 @@ func (s *Server) UpdateRun(ctx context.Context, req *runtimev1.UpdateRunRequest)
 	}
 	if u.Metadata != nil {
 		update.Metadata = structToMap(u.Metadata)
+	}
+	if err := s.appStore.UpdateRun(ctx, req.Id, update); err != nil {
+		return nil, err
+	}
+	return s.GetRun(ctx, &runtimev1.GetRunRequest{Id: req.Id})
+}
+
+func (s *Server) CancelRun(ctx context.Context, req *runtimev1.CancelRunRequest) (*runtimev1.RunRecord, error) {
+	run, err := s.appStore.GetRunByID(ctx, req.Id)
+	if err != nil {
+		return nil, err
+	}
+	if run == nil {
+		return nil, status.Errorf(codes.NotFound, "run %q not found", req.Id)
+	}
+	now := nowMS()
+	update := &runtimemodel.RunUpdate{
+		Status:  stringPtr("cancelled"),
+		EndedAt: &now,
+	}
+	if reason := req.GetReason(); reason != "" {
+		update.ErrorMessage = &reason
 	}
 	if err := s.appStore.UpdateRun(ctx, req.Id, update); err != nil {
 		return nil, err
@@ -191,7 +214,7 @@ func (s *Server) ListActions(ctx context.Context, req *runtimev1.ListActionsRequ
 	if req.Filter != nil {
 		runID = req.Filter.RunId
 	}
-	page := pageFromProto(req.Limit)
+	page := pageFromProto(req.Limit, req.Cursor)
 	result, err := s.appStore.ListActionsByRun(ctx, runID, page)
 	if err != nil {
 		return nil, err
@@ -200,6 +223,7 @@ func (s *Server) ListActions(ctx context.Context, req *runtimev1.ListActionsRequ
 	for _, a := range result.Items {
 		resp.Actions = append(resp.Actions, actionToProto(a))
 	}
+	resp.NextCursor = result.NextCursor
 	return resp, nil
 }
 
@@ -238,7 +262,7 @@ func (s *Server) GetSpan(ctx context.Context, req *runtimev1.GetSpanRequest) (*r
 
 func (s *Server) QuerySpans(ctx context.Context, req *runtimev1.QuerySpansRequest) (*runtimev1.QuerySpansResponse, error) {
 	filter := spanFilterFromProto(req.Filter)
-	page := pageFromProto(req.Limit)
+	page := pageFromProto(req.Limit, req.Cursor)
 	result, err := s.spanStore.QuerySpans(ctx, filter, page)
 	if err != nil {
 		return nil, err
@@ -247,15 +271,29 @@ func (s *Server) QuerySpans(ctx context.Context, req *runtimev1.QuerySpansReques
 	for _, span := range result.Items {
 		resp.Spans = append(resp.Spans, spanToProto(span))
 	}
+	resp.NextCursor = result.NextCursor
 	return resp, nil
 }
 
 // ── Cost Operations ────────────────────────────────────────────────────────
 
 func (s *Server) GetPriceBook(ctx context.Context, req *runtimev1.GetPriceBookRequest) (*runtimev1.PriceBook, error) {
-	return nil, status.Error(codes.Unimplemented, "GetPriceBook not yet supported via gRPC")
+	book, err := s.appStore.GetPriceBook(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if book == nil {
+		return nil, status.Error(codes.NotFound, "price book not found")
+	}
+	return priceBookToProto(book), nil
 }
 
 func (s *Server) GetSpendReport(ctx context.Context, req *runtimev1.GetSpendReportRequest) (*runtimev1.SpendReport, error) {
-	return nil, status.Error(codes.Unimplemented, "GetSpendReport not yet supported via gRPC")
+	report, err := s.appStore.GetSpendReport(ctx, spendFilterFromProto(req.Filter))
+	if err != nil {
+		return nil, err
+	}
+	return spendReportToProto(report), nil
 }
+
+func stringPtr(s string) *string { return &s }

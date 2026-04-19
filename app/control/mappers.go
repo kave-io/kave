@@ -397,6 +397,44 @@ func credentialToProto(c *control.ConnectorCredential) *controlv1.ConnectorCrede
 	}
 }
 
+// ── Budget ───────────────────────────────────────────────────────────────────
+
+func budgetToProto(b *control.Budget) *controlv1.Budget {
+	if b == nil {
+		return nil
+	}
+	proto := &controlv1.Budget{
+		Id:          b.ID,
+		AgentId:     b.AgentID,
+		HardCap:     amountToProto(b.HardCap),
+		Period:      budgetPeriodToProto(b.Period),
+		CreatedAtMs: b.CreatedAt,
+		UpdatedAtMs: b.UpdatedAt,
+	}
+	if b.SoftCap != 0 {
+		proto.SoftCap = amountToProto(b.SoftCap)
+	}
+	return proto
+}
+
+func budgetFromProto(p *controlv1.Budget) *control.Budget {
+	if p == nil {
+		return nil
+	}
+	b := &control.Budget{
+		ID:        p.Id,
+		AgentID:   p.AgentId,
+		HardCap:   amountFromProto(p.HardCap),
+		Period:    budgetPeriodFromProto(p.Period),
+		CreatedAt: p.CreatedAtMs,
+		UpdatedAt: p.UpdatedAtMs,
+	}
+	if p.SoftCap != nil {
+		b.SoftCap = amountFromProto(p.SoftCap)
+	}
+	return b
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func newID(prefix string) string { return ids.New(prefix) }

@@ -601,6 +601,234 @@ func (x *PolicyUpdate) GetUpdatedBy() string {
 	return ""
 }
 
+type DeletePolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeletePolicyRequest) Reset() {
+	*x = DeletePolicyRequest{}
+	mi := &file_kave_control_v1_policy_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeletePolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletePolicyRequest) ProtoMessage() {}
+
+func (x *DeletePolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_control_v1_policy_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletePolicyRequest.ProtoReflect.Descriptor instead.
+func (*DeletePolicyRequest) Descriptor() ([]byte, []int) {
+	return file_kave_control_v1_policy_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DeletePolicyRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type ExportPolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportPolicyRequest) Reset() {
+	*x = ExportPolicyRequest{}
+	mi := &file_kave_control_v1_policy_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportPolicyRequest) ProtoMessage() {}
+
+func (x *ExportPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_control_v1_policy_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportPolicyRequest.ProtoReflect.Descriptor instead.
+func (*ExportPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_kave_control_v1_policy_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ExportPolicyRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type PolicyYAML struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Yaml          string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyYAML) Reset() {
+	*x = PolicyYAML{}
+	mi := &file_kave_control_v1_policy_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyYAML) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyYAML) ProtoMessage() {}
+
+func (x *PolicyYAML) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_control_v1_policy_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyYAML.ProtoReflect.Descriptor instead.
+func (*PolicyYAML) Descriptor() ([]byte, []int) {
+	return file_kave_control_v1_policy_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *PolicyYAML) GetYaml() string {
+	if x != nil {
+		return x.Yaml
+	}
+	return ""
+}
+
+type ValidatePolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Yaml          string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidatePolicyRequest) Reset() {
+	*x = ValidatePolicyRequest{}
+	mi := &file_kave_control_v1_policy_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidatePolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidatePolicyRequest) ProtoMessage() {}
+
+func (x *ValidatePolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_control_v1_policy_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidatePolicyRequest.ProtoReflect.Descriptor instead.
+func (*ValidatePolicyRequest) Descriptor() ([]byte, []int) {
+	return file_kave_control_v1_policy_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ValidatePolicyRequest) GetYaml() string {
+	if x != nil {
+		return x.Yaml
+	}
+	return ""
+}
+
+type ValidatePolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	Issues        []string               `protobuf:"bytes,2,rep,name=issues,proto3" json:"issues,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidatePolicyResponse) Reset() {
+	*x = ValidatePolicyResponse{}
+	mi := &file_kave_control_v1_policy_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidatePolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidatePolicyResponse) ProtoMessage() {}
+
+func (x *ValidatePolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_control_v1_policy_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidatePolicyResponse.ProtoReflect.Descriptor instead.
+func (*ValidatePolicyResponse) Descriptor() ([]byte, []int) {
+	return file_kave_control_v1_policy_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ValidatePolicyResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *ValidatePolicyResponse) GetIssues() []string {
+	if x != nil {
+		return x.Issues
+	}
+	return nil
+}
+
 var File_kave_control_v1_policy_proto protoreflect.FileDescriptor
 
 const file_kave_control_v1_policy_proto_rawDesc = "" +
@@ -665,7 +893,19 @@ const file_kave_control_v1_policy_proto_rawDesc = "" +
 	"\x0f_retention_daysB\a\n" +
 	"\x05_modeB\t\n" +
 	"\a_statusB\r\n" +
-	"\v_updated_by*Z\n" +
+	"\v_updated_by\"%\n" +
+	"\x13DeletePolicyRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"%\n" +
+	"\x13ExportPolicyRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\" \n" +
+	"\n" +
+	"PolicyYAML\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\tR\x04yaml\"+\n" +
+	"\x15ValidatePolicyRequest\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\tR\x04yaml\"@\n" +
+	"\x16ValidatePolicyResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x16\n" +
+	"\x06issues\x18\x02 \x03(\tR\x06issues*Z\n" +
 	"\n" +
 	"PolicyMode\x12\x1b\n" +
 	"\x17POLICY_MODE_UNSPECIFIED\x10\x00\x12\x17\n" +
@@ -699,28 +939,33 @@ func file_kave_control_v1_policy_proto_rawDescGZIP() []byte {
 }
 
 var file_kave_control_v1_policy_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_kave_control_v1_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_kave_control_v1_policy_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_kave_control_v1_policy_proto_goTypes = []any{
-	(PolicyMode)(0),         // 0: kave.control.v1.PolicyMode
-	(PolicyStatus)(0),       // 1: kave.control.v1.PolicyStatus
-	(BudgetPeriod)(0),       // 2: kave.control.v1.BudgetPeriod
-	(BudgetBehavior)(0),     // 3: kave.control.v1.BudgetBehavior
-	(*PolicyRecord)(nil),    // 4: kave.control.v1.PolicyRecord
-	(*PolicyUpdate)(nil),    // 5: kave.control.v1.PolicyUpdate
-	(*v1.Amount)(nil),       // 6: kave.common.v1.Amount
-	(*structpb.Struct)(nil), // 7: google.protobuf.Struct
+	(PolicyMode)(0),                // 0: kave.control.v1.PolicyMode
+	(PolicyStatus)(0),              // 1: kave.control.v1.PolicyStatus
+	(BudgetPeriod)(0),              // 2: kave.control.v1.BudgetPeriod
+	(BudgetBehavior)(0),            // 3: kave.control.v1.BudgetBehavior
+	(*PolicyRecord)(nil),           // 4: kave.control.v1.PolicyRecord
+	(*PolicyUpdate)(nil),           // 5: kave.control.v1.PolicyUpdate
+	(*DeletePolicyRequest)(nil),    // 6: kave.control.v1.DeletePolicyRequest
+	(*ExportPolicyRequest)(nil),    // 7: kave.control.v1.ExportPolicyRequest
+	(*PolicyYAML)(nil),             // 8: kave.control.v1.PolicyYAML
+	(*ValidatePolicyRequest)(nil),  // 9: kave.control.v1.ValidatePolicyRequest
+	(*ValidatePolicyResponse)(nil), // 10: kave.control.v1.ValidatePolicyResponse
+	(*v1.Amount)(nil),              // 11: kave.common.v1.Amount
+	(*structpb.Struct)(nil),        // 12: google.protobuf.Struct
 }
 var file_kave_control_v1_policy_proto_depIdxs = []int32{
-	6,  // 0: kave.control.v1.PolicyRecord.budget_cap:type_name -> kave.common.v1.Amount
+	11, // 0: kave.control.v1.PolicyRecord.budget_cap:type_name -> kave.common.v1.Amount
 	2,  // 1: kave.control.v1.PolicyRecord.budget_period:type_name -> kave.control.v1.BudgetPeriod
 	3,  // 2: kave.control.v1.PolicyRecord.budget_behavior:type_name -> kave.control.v1.BudgetBehavior
-	7,  // 3: kave.control.v1.PolicyRecord.config:type_name -> google.protobuf.Struct
+	12, // 3: kave.control.v1.PolicyRecord.config:type_name -> google.protobuf.Struct
 	0,  // 4: kave.control.v1.PolicyRecord.mode:type_name -> kave.control.v1.PolicyMode
 	1,  // 5: kave.control.v1.PolicyRecord.status:type_name -> kave.control.v1.PolicyStatus
-	6,  // 6: kave.control.v1.PolicyUpdate.budget_cap:type_name -> kave.common.v1.Amount
+	11, // 6: kave.control.v1.PolicyUpdate.budget_cap:type_name -> kave.common.v1.Amount
 	2,  // 7: kave.control.v1.PolicyUpdate.budget_period:type_name -> kave.control.v1.BudgetPeriod
 	3,  // 8: kave.control.v1.PolicyUpdate.budget_behavior:type_name -> kave.control.v1.BudgetBehavior
-	7,  // 9: kave.control.v1.PolicyUpdate.config:type_name -> google.protobuf.Struct
+	12, // 9: kave.control.v1.PolicyUpdate.config:type_name -> google.protobuf.Struct
 	0,  // 10: kave.control.v1.PolicyUpdate.mode:type_name -> kave.control.v1.PolicyMode
 	1,  // 11: kave.control.v1.PolicyUpdate.status:type_name -> kave.control.v1.PolicyStatus
 	12, // [12:12] is the sub-list for method output_type
@@ -743,7 +988,7 @@ func file_kave_control_v1_policy_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kave_control_v1_policy_proto_rawDesc), len(file_kave_control_v1_policy_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   2,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

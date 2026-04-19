@@ -76,7 +76,7 @@ message ActionRecord {
   int64 created_at_ms = 25; // UnixMilli
 }
 
-// ActionFilter filters ListActions queries. Pagination (limit, page_token) is
+// ActionFilter filters ListActions queries. Pagination (limit, cursor) is
 // carried on the enclosing request, not the filter itself.
 message ActionFilter {
   string run_id = 1;
@@ -85,5 +85,5 @@ message ActionFilter {
   ActionStatus status = 4; // UNSPECIFIED = all statuses
   ActionSource source = 5; // UNSPECIFIED = all sources
   reserved 6, 7;
-  reserved "limit", "page_token";
+  reserved "limit", "cursor";
 }

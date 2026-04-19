@@ -34,14 +34,66 @@ func (p *PostgresAppStore) Migrate(ctx context.Context) error {
 	return postgresdb.Migrate(ctx, p.pool)
 }
 
-// ── OrgStore stubs ────────────────────────────────────────────────────────────
+// ── OrgStore ─────────────────────────────────────────────────────────────────
 
-func (p *PostgresAppStore) CreateOrg(_ context.Context, _ *control.Organization) error { return nil }
-func (p *PostgresAppStore) GetOrg(_ context.Context, _ string) (*control.Organization, error) {
-	return nil, nil
+func (p *PostgresAppStore) CreateOrg(ctx context.Context, o *control.Organization) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO workspaces (id, name, slug, description, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, o.ID, o.Name, o.Slug, "", toTime(o.CreatedAt), toTime(o.UpdatedAt))
+	return err
 }
-func (p *PostgresAppStore) GetOrgBySlug(_ context.Context, _ string) (*control.Organization, error) {
-	return nil, nil
+func (p *PostgresAppStore) GetOrg(ctx context.Context, id string) (*control.Organization, error) {
+	var o control.Organization
+	var createdAt, updatedAt time.Time
+	err := p.pool.QueryRow(ctx, `
+		SELECT id, name, slug, created_at, updated_at FROM workspaces WHERE id = $1
+	`, id).Scan(&o.ID, &o.Name, &o.Slug, &createdAt, &updatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	o.CreatedAt = createdAt.UnixMilli()
+	o.UpdatedAt = updatedAt.UnixMilli()
+	return &o, nil
+}
+func (p *PostgresAppStore) GetOrgBySlug(ctx context.Context, slug string) (*control.Organization, error) {
+	var o control.Organization
+	var createdAt, updatedAt time.Time
+	err := p.pool.QueryRow(ctx, `
+		SELECT id, name, slug, created_at, updated_at FROM workspaces WHERE slug = $1
+	`, slug).Scan(&o.ID, &o.Name, &o.Slug, &createdAt, &updatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	o.CreatedAt = createdAt.UnixMilli()
+	o.UpdatedAt = updatedAt.UnixMilli()
+	return &o, nil
+}
+func (p *PostgresAppStore) ListOrgs(ctx context.Context, page store.Page) (store.PageResult[*control.Organization], error) {
+	rows, err := p.pool.Query(ctx, `SELECT id, name, slug, created_at, updated_at FROM workspaces ORDER BY created_at ASC`)
+	if err != nil {
+		return store.PageResult[*control.Organization]{}, err
+	}
+	defer rows.Close()
+
+	var items []*control.Organization
+	for rows.Next() {
+		var o control.Organization
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &createdAt, &updatedAt); err != nil {
+			return store.PageResult[*control.Organization]{}, err
+		}
+		o.CreatedAt = createdAt.UnixMilli()
+		o.UpdatedAt = updatedAt.UnixMilli()
+		items = append(items, &o)
+	}
+	return store.Paginate(items, page), rows.Err()
 }
 
 // ── UserStore stubs ───────────────────────────────────────────────────────────
@@ -222,7 +274,7 @@ func (p *PostgresAppStore) ListAgents(ctx context.Context, envID string, page st
 		a.Status = control.AgentStatusActive
 		agents = append(agents, &a)
 	}
-	return store.PageResult[*control.Agent]{Items: agents}, rows.Err()
+	return store.Paginate(agents, page), rows.Err()
 }
 
 // ── PolicyStore ───────────────────────────────────────────────────────────────
@@ -293,7 +345,7 @@ func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string, page 
 		pol.Status = "active"
 		policies = append(policies, &pol)
 	}
-	return store.PageResult[*control.PolicyRecord]{Items: policies}, rows.Err()
+	return store.Paginate(policies, page), rows.Err()
 }
 
 // ── RunStore ──────────────────────────────────────────────────────────────────
@@ -442,7 +494,7 @@ func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.Ru
 		r.EnvID = "default"
 		runs = append(runs, &r)
 	}
-	return store.PageResult[*runtimemodel.RunRecord]{Items: runs}, rows.Err()
+	return store.Paginate(runs, page), rows.Err()
 }
 
 // ── ActionStore ───────────────────────────────────────────────────────────────
@@ -518,7 +570,7 @@ func (p *PostgresAppStore) ListActionsByRun(ctx context.Context, runID string, p
 		a.Status = "completed"
 		actions = append(actions, &a)
 	}
-	return store.PageResult[*runtimemodel.ActionRecord]{Items: actions}, rows.Err()
+	return store.Paginate(actions, page), rows.Err()
 }
 
 // ── CostStore ─────────────────────────────────────────────────────────────────
@@ -806,6 +858,10 @@ func (p *PostgresAppStore) ListTokens(_ context.Context, _ string, _ store.Page)
 func (p *PostgresAppStore) UpdatePolicy(_ context.Context, _ string, _ *control.PolicyUpdate) error {
 	return nil
 }
+func (p *PostgresAppStore) DeletePolicy(ctx context.Context, id string) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM policies WHERE id = $1`, id)
+	return err
+}
 func (p *PostgresAppStore) RevokeToken(_ context.Context, _, _, _ string) error { return nil }
 func (p *PostgresAppStore) TouchToken(_ context.Context, _ string) error        { return nil }
 
@@ -861,6 +917,47 @@ func (p *PostgresAppStore) DeleteCredential(ctx context.Context, id string) erro
 
 func (p *PostgresAppStore) ListCredentials(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.ConnectorCredential], error) {
 	return store.PageResult[*control.ConnectorCredential]{}, nil
+}
+
+// ── BudgetStore ──────────────────────────────────────────────────────────────
+
+func (p *PostgresAppStore) CreateBudget(ctx context.Context, b *control.Budget) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO budgets (id, agent_id, hard_cap_nanos, soft_cap_nanos, period, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (agent_id) DO UPDATE SET
+			hard_cap_nanos = EXCLUDED.hard_cap_nanos,
+			soft_cap_nanos = EXCLUDED.soft_cap_nanos,
+			period = EXCLUDED.period,
+			updated_at = EXCLUDED.updated_at
+	`, b.ID, b.AgentID, amountToDB(b.HardCap), amountToDB(b.SoftCap), b.Period, toTime(b.CreatedAt), toTime(b.UpdatedAt))
+	return err
+}
+
+func (p *PostgresAppStore) GetBudget(ctx context.Context, agentID string) (*control.Budget, error) {
+	var b control.Budget
+	var createdAt, updatedAt time.Time
+	var hardCap, softCap int64
+	err := p.pool.QueryRow(ctx, `
+		SELECT id, agent_id, hard_cap_nanos, soft_cap_nanos, period, created_at, updated_at
+		FROM budgets WHERE agent_id = $1
+	`, agentID).Scan(&b.ID, &b.AgentID, &hardCap, &softCap, &b.Period, &createdAt, &updatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	b.HardCap = amountFromDB(hardCap)
+	b.SoftCap = amountFromDB(softCap)
+	b.CreatedAt = createdAt.UnixMilli()
+	b.UpdatedAt = updatedAt.UnixMilli()
+	return &b, nil
+}
+
+func (p *PostgresAppStore) DeleteBudget(ctx context.Context, agentID string) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM budgets WHERE agent_id = $1`, agentID)
+	return err
 }
 
 func (p *PostgresAppStore) ResolveCredential(ctx context.Context, filter *control.CredentialFilter) (*control.ConnectorCredential, error) {

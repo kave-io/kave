@@ -9,16 +9,18 @@ import (
 	"strings"
 	"time"
 
+	appcontrol "github.com/kave-io/kave/app/control"
+	appruntime "github.com/kave-io/kave/app/runtime"
 	"github.com/kave-io/kave/core/bus"
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
-	"github.com/kave-io/kave/server/api"
 	"github.com/kave-io/kave/server/internal/config"
 	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/internal/gateway"
+	"github.com/kave-io/kave/server/internal/httpbridge"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
 	"github.com/kave-io/kave/server/ops/cost"
 	"github.com/kave-io/kave/server/ops/fx"
@@ -61,7 +63,9 @@ func main() {
 	}
 
 	eventBus := bus.New()
-	grpcServer := portgrpc.New(appStore, defaultSpanStore, eventBus)
+	controlServer := appcontrol.New(appStore)
+	runtimeServer := appruntime.New(appStore, defaultSpanStore, eventBus)
+	grpcServer := portgrpc.New(controlServer, runtimeServer)
 
 	// Create pipeline interceptors in order: cost → trace
 	// (auth requires casbin config, skipped for now in local dev)
@@ -94,9 +98,10 @@ func main() {
 	gatewayServer.RegisterRoutes(mux)
 	fx.RegisterRoutes(mux, fxService)
 
-	// Register REST API routes
-	apiHandler := api.New(appStore, defaultSpanStore, eventBus)
-	apiHandler.RegisterRoutes(mux)
+	bridgeMux := http.NewServeMux()
+	httpbridge.Register(bridgeMux, httpbridge.BuildRoutes(controlServer, runtimeServer, appStore, defaultSpanStore))
+	httpbridge.RegisterStreams(bridgeMux, defaultSpanStore, eventBus)
+	log.Printf("warn: unimplemented HTTP bridge routes: /api/v1/trace/tail, /api/v1/events/tail, /api/v1/logs/tail, /api/v1/status, /api/v1/doctor, /api/v1/config/view, /api/v1/config/reload, /api/v1/admin/store, /api/v1/apply, /api/v1/diff, /api/v1/watch")
 
 	// Register health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -112,8 +117,14 @@ func main() {
 		}, nil, nil)
 	})
 
-	// Serve dashboard SPA at /
-	mux.Handle("/", ui.Handler())
+	// Bridge first, then the dashboard SPA.
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, pattern := bridgeMux.Handler(r); pattern != "" {
+			bridgeMux.ServeHTTP(w, r)
+			return
+		}
+		ui.Handler().ServeHTTP(w, r)
+	}))
 
 	// Start HTTP server
 	addr := cfg.Server.Addr()

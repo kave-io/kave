@@ -64,7 +64,7 @@ message RunUpdate {
   google.protobuf.Struct metadata = 5;
 }
 
-// RunFilter filters ListRuns queries. Pagination (limit, page_token) is
+// RunFilter filters ListRuns queries. Pagination (limit, cursor) is
 // carried on the enclosing request, not the filter itself.
 message RunFilter {
   string project_id = 1;
@@ -74,5 +74,5 @@ message RunFilter {
   optional int64 from_ms = 5;
   optional int64 to_ms = 6;
   reserved 7, 8;
-  reserved "limit", "page_token";
+  reserved "limit", "cursor";
 }

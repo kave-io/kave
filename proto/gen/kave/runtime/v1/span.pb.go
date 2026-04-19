@@ -936,7 +936,7 @@ func (x *SpanEnd) GetValidationMeta() *ValidationMeta {
 	return nil
 }
 
-// SpanFilter filters QuerySpans queries. Pagination (limit, page_token) is
+// SpanFilter filters QuerySpans queries. Pagination (limit, cursor) is
 // carried on the enclosing request, not the filter itself.
 type SpanFilter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1168,7 +1168,7 @@ const file_kave_runtime_v1_span_proto_rawDesc = "" +
 	"\x06_modelB\a\n" +
 	"\x05_costB\x11\n" +
 	"\x0f_price_snapshotB\x12\n" +
-	"\x10_validation_meta\"\xdd\x01\n" +
+	"\x10_validation_meta\"\xd9\x01\n" +
 	"\n" +
 	"SpanFilter\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x1b\n" +
@@ -1180,8 +1180,7 @@ const file_kave_runtime_v1_span_proto_rawDesc = "" +
 	"\b_from_msB\b\n" +
 	"\x06_to_msB\f\n" +
 	"\n" +
-	"_has_errorJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\n" +
-	"page_token*p\n" +
+	"_has_errorJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\x06cursor*p\n" +
 	"\bSpanKind\x12\x19\n" +
 	"\x15SPAN_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10SPAN_KIND_ACTION\x10\x01\x12\x1d\n" +

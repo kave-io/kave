@@ -416,7 +416,7 @@ func (x *RunUpdate) GetMetadata() *structpb.Struct {
 	return nil
 }
 
-// RunFilter filters ListRuns queries. Pagination (limit, page_token) is
+// RunFilter filters ListRuns queries. Pagination (limit, cursor) is
 // carried on the enclosing request, not the filter itself.
 type RunFilter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -552,7 +552,7 @@ const file_kave_runtime_v1_run_proto_rawDesc = "" +
 	"\a_statusB\b\n" +
 	"\x06_spentB\x10\n" +
 	"\x0e_error_messageB\x0e\n" +
-	"\f_ended_at_ms\"\xfd\x01\n" +
+	"\f_ended_at_ms\"\xf9\x01\n" +
 	"\tRunFilter\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x15\n" +
@@ -563,8 +563,7 @@ const file_kave_runtime_v1_run_proto_rawDesc = "" +
 	"\x05to_ms\x18\x06 \x01(\x03H\x01R\x04toMs\x88\x01\x01B\n" +
 	"\n" +
 	"\b_from_msB\b\n" +
-	"\x06_to_msJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\x05limitR\n" +
-	"page_token*\x8f\x01\n" +
+	"\x06_to_msJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\x05limitR\x06cursor*\x8f\x01\n" +
 	"\vTriggerType\x12\x1c\n" +
 	"\x18TRIGGER_TYPE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10TRIGGER_TYPE_API\x10\x01\x12\x19\n" +

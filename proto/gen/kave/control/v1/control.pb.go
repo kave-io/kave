@@ -121,7 +121,7 @@ func (x *GetOrganizationRequest) GetId() string {
 type ListOrganizationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -163,9 +163,9 @@ func (x *ListOrganizationsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListOrganizationsRequest) GetPageToken() string {
+func (x *ListOrganizationsRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -173,7 +173,7 @@ func (x *ListOrganizationsRequest) GetPageToken() string {
 type ListOrganizationsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Organizations []*Organization        `protobuf:"bytes,1,rep,name=organizations,proto3" json:"organizations,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,9 +215,9 @@ func (x *ListOrganizationsResponse) GetOrganizations() []*Organization {
 	return nil
 }
 
-func (x *ListOrganizationsResponse) GetNextPageToken() string {
+func (x *ListOrganizationsResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -330,7 +330,7 @@ type ListProjectsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -379,9 +379,9 @@ func (x *ListProjectsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListProjectsRequest) GetPageToken() string {
+func (x *ListProjectsRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -389,7 +389,7 @@ func (x *ListProjectsRequest) GetPageToken() string {
 type ListProjectsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Projects      []*Project             `protobuf:"bytes,1,rep,name=projects,proto3" json:"projects,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -431,9 +431,9 @@ func (x *ListProjectsResponse) GetProjects() []*Project {
 	return nil
 }
 
-func (x *ListProjectsResponse) GetNextPageToken() string {
+func (x *ListProjectsResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -554,7 +554,7 @@ type ListEnvironmentsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -603,9 +603,9 @@ func (x *ListEnvironmentsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListEnvironmentsRequest) GetPageToken() string {
+func (x *ListEnvironmentsRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -613,7 +613,7 @@ func (x *ListEnvironmentsRequest) GetPageToken() string {
 type ListEnvironmentsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Environments  []*Environment         `protobuf:"bytes,1,rep,name=environments,proto3" json:"environments,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -655,9 +655,9 @@ func (x *ListEnvironmentsResponse) GetEnvironments() []*Environment {
 	return nil
 }
 
-func (x *ListEnvironmentsResponse) GetNextPageToken() string {
+func (x *ListEnvironmentsResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -778,7 +778,7 @@ type ListAgentsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvId         string                 `protobuf:"bytes,1,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -827,9 +827,9 @@ func (x *ListAgentsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListAgentsRequest) GetPageToken() string {
+func (x *ListAgentsRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -837,7 +837,7 @@ func (x *ListAgentsRequest) GetPageToken() string {
 type ListAgentsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Agents        []*Agent               `protobuf:"bytes,1,rep,name=agents,proto3" json:"agents,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -879,9 +879,9 @@ func (x *ListAgentsResponse) GetAgents() []*Agent {
 	return nil
 }
 
-func (x *ListAgentsResponse) GetNextPageToken() string {
+func (x *ListAgentsResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -982,6 +982,50 @@ func (x *DeleteAgentRequest) GetId() string {
 	return ""
 }
 
+type RestoreAgentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreAgentRequest) Reset() {
+	*x = RestoreAgentRequest{}
+	mi := &file_kave_control_v1_control_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreAgentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreAgentRequest) ProtoMessage() {}
+
+func (x *RestoreAgentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_control_v1_control_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreAgentRequest.ProtoReflect.Descriptor instead.
+func (*RestoreAgentRequest) Descriptor() ([]byte, []int) {
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RestoreAgentRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 type CreatePolicyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvId         string                 `protobuf:"bytes,1,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
@@ -994,7 +1038,7 @@ type CreatePolicyRequest struct {
 
 func (x *CreatePolicyRequest) Reset() {
 	*x = CreatePolicyRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[18]
+	mi := &file_kave_control_v1_control_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1006,7 +1050,7 @@ func (x *CreatePolicyRequest) String() string {
 func (*CreatePolicyRequest) ProtoMessage() {}
 
 func (x *CreatePolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[18]
+	mi := &file_kave_control_v1_control_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1019,7 +1063,7 @@ func (x *CreatePolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePolicyRequest.ProtoReflect.Descriptor instead.
 func (*CreatePolicyRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{18}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CreatePolicyRequest) GetEnvId() string {
@@ -1059,7 +1103,7 @@ type GetPolicyRequest struct {
 
 func (x *GetPolicyRequest) Reset() {
 	*x = GetPolicyRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[19]
+	mi := &file_kave_control_v1_control_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1071,7 +1115,7 @@ func (x *GetPolicyRequest) String() string {
 func (*GetPolicyRequest) ProtoMessage() {}
 
 func (x *GetPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[19]
+	mi := &file_kave_control_v1_control_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1084,7 +1128,7 @@ func (x *GetPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPolicyRequest.ProtoReflect.Descriptor instead.
 func (*GetPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{19}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetPolicyRequest) GetId() string {
@@ -1098,14 +1142,14 @@ type ListPoliciesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvId         string                 `protobuf:"bytes,1,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListPoliciesRequest) Reset() {
 	*x = ListPoliciesRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[20]
+	mi := &file_kave_control_v1_control_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1117,7 +1161,7 @@ func (x *ListPoliciesRequest) String() string {
 func (*ListPoliciesRequest) ProtoMessage() {}
 
 func (x *ListPoliciesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[20]
+	mi := &file_kave_control_v1_control_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1130,7 +1174,7 @@ func (x *ListPoliciesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPoliciesRequest.ProtoReflect.Descriptor instead.
 func (*ListPoliciesRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{20}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListPoliciesRequest) GetEnvId() string {
@@ -1147,9 +1191,9 @@ func (x *ListPoliciesRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListPoliciesRequest) GetPageToken() string {
+func (x *ListPoliciesRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -1157,14 +1201,14 @@ func (x *ListPoliciesRequest) GetPageToken() string {
 type ListPoliciesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Policies      []*PolicyRecord        `protobuf:"bytes,1,rep,name=policies,proto3" json:"policies,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListPoliciesResponse) Reset() {
 	*x = ListPoliciesResponse{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[21]
+	mi := &file_kave_control_v1_control_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1176,7 +1220,7 @@ func (x *ListPoliciesResponse) String() string {
 func (*ListPoliciesResponse) ProtoMessage() {}
 
 func (x *ListPoliciesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[21]
+	mi := &file_kave_control_v1_control_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1189,7 +1233,7 @@ func (x *ListPoliciesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPoliciesResponse.ProtoReflect.Descriptor instead.
 func (*ListPoliciesResponse) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{21}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListPoliciesResponse) GetPolicies() []*PolicyRecord {
@@ -1199,9 +1243,9 @@ func (x *ListPoliciesResponse) GetPolicies() []*PolicyRecord {
 	return nil
 }
 
-func (x *ListPoliciesResponse) GetNextPageToken() string {
+func (x *ListPoliciesResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -1216,7 +1260,7 @@ type UpdatePolicyRequest struct {
 
 func (x *UpdatePolicyRequest) Reset() {
 	*x = UpdatePolicyRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[22]
+	mi := &file_kave_control_v1_control_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1228,7 +1272,7 @@ func (x *UpdatePolicyRequest) String() string {
 func (*UpdatePolicyRequest) ProtoMessage() {}
 
 func (x *UpdatePolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[22]
+	mi := &file_kave_control_v1_control_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1241,7 +1285,7 @@ func (x *UpdatePolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePolicyRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePolicyRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{22}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdatePolicyRequest) GetId() string {
@@ -1268,7 +1312,7 @@ type CreateTokenRequest struct {
 
 func (x *CreateTokenRequest) Reset() {
 	*x = CreateTokenRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[23]
+	mi := &file_kave_control_v1_control_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1280,7 +1324,7 @@ func (x *CreateTokenRequest) String() string {
 func (*CreateTokenRequest) ProtoMessage() {}
 
 func (x *CreateTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[23]
+	mi := &file_kave_control_v1_control_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1293,7 +1337,7 @@ func (x *CreateTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTokenRequest.ProtoReflect.Descriptor instead.
 func (*CreateTokenRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{23}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CreateTokenRequest) GetAgentId() string {
@@ -1320,7 +1364,7 @@ type CreateTokenResponse struct {
 
 func (x *CreateTokenResponse) Reset() {
 	*x = CreateTokenResponse{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[24]
+	mi := &file_kave_control_v1_control_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1332,7 +1376,7 @@ func (x *CreateTokenResponse) String() string {
 func (*CreateTokenResponse) ProtoMessage() {}
 
 func (x *CreateTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[24]
+	mi := &file_kave_control_v1_control_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1345,7 +1389,7 @@ func (x *CreateTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTokenResponse.ProtoReflect.Descriptor instead.
 func (*CreateTokenResponse) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{24}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CreateTokenResponse) GetToken() *AgentToken {
@@ -1371,7 +1415,7 @@ type GetTokenRequest struct {
 
 func (x *GetTokenRequest) Reset() {
 	*x = GetTokenRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[25]
+	mi := &file_kave_control_v1_control_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1383,7 +1427,7 @@ func (x *GetTokenRequest) String() string {
 func (*GetTokenRequest) ProtoMessage() {}
 
 func (x *GetTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[25]
+	mi := &file_kave_control_v1_control_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1396,7 +1440,7 @@ func (x *GetTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTokenRequest.ProtoReflect.Descriptor instead.
 func (*GetTokenRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{25}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetTokenRequest) GetId() string {
@@ -1410,14 +1454,14 @@ type ListTokensRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListTokensRequest) Reset() {
 	*x = ListTokensRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[26]
+	mi := &file_kave_control_v1_control_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1429,7 +1473,7 @@ func (x *ListTokensRequest) String() string {
 func (*ListTokensRequest) ProtoMessage() {}
 
 func (x *ListTokensRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[26]
+	mi := &file_kave_control_v1_control_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1442,7 +1486,7 @@ func (x *ListTokensRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTokensRequest.ProtoReflect.Descriptor instead.
 func (*ListTokensRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{26}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListTokensRequest) GetAgentId() string {
@@ -1459,9 +1503,9 @@ func (x *ListTokensRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListTokensRequest) GetPageToken() string {
+func (x *ListTokensRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -1469,14 +1513,14 @@ func (x *ListTokensRequest) GetPageToken() string {
 type ListTokensResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tokens        []*AgentToken          `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListTokensResponse) Reset() {
 	*x = ListTokensResponse{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[27]
+	mi := &file_kave_control_v1_control_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1488,7 +1532,7 @@ func (x *ListTokensResponse) String() string {
 func (*ListTokensResponse) ProtoMessage() {}
 
 func (x *ListTokensResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[27]
+	mi := &file_kave_control_v1_control_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1501,7 +1545,7 @@ func (x *ListTokensResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTokensResponse.ProtoReflect.Descriptor instead.
 func (*ListTokensResponse) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{27}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListTokensResponse) GetTokens() []*AgentToken {
@@ -1511,9 +1555,9 @@ func (x *ListTokensResponse) GetTokens() []*AgentToken {
 	return nil
 }
 
-func (x *ListTokensResponse) GetNextPageToken() string {
+func (x *ListTokensResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -1528,7 +1572,7 @@ type RevokeTokenRequest struct {
 
 func (x *RevokeTokenRequest) Reset() {
 	*x = RevokeTokenRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[28]
+	mi := &file_kave_control_v1_control_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1540,7 +1584,7 @@ func (x *RevokeTokenRequest) String() string {
 func (*RevokeTokenRequest) ProtoMessage() {}
 
 func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[28]
+	mi := &file_kave_control_v1_control_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1553,7 +1597,7 @@ func (x *RevokeTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeTokenRequest.ProtoReflect.Descriptor instead.
 func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{28}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RevokeTokenRequest) GetId() string {
@@ -1582,7 +1626,7 @@ type CreateCredentialRequest struct {
 
 func (x *CreateCredentialRequest) Reset() {
 	*x = CreateCredentialRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[29]
+	mi := &file_kave_control_v1_control_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1594,7 +1638,7 @@ func (x *CreateCredentialRequest) String() string {
 func (*CreateCredentialRequest) ProtoMessage() {}
 
 func (x *CreateCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[29]
+	mi := &file_kave_control_v1_control_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1607,7 +1651,7 @@ func (x *CreateCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateCredentialRequest.ProtoReflect.Descriptor instead.
 func (*CreateCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{29}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *CreateCredentialRequest) GetEnvId() string {
@@ -1647,7 +1691,7 @@ type GetCredentialRequest struct {
 
 func (x *GetCredentialRequest) Reset() {
 	*x = GetCredentialRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[30]
+	mi := &file_kave_control_v1_control_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1659,7 +1703,7 @@ func (x *GetCredentialRequest) String() string {
 func (*GetCredentialRequest) ProtoMessage() {}
 
 func (x *GetCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[30]
+	mi := &file_kave_control_v1_control_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1672,7 +1716,7 @@ func (x *GetCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCredentialRequest.ProtoReflect.Descriptor instead.
 func (*GetCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{30}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetCredentialRequest) GetId() string {
@@ -1686,14 +1730,14 @@ type ListCredentialsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filter        *CredentialFilter      `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListCredentialsRequest) Reset() {
 	*x = ListCredentialsRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[31]
+	mi := &file_kave_control_v1_control_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1705,7 +1749,7 @@ func (x *ListCredentialsRequest) String() string {
 func (*ListCredentialsRequest) ProtoMessage() {}
 
 func (x *ListCredentialsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[31]
+	mi := &file_kave_control_v1_control_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1718,7 +1762,7 @@ func (x *ListCredentialsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCredentialsRequest.ProtoReflect.Descriptor instead.
 func (*ListCredentialsRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{31}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListCredentialsRequest) GetFilter() *CredentialFilter {
@@ -1735,9 +1779,9 @@ func (x *ListCredentialsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListCredentialsRequest) GetPageToken() string {
+func (x *ListCredentialsRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -1745,14 +1789,14 @@ func (x *ListCredentialsRequest) GetPageToken() string {
 type ListCredentialsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Credentials   []*ConnectorCredential `protobuf:"bytes,1,rep,name=credentials,proto3" json:"credentials,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListCredentialsResponse) Reset() {
 	*x = ListCredentialsResponse{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[32]
+	mi := &file_kave_control_v1_control_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1764,7 +1808,7 @@ func (x *ListCredentialsResponse) String() string {
 func (*ListCredentialsResponse) ProtoMessage() {}
 
 func (x *ListCredentialsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[32]
+	mi := &file_kave_control_v1_control_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1777,7 +1821,7 @@ func (x *ListCredentialsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCredentialsResponse.ProtoReflect.Descriptor instead.
 func (*ListCredentialsResponse) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{32}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListCredentialsResponse) GetCredentials() []*ConnectorCredential {
@@ -1787,9 +1831,9 @@ func (x *ListCredentialsResponse) GetCredentials() []*ConnectorCredential {
 	return nil
 }
 
-func (x *ListCredentialsResponse) GetNextPageToken() string {
+func (x *ListCredentialsResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -1804,7 +1848,7 @@ type UpdateCredentialRequest struct {
 
 func (x *UpdateCredentialRequest) Reset() {
 	*x = UpdateCredentialRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[33]
+	mi := &file_kave_control_v1_control_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1816,7 +1860,7 @@ func (x *UpdateCredentialRequest) String() string {
 func (*UpdateCredentialRequest) ProtoMessage() {}
 
 func (x *UpdateCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[33]
+	mi := &file_kave_control_v1_control_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1829,7 +1873,7 @@ func (x *UpdateCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCredentialRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{33}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *UpdateCredentialRequest) GetId() string {
@@ -1856,7 +1900,7 @@ type RotateCredentialRequest struct {
 
 func (x *RotateCredentialRequest) Reset() {
 	*x = RotateCredentialRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[34]
+	mi := &file_kave_control_v1_control_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1868,7 +1912,7 @@ func (x *RotateCredentialRequest) String() string {
 func (*RotateCredentialRequest) ProtoMessage() {}
 
 func (x *RotateCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[34]
+	mi := &file_kave_control_v1_control_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1881,7 +1925,7 @@ func (x *RotateCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateCredentialRequest.ProtoReflect.Descriptor instead.
 func (*RotateCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{34}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *RotateCredentialRequest) GetId() string {
@@ -1908,7 +1952,7 @@ type RevokeCredentialRequest struct {
 
 func (x *RevokeCredentialRequest) Reset() {
 	*x = RevokeCredentialRequest{}
-	mi := &file_kave_control_v1_control_proto_msgTypes[35]
+	mi := &file_kave_control_v1_control_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1920,7 +1964,7 @@ func (x *RevokeCredentialRequest) String() string {
 func (*RevokeCredentialRequest) ProtoMessage() {}
 
 func (x *RevokeCredentialRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_control_v1_control_proto_msgTypes[35]
+	mi := &file_kave_control_v1_control_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1933,7 +1977,7 @@ func (x *RevokeCredentialRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeCredentialRequest.ProtoReflect.Descriptor instead.
 func (*RevokeCredentialRequest) Descriptor() ([]byte, []int) {
-	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{35}
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RevokeCredentialRequest) GetId() string {
@@ -1950,37 +1994,81 @@ func (x *RevokeCredentialRequest) GetReason() string {
 	return ""
 }
 
+type DeleteCredentialRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteCredentialRequest) Reset() {
+	*x = DeleteCredentialRequest{}
+	mi := &file_kave_control_v1_control_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteCredentialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteCredentialRequest) ProtoMessage() {}
+
+func (x *DeleteCredentialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_control_v1_control_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteCredentialRequest.ProtoReflect.Descriptor instead.
+func (*DeleteCredentialRequest) Descriptor() ([]byte, []int) {
+	return file_kave_control_v1_control_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *DeleteCredentialRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 var File_kave_control_v1_control_proto protoreflect.FileDescriptor
 
 const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\n" +
-	"\x1dkave/control/v1/control.proto\x12\x0fkave.control.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1bkave/control/v1/agent.proto\x1a kave/control/v1/credential.proto\x1a!kave/control/v1/environment.proto\x1a\x19kave/control/v1/org.proto\x1a\x1ckave/control/v1/policy.proto\x1a\x1dkave/control/v1/project.proto\x1a\x1bkave/control/v1/token.proto\"C\n" +
+	"\x1dkave/control/v1/control.proto\x12\x0fkave.control.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1bkave/control/v1/agent.proto\x1a\x1ckave/control/v1/budget.proto\x1a kave/control/v1/credential.proto\x1a!kave/control/v1/environment.proto\x1a\x19kave/control/v1/org.proto\x1a\x1ckave/control/v1/policy.proto\x1a\x1dkave/control/v1/project.proto\x1a\x1bkave/control/v1/token.proto\"C\n" +
 	"\x19CreateOrganizationRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\"(\n" +
 	"\x16GetOrganizationRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"O\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"H\n" +
 	"\x18ListOrganizationsRequest\x12\x14\n" +
-	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"\x88\x01\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x02 \x01(\tR\x06cursor\"\x81\x01\n" +
 	"\x19ListOrganizationsResponse\x12C\n" +
-	"\rorganizations\x18\x01 \x03(\v2\x1d.kave.control.v1.OrganizationR\rorganizations\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"U\n" +
+	"\rorganizations\x18\x01 \x03(\v2\x1d.kave.control.v1.OrganizationR\rorganizations\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"U\n" +
 	"\x14CreateProjectRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04slug\x18\x03 \x01(\tR\x04slug\"#\n" +
 	"\x11GetProjectRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"a\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"Z\n" +
 	"\x13ListProjectsRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"t\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"m\n" +
 	"\x14ListProjectsResponse\x124\n" +
-	"\bprojects\x18\x01 \x03(\v2\x18.kave.control.v1.ProjectR\bprojects\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x97\x01\n" +
+	"\bprojects\x18\x01 \x03(\v2\x18.kave.control.v1.ProjectR\bprojects\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"\x97\x01\n" +
 	"\x18CreateEnvironmentRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -1988,16 +2076,16 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\x04slug\x18\x03 \x01(\tR\x04slug\x124\n" +
 	"\x04type\x18\x04 \x01(\x0e2 .kave.control.v1.EnvironmentTypeR\x04type\"'\n" +
 	"\x15GetEnvironmentRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"m\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"f\n" +
 	"\x17ListEnvironmentsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"\x84\x01\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"}\n" +
 	"\x18ListEnvironmentsResponse\x12@\n" +
-	"\fenvironments\x18\x01 \x03(\v2\x1c.kave.control.v1.EnvironmentR\fenvironments\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x91\x01\n" +
+	"\fenvironments\x18\x01 \x03(\v2\x1c.kave.control.v1.EnvironmentR\fenvironments\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"\x91\x01\n" +
 	"\x12CreateAgentRequest\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2006,19 +2094,21 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\n" +
 	"_policy_id\"!\n" +
 	"\x0fGetAgentRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"_\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"X\n" +
 	"\x11ListAgentsRequest\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"l\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"e\n" +
 	"\x12ListAgentsResponse\x12.\n" +
-	"\x06agents\x18\x01 \x03(\v2\x16.kave.control.v1.AgentR\x06agents\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"Z\n" +
+	"\x06agents\x18\x01 \x03(\v2\x16.kave.control.v1.AgentR\x06agents\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"Z\n" +
 	"\x12UpdateAgentRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x124\n" +
 	"\x06update\x18\x02 \x01(\v2\x1c.kave.control.v1.AgentUpdateR\x06update\"$\n" +
 	"\x12DeleteAgentRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"%\n" +
+	"\x13RestoreAgentRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x93\x01\n" +
 	"\x13CreatePolicyRequest\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x12\n" +
@@ -2026,15 +2116,15 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12/\n" +
 	"\x04mode\x18\x04 \x01(\x0e2\x1b.kave.control.v1.PolicyModeR\x04mode\"\"\n" +
 	"\x10GetPolicyRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"a\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"Z\n" +
 	"\x13ListPoliciesRequest\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"y\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"r\n" +
 	"\x14ListPoliciesResponse\x129\n" +
-	"\bpolicies\x18\x01 \x03(\v2\x1d.kave.control.v1.PolicyRecordR\bpolicies\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\\\n" +
+	"\bpolicies\x18\x01 \x03(\v2\x1d.kave.control.v1.PolicyRecordR\bpolicies\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"\\\n" +
 	"\x13UpdatePolicyRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x125\n" +
 	"\x06update\x18\x02 \x01(\v2\x1d.kave.control.v1.PolicyUpdateR\x06update\"C\n" +
@@ -2045,15 +2135,15 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\x05token\x18\x01 \x01(\v2\x1b.kave.control.v1.AgentTokenR\x05token\x12\x1b\n" +
 	"\traw_token\x18\x02 \x01(\tR\brawToken\"!\n" +
 	"\x0fGetTokenRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"c\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\\\n" +
 	"\x11ListTokensRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"q\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"j\n" +
 	"\x12ListTokensResponse\x123\n" +
-	"\x06tokens\x18\x01 \x03(\v2\x1b.kave.control.v1.AgentTokenR\x06tokens\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"<\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x1b.kave.control.v1.AgentTokenR\x06tokens\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"<\n" +
 	"\x12RevokeTokenRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x94\x01\n" +
@@ -2063,15 +2153,15 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12%\n" +
 	"\x0eencrypted_blob\x18\x04 \x01(\fR\rencryptedBlob\"&\n" +
 	"\x14GetCredentialRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x88\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x81\x01\n" +
 	"\x16ListCredentialsRequest\x129\n" +
 	"\x06filter\x18\x01 \x01(\v2!.kave.control.v1.CredentialFilterR\x06filter\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"\x89\x01\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"\x82\x01\n" +
 	"\x17ListCredentialsResponse\x12F\n" +
-	"\vcredentials\x18\x01 \x03(\v2$.kave.control.v1.ConnectorCredentialR\vcredentials\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"d\n" +
+	"\vcredentials\x18\x01 \x03(\v2$.kave.control.v1.ConnectorCredentialR\vcredentials\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"d\n" +
 	"\x17UpdateCredentialRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x129\n" +
 	"\x06update\x18\x02 \x01(\v2!.kave.control.v1.CredentialUpdateR\x06update\"W\n" +
@@ -2080,7 +2170,9 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\x12new_encrypted_blob\x18\x02 \x01(\fR\x10newEncryptedBlob\"A\n" +
 	"\x17RevokeCredentialRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason2\xbc\x13\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\")\n" +
+	"\x17DeleteCredentialRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id2\xca\x18\n" +
 	"\x13ControlPlaneService\x12_\n" +
 	"\x12CreateOrganization\x12*.kave.control.v1.CreateOrganizationRequest\x1a\x1d.kave.control.v1.Organization\x12Y\n" +
 	"\x0fGetOrganization\x12'.kave.control.v1.GetOrganizationRequest\x1a\x1d.kave.control.v1.Organization\x12j\n" +
@@ -2097,11 +2189,15 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\n" +
 	"ListAgents\x12\".kave.control.v1.ListAgentsRequest\x1a#.kave.control.v1.ListAgentsResponse\x12J\n" +
 	"\vUpdateAgent\x12#.kave.control.v1.UpdateAgentRequest\x1a\x16.kave.control.v1.Agent\x12J\n" +
-	"\vDeleteAgent\x12#.kave.control.v1.DeleteAgentRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
+	"\vDeleteAgent\x12#.kave.control.v1.DeleteAgentRequest\x1a\x16.google.protobuf.Empty\x12L\n" +
+	"\fRestoreAgent\x12$.kave.control.v1.RestoreAgentRequest\x1a\x16.kave.control.v1.Agent\x12S\n" +
 	"\fCreatePolicy\x12$.kave.control.v1.CreatePolicyRequest\x1a\x1d.kave.control.v1.PolicyRecord\x12M\n" +
 	"\tGetPolicy\x12!.kave.control.v1.GetPolicyRequest\x1a\x1d.kave.control.v1.PolicyRecord\x12[\n" +
 	"\fListPolicies\x12$.kave.control.v1.ListPoliciesRequest\x1a%.kave.control.v1.ListPoliciesResponse\x12S\n" +
-	"\fUpdatePolicy\x12$.kave.control.v1.UpdatePolicyRequest\x1a\x1d.kave.control.v1.PolicyRecord\x12X\n" +
+	"\fUpdatePolicy\x12$.kave.control.v1.UpdatePolicyRequest\x1a\x1d.kave.control.v1.PolicyRecord\x12L\n" +
+	"\fDeletePolicy\x12$.kave.control.v1.DeletePolicyRequest\x1a\x16.google.protobuf.Empty\x12Q\n" +
+	"\fExportPolicy\x12$.kave.control.v1.ExportPolicyRequest\x1a\x1b.kave.control.v1.PolicyYAML\x12a\n" +
+	"\x0eValidatePolicy\x12&.kave.control.v1.ValidatePolicyRequest\x1a'.kave.control.v1.ValidatePolicyResponse\x12X\n" +
 	"\vCreateToken\x12#.kave.control.v1.CreateTokenRequest\x1a$.kave.control.v1.CreateTokenResponse\x12I\n" +
 	"\bGetToken\x12 .kave.control.v1.GetTokenRequest\x1a\x1b.kave.control.v1.AgentToken\x12U\n" +
 	"\n" +
@@ -2112,7 +2208,11 @@ const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\x0fListCredentials\x12'.kave.control.v1.ListCredentialsRequest\x1a(.kave.control.v1.ListCredentialsResponse\x12b\n" +
 	"\x10UpdateCredential\x12(.kave.control.v1.UpdateCredentialRequest\x1a$.kave.control.v1.ConnectorCredential\x12b\n" +
 	"\x10RotateCredential\x12(.kave.control.v1.RotateCredentialRequest\x1a$.kave.control.v1.ConnectorCredential\x12T\n" +
-	"\x10RevokeCredential\x12(.kave.control.v1.RevokeCredentialRequest\x1a\x16.google.protobuf.EmptyB\xbe\x01\n" +
+	"\x10RevokeCredential\x12(.kave.control.v1.RevokeCredentialRequest\x1a\x16.google.protobuf.Empty\x12T\n" +
+	"\x10DeleteCredential\x12(.kave.control.v1.DeleteCredentialRequest\x1a\x16.google.protobuf.Empty\x12M\n" +
+	"\fCreateBudget\x12$.kave.control.v1.CreateBudgetRequest\x1a\x17.kave.control.v1.Budget\x12G\n" +
+	"\tGetBudget\x12!.kave.control.v1.GetBudgetRequest\x1a\x17.kave.control.v1.Budget\x12L\n" +
+	"\fDeleteBudget\x12$.kave.control.v1.DeleteBudgetRequest\x1a\x16.google.protobuf.EmptyB\xbe\x01\n" +
 	"\x13com.kave.control.v1B\fControlProtoP\x01Z;github.com/kave-io/kave/proto/gen/kave/control/v1;controlv1\xa2\x02\x03KCX\xaa\x02\x0fKave.Control.V1\xca\x02\x0fKave\\Control\\V1\xe2\x02\x1bKave\\Control\\V1\\GPBMetadata\xea\x02\x11Kave::Control::V1b\x06proto3"
 
 var (
@@ -2127,7 +2227,7 @@ func file_kave_control_v1_control_proto_rawDescGZIP() []byte {
 	return file_kave_control_v1_control_proto_rawDescData
 }
 
-var file_kave_control_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_kave_control_v1_control_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_kave_control_v1_control_proto_goTypes = []any{
 	(*CreateOrganizationRequest)(nil), // 0: kave.control.v1.CreateOrganizationRequest
 	(*GetOrganizationRequest)(nil),    // 1: kave.control.v1.GetOrganizationRequest
@@ -2147,54 +2247,65 @@ var file_kave_control_v1_control_proto_goTypes = []any{
 	(*ListAgentsResponse)(nil),        // 15: kave.control.v1.ListAgentsResponse
 	(*UpdateAgentRequest)(nil),        // 16: kave.control.v1.UpdateAgentRequest
 	(*DeleteAgentRequest)(nil),        // 17: kave.control.v1.DeleteAgentRequest
-	(*CreatePolicyRequest)(nil),       // 18: kave.control.v1.CreatePolicyRequest
-	(*GetPolicyRequest)(nil),          // 19: kave.control.v1.GetPolicyRequest
-	(*ListPoliciesRequest)(nil),       // 20: kave.control.v1.ListPoliciesRequest
-	(*ListPoliciesResponse)(nil),      // 21: kave.control.v1.ListPoliciesResponse
-	(*UpdatePolicyRequest)(nil),       // 22: kave.control.v1.UpdatePolicyRequest
-	(*CreateTokenRequest)(nil),        // 23: kave.control.v1.CreateTokenRequest
-	(*CreateTokenResponse)(nil),       // 24: kave.control.v1.CreateTokenResponse
-	(*GetTokenRequest)(nil),           // 25: kave.control.v1.GetTokenRequest
-	(*ListTokensRequest)(nil),         // 26: kave.control.v1.ListTokensRequest
-	(*ListTokensResponse)(nil),        // 27: kave.control.v1.ListTokensResponse
-	(*RevokeTokenRequest)(nil),        // 28: kave.control.v1.RevokeTokenRequest
-	(*CreateCredentialRequest)(nil),   // 29: kave.control.v1.CreateCredentialRequest
-	(*GetCredentialRequest)(nil),      // 30: kave.control.v1.GetCredentialRequest
-	(*ListCredentialsRequest)(nil),    // 31: kave.control.v1.ListCredentialsRequest
-	(*ListCredentialsResponse)(nil),   // 32: kave.control.v1.ListCredentialsResponse
-	(*UpdateCredentialRequest)(nil),   // 33: kave.control.v1.UpdateCredentialRequest
-	(*RotateCredentialRequest)(nil),   // 34: kave.control.v1.RotateCredentialRequest
-	(*RevokeCredentialRequest)(nil),   // 35: kave.control.v1.RevokeCredentialRequest
-	(*Organization)(nil),              // 36: kave.control.v1.Organization
-	(*Project)(nil),                   // 37: kave.control.v1.Project
-	(EnvironmentType)(0),              // 38: kave.control.v1.EnvironmentType
-	(*Environment)(nil),               // 39: kave.control.v1.Environment
-	(*Agent)(nil),                     // 40: kave.control.v1.Agent
-	(*AgentUpdate)(nil),               // 41: kave.control.v1.AgentUpdate
-	(PolicyMode)(0),                   // 42: kave.control.v1.PolicyMode
-	(*PolicyRecord)(nil),              // 43: kave.control.v1.PolicyRecord
-	(*PolicyUpdate)(nil),              // 44: kave.control.v1.PolicyUpdate
-	(*AgentToken)(nil),                // 45: kave.control.v1.AgentToken
-	(*CredentialFilter)(nil),          // 46: kave.control.v1.CredentialFilter
-	(*ConnectorCredential)(nil),       // 47: kave.control.v1.ConnectorCredential
-	(*CredentialUpdate)(nil),          // 48: kave.control.v1.CredentialUpdate
-	(*emptypb.Empty)(nil),             // 49: google.protobuf.Empty
+	(*RestoreAgentRequest)(nil),       // 18: kave.control.v1.RestoreAgentRequest
+	(*CreatePolicyRequest)(nil),       // 19: kave.control.v1.CreatePolicyRequest
+	(*GetPolicyRequest)(nil),          // 20: kave.control.v1.GetPolicyRequest
+	(*ListPoliciesRequest)(nil),       // 21: kave.control.v1.ListPoliciesRequest
+	(*ListPoliciesResponse)(nil),      // 22: kave.control.v1.ListPoliciesResponse
+	(*UpdatePolicyRequest)(nil),       // 23: kave.control.v1.UpdatePolicyRequest
+	(*CreateTokenRequest)(nil),        // 24: kave.control.v1.CreateTokenRequest
+	(*CreateTokenResponse)(nil),       // 25: kave.control.v1.CreateTokenResponse
+	(*GetTokenRequest)(nil),           // 26: kave.control.v1.GetTokenRequest
+	(*ListTokensRequest)(nil),         // 27: kave.control.v1.ListTokensRequest
+	(*ListTokensResponse)(nil),        // 28: kave.control.v1.ListTokensResponse
+	(*RevokeTokenRequest)(nil),        // 29: kave.control.v1.RevokeTokenRequest
+	(*CreateCredentialRequest)(nil),   // 30: kave.control.v1.CreateCredentialRequest
+	(*GetCredentialRequest)(nil),      // 31: kave.control.v1.GetCredentialRequest
+	(*ListCredentialsRequest)(nil),    // 32: kave.control.v1.ListCredentialsRequest
+	(*ListCredentialsResponse)(nil),   // 33: kave.control.v1.ListCredentialsResponse
+	(*UpdateCredentialRequest)(nil),   // 34: kave.control.v1.UpdateCredentialRequest
+	(*RotateCredentialRequest)(nil),   // 35: kave.control.v1.RotateCredentialRequest
+	(*RevokeCredentialRequest)(nil),   // 36: kave.control.v1.RevokeCredentialRequest
+	(*DeleteCredentialRequest)(nil),   // 37: kave.control.v1.DeleteCredentialRequest
+	(*Organization)(nil),              // 38: kave.control.v1.Organization
+	(*Project)(nil),                   // 39: kave.control.v1.Project
+	(EnvironmentType)(0),              // 40: kave.control.v1.EnvironmentType
+	(*Environment)(nil),               // 41: kave.control.v1.Environment
+	(*Agent)(nil),                     // 42: kave.control.v1.Agent
+	(*AgentUpdate)(nil),               // 43: kave.control.v1.AgentUpdate
+	(PolicyMode)(0),                   // 44: kave.control.v1.PolicyMode
+	(*PolicyRecord)(nil),              // 45: kave.control.v1.PolicyRecord
+	(*PolicyUpdate)(nil),              // 46: kave.control.v1.PolicyUpdate
+	(*AgentToken)(nil),                // 47: kave.control.v1.AgentToken
+	(*CredentialFilter)(nil),          // 48: kave.control.v1.CredentialFilter
+	(*ConnectorCredential)(nil),       // 49: kave.control.v1.ConnectorCredential
+	(*CredentialUpdate)(nil),          // 50: kave.control.v1.CredentialUpdate
+	(*DeletePolicyRequest)(nil),       // 51: kave.control.v1.DeletePolicyRequest
+	(*ExportPolicyRequest)(nil),       // 52: kave.control.v1.ExportPolicyRequest
+	(*ValidatePolicyRequest)(nil),     // 53: kave.control.v1.ValidatePolicyRequest
+	(*CreateBudgetRequest)(nil),       // 54: kave.control.v1.CreateBudgetRequest
+	(*GetBudgetRequest)(nil),          // 55: kave.control.v1.GetBudgetRequest
+	(*DeleteBudgetRequest)(nil),       // 56: kave.control.v1.DeleteBudgetRequest
+	(*emptypb.Empty)(nil),             // 57: google.protobuf.Empty
+	(*PolicyYAML)(nil),                // 58: kave.control.v1.PolicyYAML
+	(*ValidatePolicyResponse)(nil),    // 59: kave.control.v1.ValidatePolicyResponse
+	(*Budget)(nil),                    // 60: kave.control.v1.Budget
 }
 var file_kave_control_v1_control_proto_depIdxs = []int32{
-	36, // 0: kave.control.v1.ListOrganizationsResponse.organizations:type_name -> kave.control.v1.Organization
-	37, // 1: kave.control.v1.ListProjectsResponse.projects:type_name -> kave.control.v1.Project
-	38, // 2: kave.control.v1.CreateEnvironmentRequest.type:type_name -> kave.control.v1.EnvironmentType
-	39, // 3: kave.control.v1.ListEnvironmentsResponse.environments:type_name -> kave.control.v1.Environment
-	40, // 4: kave.control.v1.ListAgentsResponse.agents:type_name -> kave.control.v1.Agent
-	41, // 5: kave.control.v1.UpdateAgentRequest.update:type_name -> kave.control.v1.AgentUpdate
-	42, // 6: kave.control.v1.CreatePolicyRequest.mode:type_name -> kave.control.v1.PolicyMode
-	43, // 7: kave.control.v1.ListPoliciesResponse.policies:type_name -> kave.control.v1.PolicyRecord
-	44, // 8: kave.control.v1.UpdatePolicyRequest.update:type_name -> kave.control.v1.PolicyUpdate
-	45, // 9: kave.control.v1.CreateTokenResponse.token:type_name -> kave.control.v1.AgentToken
-	45, // 10: kave.control.v1.ListTokensResponse.tokens:type_name -> kave.control.v1.AgentToken
-	46, // 11: kave.control.v1.ListCredentialsRequest.filter:type_name -> kave.control.v1.CredentialFilter
-	47, // 12: kave.control.v1.ListCredentialsResponse.credentials:type_name -> kave.control.v1.ConnectorCredential
-	48, // 13: kave.control.v1.UpdateCredentialRequest.update:type_name -> kave.control.v1.CredentialUpdate
+	38, // 0: kave.control.v1.ListOrganizationsResponse.organizations:type_name -> kave.control.v1.Organization
+	39, // 1: kave.control.v1.ListProjectsResponse.projects:type_name -> kave.control.v1.Project
+	40, // 2: kave.control.v1.CreateEnvironmentRequest.type:type_name -> kave.control.v1.EnvironmentType
+	41, // 3: kave.control.v1.ListEnvironmentsResponse.environments:type_name -> kave.control.v1.Environment
+	42, // 4: kave.control.v1.ListAgentsResponse.agents:type_name -> kave.control.v1.Agent
+	43, // 5: kave.control.v1.UpdateAgentRequest.update:type_name -> kave.control.v1.AgentUpdate
+	44, // 6: kave.control.v1.CreatePolicyRequest.mode:type_name -> kave.control.v1.PolicyMode
+	45, // 7: kave.control.v1.ListPoliciesResponse.policies:type_name -> kave.control.v1.PolicyRecord
+	46, // 8: kave.control.v1.UpdatePolicyRequest.update:type_name -> kave.control.v1.PolicyUpdate
+	47, // 9: kave.control.v1.CreateTokenResponse.token:type_name -> kave.control.v1.AgentToken
+	47, // 10: kave.control.v1.ListTokensResponse.tokens:type_name -> kave.control.v1.AgentToken
+	48, // 11: kave.control.v1.ListCredentialsRequest.filter:type_name -> kave.control.v1.CredentialFilter
+	49, // 12: kave.control.v1.ListCredentialsResponse.credentials:type_name -> kave.control.v1.ConnectorCredential
+	50, // 13: kave.control.v1.UpdateCredentialRequest.update:type_name -> kave.control.v1.CredentialUpdate
 	0,  // 14: kave.control.v1.ControlPlaneService.CreateOrganization:input_type -> kave.control.v1.CreateOrganizationRequest
 	1,  // 15: kave.control.v1.ControlPlaneService.GetOrganization:input_type -> kave.control.v1.GetOrganizationRequest
 	2,  // 16: kave.control.v1.ControlPlaneService.ListOrganizations:input_type -> kave.control.v1.ListOrganizationsRequest
@@ -2209,50 +2320,66 @@ var file_kave_control_v1_control_proto_depIdxs = []int32{
 	14, // 25: kave.control.v1.ControlPlaneService.ListAgents:input_type -> kave.control.v1.ListAgentsRequest
 	16, // 26: kave.control.v1.ControlPlaneService.UpdateAgent:input_type -> kave.control.v1.UpdateAgentRequest
 	17, // 27: kave.control.v1.ControlPlaneService.DeleteAgent:input_type -> kave.control.v1.DeleteAgentRequest
-	18, // 28: kave.control.v1.ControlPlaneService.CreatePolicy:input_type -> kave.control.v1.CreatePolicyRequest
-	19, // 29: kave.control.v1.ControlPlaneService.GetPolicy:input_type -> kave.control.v1.GetPolicyRequest
-	20, // 30: kave.control.v1.ControlPlaneService.ListPolicies:input_type -> kave.control.v1.ListPoliciesRequest
-	22, // 31: kave.control.v1.ControlPlaneService.UpdatePolicy:input_type -> kave.control.v1.UpdatePolicyRequest
-	23, // 32: kave.control.v1.ControlPlaneService.CreateToken:input_type -> kave.control.v1.CreateTokenRequest
-	25, // 33: kave.control.v1.ControlPlaneService.GetToken:input_type -> kave.control.v1.GetTokenRequest
-	26, // 34: kave.control.v1.ControlPlaneService.ListTokens:input_type -> kave.control.v1.ListTokensRequest
-	28, // 35: kave.control.v1.ControlPlaneService.RevokeToken:input_type -> kave.control.v1.RevokeTokenRequest
-	29, // 36: kave.control.v1.ControlPlaneService.CreateCredential:input_type -> kave.control.v1.CreateCredentialRequest
-	30, // 37: kave.control.v1.ControlPlaneService.GetCredential:input_type -> kave.control.v1.GetCredentialRequest
-	31, // 38: kave.control.v1.ControlPlaneService.ListCredentials:input_type -> kave.control.v1.ListCredentialsRequest
-	33, // 39: kave.control.v1.ControlPlaneService.UpdateCredential:input_type -> kave.control.v1.UpdateCredentialRequest
-	34, // 40: kave.control.v1.ControlPlaneService.RotateCredential:input_type -> kave.control.v1.RotateCredentialRequest
-	35, // 41: kave.control.v1.ControlPlaneService.RevokeCredential:input_type -> kave.control.v1.RevokeCredentialRequest
-	36, // 42: kave.control.v1.ControlPlaneService.CreateOrganization:output_type -> kave.control.v1.Organization
-	36, // 43: kave.control.v1.ControlPlaneService.GetOrganization:output_type -> kave.control.v1.Organization
-	3,  // 44: kave.control.v1.ControlPlaneService.ListOrganizations:output_type -> kave.control.v1.ListOrganizationsResponse
-	37, // 45: kave.control.v1.ControlPlaneService.CreateProject:output_type -> kave.control.v1.Project
-	37, // 46: kave.control.v1.ControlPlaneService.GetProject:output_type -> kave.control.v1.Project
-	7,  // 47: kave.control.v1.ControlPlaneService.ListProjects:output_type -> kave.control.v1.ListProjectsResponse
-	39, // 48: kave.control.v1.ControlPlaneService.CreateEnvironment:output_type -> kave.control.v1.Environment
-	39, // 49: kave.control.v1.ControlPlaneService.GetEnvironment:output_type -> kave.control.v1.Environment
-	11, // 50: kave.control.v1.ControlPlaneService.ListEnvironments:output_type -> kave.control.v1.ListEnvironmentsResponse
-	40, // 51: kave.control.v1.ControlPlaneService.CreateAgent:output_type -> kave.control.v1.Agent
-	40, // 52: kave.control.v1.ControlPlaneService.GetAgent:output_type -> kave.control.v1.Agent
-	15, // 53: kave.control.v1.ControlPlaneService.ListAgents:output_type -> kave.control.v1.ListAgentsResponse
-	40, // 54: kave.control.v1.ControlPlaneService.UpdateAgent:output_type -> kave.control.v1.Agent
-	49, // 55: kave.control.v1.ControlPlaneService.DeleteAgent:output_type -> google.protobuf.Empty
-	43, // 56: kave.control.v1.ControlPlaneService.CreatePolicy:output_type -> kave.control.v1.PolicyRecord
-	43, // 57: kave.control.v1.ControlPlaneService.GetPolicy:output_type -> kave.control.v1.PolicyRecord
-	21, // 58: kave.control.v1.ControlPlaneService.ListPolicies:output_type -> kave.control.v1.ListPoliciesResponse
-	43, // 59: kave.control.v1.ControlPlaneService.UpdatePolicy:output_type -> kave.control.v1.PolicyRecord
-	24, // 60: kave.control.v1.ControlPlaneService.CreateToken:output_type -> kave.control.v1.CreateTokenResponse
-	45, // 61: kave.control.v1.ControlPlaneService.GetToken:output_type -> kave.control.v1.AgentToken
-	27, // 62: kave.control.v1.ControlPlaneService.ListTokens:output_type -> kave.control.v1.ListTokensResponse
-	49, // 63: kave.control.v1.ControlPlaneService.RevokeToken:output_type -> google.protobuf.Empty
-	47, // 64: kave.control.v1.ControlPlaneService.CreateCredential:output_type -> kave.control.v1.ConnectorCredential
-	47, // 65: kave.control.v1.ControlPlaneService.GetCredential:output_type -> kave.control.v1.ConnectorCredential
-	32, // 66: kave.control.v1.ControlPlaneService.ListCredentials:output_type -> kave.control.v1.ListCredentialsResponse
-	47, // 67: kave.control.v1.ControlPlaneService.UpdateCredential:output_type -> kave.control.v1.ConnectorCredential
-	47, // 68: kave.control.v1.ControlPlaneService.RotateCredential:output_type -> kave.control.v1.ConnectorCredential
-	49, // 69: kave.control.v1.ControlPlaneService.RevokeCredential:output_type -> google.protobuf.Empty
-	42, // [42:70] is the sub-list for method output_type
-	14, // [14:42] is the sub-list for method input_type
+	18, // 28: kave.control.v1.ControlPlaneService.RestoreAgent:input_type -> kave.control.v1.RestoreAgentRequest
+	19, // 29: kave.control.v1.ControlPlaneService.CreatePolicy:input_type -> kave.control.v1.CreatePolicyRequest
+	20, // 30: kave.control.v1.ControlPlaneService.GetPolicy:input_type -> kave.control.v1.GetPolicyRequest
+	21, // 31: kave.control.v1.ControlPlaneService.ListPolicies:input_type -> kave.control.v1.ListPoliciesRequest
+	23, // 32: kave.control.v1.ControlPlaneService.UpdatePolicy:input_type -> kave.control.v1.UpdatePolicyRequest
+	51, // 33: kave.control.v1.ControlPlaneService.DeletePolicy:input_type -> kave.control.v1.DeletePolicyRequest
+	52, // 34: kave.control.v1.ControlPlaneService.ExportPolicy:input_type -> kave.control.v1.ExportPolicyRequest
+	53, // 35: kave.control.v1.ControlPlaneService.ValidatePolicy:input_type -> kave.control.v1.ValidatePolicyRequest
+	24, // 36: kave.control.v1.ControlPlaneService.CreateToken:input_type -> kave.control.v1.CreateTokenRequest
+	26, // 37: kave.control.v1.ControlPlaneService.GetToken:input_type -> kave.control.v1.GetTokenRequest
+	27, // 38: kave.control.v1.ControlPlaneService.ListTokens:input_type -> kave.control.v1.ListTokensRequest
+	29, // 39: kave.control.v1.ControlPlaneService.RevokeToken:input_type -> kave.control.v1.RevokeTokenRequest
+	30, // 40: kave.control.v1.ControlPlaneService.CreateCredential:input_type -> kave.control.v1.CreateCredentialRequest
+	31, // 41: kave.control.v1.ControlPlaneService.GetCredential:input_type -> kave.control.v1.GetCredentialRequest
+	32, // 42: kave.control.v1.ControlPlaneService.ListCredentials:input_type -> kave.control.v1.ListCredentialsRequest
+	34, // 43: kave.control.v1.ControlPlaneService.UpdateCredential:input_type -> kave.control.v1.UpdateCredentialRequest
+	35, // 44: kave.control.v1.ControlPlaneService.RotateCredential:input_type -> kave.control.v1.RotateCredentialRequest
+	36, // 45: kave.control.v1.ControlPlaneService.RevokeCredential:input_type -> kave.control.v1.RevokeCredentialRequest
+	37, // 46: kave.control.v1.ControlPlaneService.DeleteCredential:input_type -> kave.control.v1.DeleteCredentialRequest
+	54, // 47: kave.control.v1.ControlPlaneService.CreateBudget:input_type -> kave.control.v1.CreateBudgetRequest
+	55, // 48: kave.control.v1.ControlPlaneService.GetBudget:input_type -> kave.control.v1.GetBudgetRequest
+	56, // 49: kave.control.v1.ControlPlaneService.DeleteBudget:input_type -> kave.control.v1.DeleteBudgetRequest
+	38, // 50: kave.control.v1.ControlPlaneService.CreateOrganization:output_type -> kave.control.v1.Organization
+	38, // 51: kave.control.v1.ControlPlaneService.GetOrganization:output_type -> kave.control.v1.Organization
+	3,  // 52: kave.control.v1.ControlPlaneService.ListOrganizations:output_type -> kave.control.v1.ListOrganizationsResponse
+	39, // 53: kave.control.v1.ControlPlaneService.CreateProject:output_type -> kave.control.v1.Project
+	39, // 54: kave.control.v1.ControlPlaneService.GetProject:output_type -> kave.control.v1.Project
+	7,  // 55: kave.control.v1.ControlPlaneService.ListProjects:output_type -> kave.control.v1.ListProjectsResponse
+	41, // 56: kave.control.v1.ControlPlaneService.CreateEnvironment:output_type -> kave.control.v1.Environment
+	41, // 57: kave.control.v1.ControlPlaneService.GetEnvironment:output_type -> kave.control.v1.Environment
+	11, // 58: kave.control.v1.ControlPlaneService.ListEnvironments:output_type -> kave.control.v1.ListEnvironmentsResponse
+	42, // 59: kave.control.v1.ControlPlaneService.CreateAgent:output_type -> kave.control.v1.Agent
+	42, // 60: kave.control.v1.ControlPlaneService.GetAgent:output_type -> kave.control.v1.Agent
+	15, // 61: kave.control.v1.ControlPlaneService.ListAgents:output_type -> kave.control.v1.ListAgentsResponse
+	42, // 62: kave.control.v1.ControlPlaneService.UpdateAgent:output_type -> kave.control.v1.Agent
+	57, // 63: kave.control.v1.ControlPlaneService.DeleteAgent:output_type -> google.protobuf.Empty
+	42, // 64: kave.control.v1.ControlPlaneService.RestoreAgent:output_type -> kave.control.v1.Agent
+	45, // 65: kave.control.v1.ControlPlaneService.CreatePolicy:output_type -> kave.control.v1.PolicyRecord
+	45, // 66: kave.control.v1.ControlPlaneService.GetPolicy:output_type -> kave.control.v1.PolicyRecord
+	22, // 67: kave.control.v1.ControlPlaneService.ListPolicies:output_type -> kave.control.v1.ListPoliciesResponse
+	45, // 68: kave.control.v1.ControlPlaneService.UpdatePolicy:output_type -> kave.control.v1.PolicyRecord
+	57, // 69: kave.control.v1.ControlPlaneService.DeletePolicy:output_type -> google.protobuf.Empty
+	58, // 70: kave.control.v1.ControlPlaneService.ExportPolicy:output_type -> kave.control.v1.PolicyYAML
+	59, // 71: kave.control.v1.ControlPlaneService.ValidatePolicy:output_type -> kave.control.v1.ValidatePolicyResponse
+	25, // 72: kave.control.v1.ControlPlaneService.CreateToken:output_type -> kave.control.v1.CreateTokenResponse
+	47, // 73: kave.control.v1.ControlPlaneService.GetToken:output_type -> kave.control.v1.AgentToken
+	28, // 74: kave.control.v1.ControlPlaneService.ListTokens:output_type -> kave.control.v1.ListTokensResponse
+	57, // 75: kave.control.v1.ControlPlaneService.RevokeToken:output_type -> google.protobuf.Empty
+	49, // 76: kave.control.v1.ControlPlaneService.CreateCredential:output_type -> kave.control.v1.ConnectorCredential
+	49, // 77: kave.control.v1.ControlPlaneService.GetCredential:output_type -> kave.control.v1.ConnectorCredential
+	33, // 78: kave.control.v1.ControlPlaneService.ListCredentials:output_type -> kave.control.v1.ListCredentialsResponse
+	49, // 79: kave.control.v1.ControlPlaneService.UpdateCredential:output_type -> kave.control.v1.ConnectorCredential
+	49, // 80: kave.control.v1.ControlPlaneService.RotateCredential:output_type -> kave.control.v1.ConnectorCredential
+	57, // 81: kave.control.v1.ControlPlaneService.RevokeCredential:output_type -> google.protobuf.Empty
+	57, // 82: kave.control.v1.ControlPlaneService.DeleteCredential:output_type -> google.protobuf.Empty
+	60, // 83: kave.control.v1.ControlPlaneService.CreateBudget:output_type -> kave.control.v1.Budget
+	60, // 84: kave.control.v1.ControlPlaneService.GetBudget:output_type -> kave.control.v1.Budget
+	57, // 85: kave.control.v1.ControlPlaneService.DeleteBudget:output_type -> google.protobuf.Empty
+	50, // [50:86] is the sub-list for method output_type
+	14, // [14:50] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
 	14, // [14:14] is the sub-list for extension extendee
 	0,  // [0:14] is the sub-list for field type_name
@@ -2264,6 +2391,7 @@ func file_kave_control_v1_control_proto_init() {
 		return
 	}
 	file_kave_control_v1_agent_proto_init()
+	file_kave_control_v1_budget_proto_init()
 	file_kave_control_v1_credential_proto_init()
 	file_kave_control_v1_environment_proto_init()
 	file_kave_control_v1_org_proto_init()
@@ -2277,7 +2405,7 @@ func file_kave_control_v1_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kave_control_v1_control_proto_rawDesc), len(file_kave_control_v1_control_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   36,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

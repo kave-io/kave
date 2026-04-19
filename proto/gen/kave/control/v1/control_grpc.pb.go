@@ -34,10 +34,14 @@ const (
 	ControlPlaneService_ListAgents_FullMethodName         = "/kave.control.v1.ControlPlaneService/ListAgents"
 	ControlPlaneService_UpdateAgent_FullMethodName        = "/kave.control.v1.ControlPlaneService/UpdateAgent"
 	ControlPlaneService_DeleteAgent_FullMethodName        = "/kave.control.v1.ControlPlaneService/DeleteAgent"
+	ControlPlaneService_RestoreAgent_FullMethodName       = "/kave.control.v1.ControlPlaneService/RestoreAgent"
 	ControlPlaneService_CreatePolicy_FullMethodName       = "/kave.control.v1.ControlPlaneService/CreatePolicy"
 	ControlPlaneService_GetPolicy_FullMethodName          = "/kave.control.v1.ControlPlaneService/GetPolicy"
 	ControlPlaneService_ListPolicies_FullMethodName       = "/kave.control.v1.ControlPlaneService/ListPolicies"
 	ControlPlaneService_UpdatePolicy_FullMethodName       = "/kave.control.v1.ControlPlaneService/UpdatePolicy"
+	ControlPlaneService_DeletePolicy_FullMethodName       = "/kave.control.v1.ControlPlaneService/DeletePolicy"
+	ControlPlaneService_ExportPolicy_FullMethodName       = "/kave.control.v1.ControlPlaneService/ExportPolicy"
+	ControlPlaneService_ValidatePolicy_FullMethodName     = "/kave.control.v1.ControlPlaneService/ValidatePolicy"
 	ControlPlaneService_CreateToken_FullMethodName        = "/kave.control.v1.ControlPlaneService/CreateToken"
 	ControlPlaneService_GetToken_FullMethodName           = "/kave.control.v1.ControlPlaneService/GetToken"
 	ControlPlaneService_ListTokens_FullMethodName         = "/kave.control.v1.ControlPlaneService/ListTokens"
@@ -48,6 +52,10 @@ const (
 	ControlPlaneService_UpdateCredential_FullMethodName   = "/kave.control.v1.ControlPlaneService/UpdateCredential"
 	ControlPlaneService_RotateCredential_FullMethodName   = "/kave.control.v1.ControlPlaneService/RotateCredential"
 	ControlPlaneService_RevokeCredential_FullMethodName   = "/kave.control.v1.ControlPlaneService/RevokeCredential"
+	ControlPlaneService_DeleteCredential_FullMethodName   = "/kave.control.v1.ControlPlaneService/DeleteCredential"
+	ControlPlaneService_CreateBudget_FullMethodName       = "/kave.control.v1.ControlPlaneService/CreateBudget"
+	ControlPlaneService_GetBudget_FullMethodName          = "/kave.control.v1.ControlPlaneService/GetBudget"
+	ControlPlaneService_DeleteBudget_FullMethodName       = "/kave.control.v1.ControlPlaneService/DeleteBudget"
 )
 
 // ControlPlaneServiceClient is the client API for ControlPlaneService service.
@@ -75,11 +83,15 @@ type ControlPlaneServiceClient interface {
 	ListAgents(ctx context.Context, in *ListAgentsRequest, opts ...grpc.CallOption) (*ListAgentsResponse, error)
 	UpdateAgent(ctx context.Context, in *UpdateAgentRequest, opts ...grpc.CallOption) (*Agent, error)
 	DeleteAgent(ctx context.Context, in *DeleteAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RestoreAgent(ctx context.Context, in *RestoreAgentRequest, opts ...grpc.CallOption) (*Agent, error)
 	// Policy operations
 	CreatePolicy(ctx context.Context, in *CreatePolicyRequest, opts ...grpc.CallOption) (*PolicyRecord, error)
 	GetPolicy(ctx context.Context, in *GetPolicyRequest, opts ...grpc.CallOption) (*PolicyRecord, error)
 	ListPolicies(ctx context.Context, in *ListPoliciesRequest, opts ...grpc.CallOption) (*ListPoliciesResponse, error)
 	UpdatePolicy(ctx context.Context, in *UpdatePolicyRequest, opts ...grpc.CallOption) (*PolicyRecord, error)
+	DeletePolicy(ctx context.Context, in *DeletePolicyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ExportPolicy(ctx context.Context, in *ExportPolicyRequest, opts ...grpc.CallOption) (*PolicyYAML, error)
+	ValidatePolicy(ctx context.Context, in *ValidatePolicyRequest, opts ...grpc.CallOption) (*ValidatePolicyResponse, error)
 	// Token operations
 	CreateToken(ctx context.Context, in *CreateTokenRequest, opts ...grpc.CallOption) (*CreateTokenResponse, error)
 	GetToken(ctx context.Context, in *GetTokenRequest, opts ...grpc.CallOption) (*AgentToken, error)
@@ -92,6 +104,11 @@ type ControlPlaneServiceClient interface {
 	UpdateCredential(ctx context.Context, in *UpdateCredentialRequest, opts ...grpc.CallOption) (*ConnectorCredential, error)
 	RotateCredential(ctx context.Context, in *RotateCredentialRequest, opts ...grpc.CallOption) (*ConnectorCredential, error)
 	RevokeCredential(ctx context.Context, in *RevokeCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Budget operations
+	CreateBudget(ctx context.Context, in *CreateBudgetRequest, opts ...grpc.CallOption) (*Budget, error)
+	GetBudget(ctx context.Context, in *GetBudgetRequest, opts ...grpc.CallOption) (*Budget, error)
+	DeleteBudget(ctx context.Context, in *DeleteBudgetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type controlPlaneServiceClient struct {
@@ -242,6 +259,16 @@ func (c *controlPlaneServiceClient) DeleteAgent(ctx context.Context, in *DeleteA
 	return out, nil
 }
 
+func (c *controlPlaneServiceClient) RestoreAgent(ctx context.Context, in *RestoreAgentRequest, opts ...grpc.CallOption) (*Agent, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Agent)
+	err := c.cc.Invoke(ctx, ControlPlaneService_RestoreAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *controlPlaneServiceClient) CreatePolicy(ctx context.Context, in *CreatePolicyRequest, opts ...grpc.CallOption) (*PolicyRecord, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PolicyRecord)
@@ -276,6 +303,36 @@ func (c *controlPlaneServiceClient) UpdatePolicy(ctx context.Context, in *Update
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PolicyRecord)
 	err := c.cc.Invoke(ctx, ControlPlaneService_UpdatePolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlPlaneServiceClient) DeletePolicy(ctx context.Context, in *DeletePolicyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, ControlPlaneService_DeletePolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlPlaneServiceClient) ExportPolicy(ctx context.Context, in *ExportPolicyRequest, opts ...grpc.CallOption) (*PolicyYAML, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PolicyYAML)
+	err := c.cc.Invoke(ctx, ControlPlaneService_ExportPolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlPlaneServiceClient) ValidatePolicy(ctx context.Context, in *ValidatePolicyRequest, opts ...grpc.CallOption) (*ValidatePolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidatePolicyResponse)
+	err := c.cc.Invoke(ctx, ControlPlaneService_ValidatePolicy_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -382,6 +439,46 @@ func (c *controlPlaneServiceClient) RevokeCredential(ctx context.Context, in *Re
 	return out, nil
 }
 
+func (c *controlPlaneServiceClient) DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, ControlPlaneService_DeleteCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlPlaneServiceClient) CreateBudget(ctx context.Context, in *CreateBudgetRequest, opts ...grpc.CallOption) (*Budget, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Budget)
+	err := c.cc.Invoke(ctx, ControlPlaneService_CreateBudget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlPlaneServiceClient) GetBudget(ctx context.Context, in *GetBudgetRequest, opts ...grpc.CallOption) (*Budget, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Budget)
+	err := c.cc.Invoke(ctx, ControlPlaneService_GetBudget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *controlPlaneServiceClient) DeleteBudget(ctx context.Context, in *DeleteBudgetRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, ControlPlaneService_DeleteBudget_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ControlPlaneServiceServer is the server API for ControlPlaneService service.
 // All implementations must embed UnimplementedControlPlaneServiceServer
 // for forward compatibility.
@@ -407,11 +504,15 @@ type ControlPlaneServiceServer interface {
 	ListAgents(context.Context, *ListAgentsRequest) (*ListAgentsResponse, error)
 	UpdateAgent(context.Context, *UpdateAgentRequest) (*Agent, error)
 	DeleteAgent(context.Context, *DeleteAgentRequest) (*emptypb.Empty, error)
+	RestoreAgent(context.Context, *RestoreAgentRequest) (*Agent, error)
 	// Policy operations
 	CreatePolicy(context.Context, *CreatePolicyRequest) (*PolicyRecord, error)
 	GetPolicy(context.Context, *GetPolicyRequest) (*PolicyRecord, error)
 	ListPolicies(context.Context, *ListPoliciesRequest) (*ListPoliciesResponse, error)
 	UpdatePolicy(context.Context, *UpdatePolicyRequest) (*PolicyRecord, error)
+	DeletePolicy(context.Context, *DeletePolicyRequest) (*emptypb.Empty, error)
+	ExportPolicy(context.Context, *ExportPolicyRequest) (*PolicyYAML, error)
+	ValidatePolicy(context.Context, *ValidatePolicyRequest) (*ValidatePolicyResponse, error)
 	// Token operations
 	CreateToken(context.Context, *CreateTokenRequest) (*CreateTokenResponse, error)
 	GetToken(context.Context, *GetTokenRequest) (*AgentToken, error)
@@ -424,6 +525,11 @@ type ControlPlaneServiceServer interface {
 	UpdateCredential(context.Context, *UpdateCredentialRequest) (*ConnectorCredential, error)
 	RotateCredential(context.Context, *RotateCredentialRequest) (*ConnectorCredential, error)
 	RevokeCredential(context.Context, *RevokeCredentialRequest) (*emptypb.Empty, error)
+	DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error)
+	// Budget operations
+	CreateBudget(context.Context, *CreateBudgetRequest) (*Budget, error)
+	GetBudget(context.Context, *GetBudgetRequest) (*Budget, error)
+	DeleteBudget(context.Context, *DeleteBudgetRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedControlPlaneServiceServer()
 }
 
@@ -476,6 +582,9 @@ func (UnimplementedControlPlaneServiceServer) UpdateAgent(context.Context, *Upda
 func (UnimplementedControlPlaneServiceServer) DeleteAgent(context.Context, *DeleteAgentRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteAgent not implemented")
 }
+func (UnimplementedControlPlaneServiceServer) RestoreAgent(context.Context, *RestoreAgentRequest) (*Agent, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RestoreAgent not implemented")
+}
 func (UnimplementedControlPlaneServiceServer) CreatePolicy(context.Context, *CreatePolicyRequest) (*PolicyRecord, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreatePolicy not implemented")
 }
@@ -487,6 +596,15 @@ func (UnimplementedControlPlaneServiceServer) ListPolicies(context.Context, *Lis
 }
 func (UnimplementedControlPlaneServiceServer) UpdatePolicy(context.Context, *UpdatePolicyRequest) (*PolicyRecord, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdatePolicy not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) DeletePolicy(context.Context, *DeletePolicyRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeletePolicy not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) ExportPolicy(context.Context, *ExportPolicyRequest) (*PolicyYAML, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExportPolicy not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) ValidatePolicy(context.Context, *ValidatePolicyRequest) (*ValidatePolicyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidatePolicy not implemented")
 }
 func (UnimplementedControlPlaneServiceServer) CreateToken(context.Context, *CreateTokenRequest) (*CreateTokenResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateToken not implemented")
@@ -517,6 +635,18 @@ func (UnimplementedControlPlaneServiceServer) RotateCredential(context.Context, 
 }
 func (UnimplementedControlPlaneServiceServer) RevokeCredential(context.Context, *RevokeCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RevokeCredential not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteCredential not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) CreateBudget(context.Context, *CreateBudgetRequest) (*Budget, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateBudget not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) GetBudget(context.Context, *GetBudgetRequest) (*Budget, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetBudget not implemented")
+}
+func (UnimplementedControlPlaneServiceServer) DeleteBudget(context.Context, *DeleteBudgetRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteBudget not implemented")
 }
 func (UnimplementedControlPlaneServiceServer) mustEmbedUnimplementedControlPlaneServiceServer() {}
 func (UnimplementedControlPlaneServiceServer) testEmbeddedByValue()                             {}
@@ -791,6 +921,24 @@ func _ControlPlaneService_DeleteAgent_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ControlPlaneService_RestoreAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RestoreAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).RestoreAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_RestoreAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).RestoreAgent(ctx, req.(*RestoreAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ControlPlaneService_CreatePolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreatePolicyRequest)
 	if err := dec(in); err != nil {
@@ -859,6 +1007,60 @@ func _ControlPlaneService_UpdatePolicy_Handler(srv interface{}, ctx context.Cont
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ControlPlaneServiceServer).UpdatePolicy(ctx, req.(*UpdatePolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ControlPlaneService_DeletePolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).DeletePolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_DeletePolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).DeletePolicy(ctx, req.(*DeletePolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ControlPlaneService_ExportPolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportPolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).ExportPolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_ExportPolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).ExportPolicy(ctx, req.(*ExportPolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ControlPlaneService_ValidatePolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidatePolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).ValidatePolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_ValidatePolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).ValidatePolicy(ctx, req.(*ValidatePolicyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1043,6 +1245,78 @@ func _ControlPlaneService_RevokeCredential_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ControlPlaneService_DeleteCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteCredentialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).DeleteCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_DeleteCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).DeleteCredential(ctx, req.(*DeleteCredentialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ControlPlaneService_CreateBudget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateBudgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).CreateBudget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_CreateBudget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).CreateBudget(ctx, req.(*CreateBudgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ControlPlaneService_GetBudget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBudgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).GetBudget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_GetBudget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).GetBudget(ctx, req.(*GetBudgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ControlPlaneService_DeleteBudget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteBudgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ControlPlaneServiceServer).DeleteBudget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ControlPlaneService_DeleteBudget_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ControlPlaneServiceServer).DeleteBudget(ctx, req.(*DeleteBudgetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ControlPlaneService_ServiceDesc is the grpc.ServiceDesc for ControlPlaneService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1107,6 +1381,10 @@ var ControlPlaneService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ControlPlaneService_DeleteAgent_Handler,
 		},
 		{
+			MethodName: "RestoreAgent",
+			Handler:    _ControlPlaneService_RestoreAgent_Handler,
+		},
+		{
 			MethodName: "CreatePolicy",
 			Handler:    _ControlPlaneService_CreatePolicy_Handler,
 		},
@@ -1121,6 +1399,18 @@ var ControlPlaneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdatePolicy",
 			Handler:    _ControlPlaneService_UpdatePolicy_Handler,
+		},
+		{
+			MethodName: "DeletePolicy",
+			Handler:    _ControlPlaneService_DeletePolicy_Handler,
+		},
+		{
+			MethodName: "ExportPolicy",
+			Handler:    _ControlPlaneService_ExportPolicy_Handler,
+		},
+		{
+			MethodName: "ValidatePolicy",
+			Handler:    _ControlPlaneService_ValidatePolicy_Handler,
 		},
 		{
 			MethodName: "CreateToken",
@@ -1161,6 +1451,22 @@ var ControlPlaneService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RevokeCredential",
 			Handler:    _ControlPlaneService_RevokeCredential_Handler,
+		},
+		{
+			MethodName: "DeleteCredential",
+			Handler:    _ControlPlaneService_DeleteCredential_Handler,
+		},
+		{
+			MethodName: "CreateBudget",
+			Handler:    _ControlPlaneService_CreateBudget_Handler,
+		},
+		{
+			MethodName: "GetBudget",
+			Handler:    _ControlPlaneService_GetBudget_Handler,
+		},
+		{
+			MethodName: "DeleteBudget",
+			Handler:    _ControlPlaneService_DeleteBudget_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

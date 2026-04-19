@@ -6,23 +6,20 @@ import (
 
 	appcontrol "github.com/kave-io/kave/app/control"
 	appruntime "github.com/kave-io/kave/app/runtime"
-	"github.com/kave-io/kave/core/bus"
-	"github.com/kave-io/kave/core/store"
 	"google.golang.org/grpc"
 )
 
 // Server exposes the control-plane and runtime APIs over gRPC.
 type Server struct {
-	app  store.AppStore
 	grpc *grpc.Server
 }
 
 // New constructs a gRPC server and registers all service handlers.
-func New(app store.AppStore, spans store.SpanStore, b *bus.Bus) *Server {
+func New(control *appcontrol.Server, runtime *appruntime.Server) *Server {
 	g := grpc.NewServer()
-	appcontrol.New(app).Register(g)
-	appruntime.New(app, spans, b).Register(g)
-	srv := &Server{app: app, grpc: g}
+	control.Register(g)
+	runtime.Register(g)
+	srv := &Server{grpc: g}
 	return srv
 }
 

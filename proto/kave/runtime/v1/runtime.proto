@@ -53,12 +53,12 @@ message GetRunRequest {
 message ListRunsRequest {
   RunFilter filter = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListRunsResponse {
   repeated RunRecord runs = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 message UpdateRunRequest {
@@ -97,12 +97,12 @@ message GetActionRequest {
 message ListActionsRequest {
   ActionFilter filter = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message ListActionsResponse {
   repeated ActionRecord actions = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 // --- Span ---
@@ -123,12 +123,12 @@ message GetSpanRequest {
 message QuerySpansRequest {
   SpanFilter filter = 1;
   int32 limit = 2;
-  string page_token = 3;
+  string cursor = 3;
 }
 
 message QuerySpansResponse {
   repeated SpanRow spans = 1;
-  string next_page_token = 2;
+  string next_cursor = 2;
 }
 
 // --- Cost ---

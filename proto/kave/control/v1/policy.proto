@@ -89,3 +89,24 @@ message PolicyUpdate {
   optional PolicyStatus status = 14;
   optional string updated_by = 15;
 }
+
+message DeletePolicyRequest {
+  string id = 1;
+}
+
+message ExportPolicyRequest {
+  string id = 1;
+}
+
+message PolicyYAML {
+  string yaml = 1;
+}
+
+message ValidatePolicyRequest {
+  string yaml = 1;
+}
+
+message ValidatePolicyResponse {
+  bool ok = 1;
+  repeated string issues = 2;
+}

@@ -80,6 +80,24 @@ func (s *SQLiteAppStore) GetOrgBySlug(ctx context.Context, slug string) (*contro
 	return &o, err
 }
 
+func (s *SQLiteAppStore) ListOrgs(ctx context.Context, page store.Page) (store.PageResult[*control.Organization], error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, slug, plan, created_at, updated_at FROM orgs ORDER BY created_at ASC`)
+	if err != nil {
+		return store.PageResult[*control.Organization]{}, err
+	}
+	defer rows.Close()
+
+	var items []*control.Organization
+	for rows.Next() {
+		var o control.Organization
+		if err := rows.Scan(&o.ID, &o.Name, &o.Slug, &o.Plan, &o.CreatedAt, &o.UpdatedAt); err != nil {
+			return store.PageResult[*control.Organization]{}, err
+		}
+		items = append(items, &o)
+	}
+	return store.Paginate(items, page), rows.Err()
+}
+
 // ── UserStore ─────────────────────────────────────────────────────────────────
 
 func (s *SQLiteAppStore) CreateUser(ctx context.Context, u *control.User) error {
@@ -145,10 +163,9 @@ func (s *SQLiteAppStore) GetMembership(ctx context.Context, orgID, userID string
 }
 
 func (s *SQLiteAppStore) ListMembers(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Membership], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, org_id, user_id, role, invited_by, created_at FROM memberships WHERE org_id = ? ORDER BY created_at ASC LIMIT ?`,
-		orgID, limit)
+		`SELECT id, org_id, user_id, role, invited_by, created_at FROM memberships WHERE org_id = ? ORDER BY created_at ASC`,
+		orgID)
 	if err != nil {
 		return store.PageResult[*control.Membership]{}, err
 	}
@@ -162,7 +179,7 @@ func (s *SQLiteAppStore) ListMembers(ctx context.Context, orgID string, page sto
 		}
 		items = append(items, &m)
 	}
-	return store.PageResult[*control.Membership]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 func (s *SQLiteAppStore) RemoveMember(ctx context.Context, orgID, userID string) error {
@@ -191,10 +208,9 @@ func (s *SQLiteAppStore) GetProject(ctx context.Context, id string) (*control.Pr
 }
 
 func (s *SQLiteAppStore) ListProjects(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Project], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, org_id, name, slug, description, created_at, updated_at FROM projects WHERE org_id = ? ORDER BY name ASC LIMIT ?`,
-		orgID, limit)
+		`SELECT id, org_id, name, slug, description, created_at, updated_at FROM projects WHERE org_id = ? ORDER BY name ASC`,
+		orgID)
 	if err != nil {
 		return store.PageResult[*control.Project]{}, err
 	}
@@ -208,7 +224,7 @@ func (s *SQLiteAppStore) ListProjects(ctx context.Context, orgID string, page st
 		}
 		items = append(items, &p)
 	}
-	return store.PageResult[*control.Project]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 // ── EnvironmentStore ──────────────────────────────────────────────────────────
@@ -243,10 +259,9 @@ func (s *SQLiteAppStore) GetEnvironmentBySlug(ctx context.Context, projectID, sl
 }
 
 func (s *SQLiteAppStore) ListEnvironments(ctx context.Context, projectID string, page store.Page) (store.PageResult[*control.Environment], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, project_id, name, slug, type, created_at, updated_at FROM environments WHERE project_id = ? ORDER BY name ASC LIMIT ?`,
-		projectID, limit)
+		`SELECT id, project_id, name, slug, type, created_at, updated_at FROM environments WHERE project_id = ? ORDER BY name ASC`,
+		projectID)
 	if err != nil {
 		return store.PageResult[*control.Environment]{}, err
 	}
@@ -260,7 +275,7 @@ func (s *SQLiteAppStore) ListEnvironments(ctx context.Context, projectID string,
 		}
 		items = append(items, &e)
 	}
-	return store.PageResult[*control.Environment]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 // ── PolicyStore ───────────────────────────────────────────────────────────────
@@ -306,14 +321,13 @@ func (s *SQLiteAppStore) GetAgentPolicy(ctx context.Context, agentID string) (*c
 }
 
 func (s *SQLiteAppStore) ListPolicies(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.PolicyRecord], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, project_id, env_id, name, description,
 		       allowed_types, allowed_connectors, allowed_methods,
 		       budget_cap_nanos, budget_period, budget_behavior,
 		       trace_input, trace_output, retention_days, config,
 		       version, mode, status, created_by, updated_by, created_at, updated_at
-		FROM policies WHERE env_id = ? ORDER BY name ASC LIMIT ?`, envID, limit)
+		FROM policies WHERE env_id = ? ORDER BY name ASC`, envID)
 	if err != nil {
 		return store.PageResult[*control.PolicyRecord]{}, err
 	}
@@ -327,7 +341,7 @@ func (s *SQLiteAppStore) ListPolicies(ctx context.Context, envID string, page st
 		}
 		items = append(items, p)
 	}
-	return store.PageResult[*control.PolicyRecord]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 func (s *SQLiteAppStore) UpdatePolicy(ctx context.Context, id string, u *control.PolicyUpdate) error {
@@ -402,6 +416,12 @@ func (s *SQLiteAppStore) UpdatePolicy(ctx context.Context, id string, u *control
 	query += ` WHERE id = ?`
 	args = append(args, id)
 	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+func (s *SQLiteAppStore) DeletePolicy(ctx context.Context, id string) error {
+	now := time.Now().UnixMilli()
+	_, err := s.db.ExecContext(ctx, `UPDATE policies SET status = 'archived', updated_at = ? WHERE id = ?`, now, id)
 	return err
 }
 
@@ -510,10 +530,9 @@ func (s *SQLiteAppStore) UpdateAgent(ctx context.Context, id string, update *con
 }
 
 func (s *SQLiteAppStore) ListAgents(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.Agent], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, project_id, env_id, name, description, policy_id, monthly_budget_nanos, status, metadata, created_by, updated_by, deleted_at, created_at, updated_at
-		FROM agents WHERE env_id = ? AND deleted_at IS NULL ORDER BY name ASC LIMIT ?`, envID, limit)
+		FROM agents WHERE env_id = ? AND deleted_at IS NULL ORDER BY name ASC`, envID)
 	if err != nil {
 		return store.PageResult[*control.Agent]{}, err
 	}
@@ -527,7 +546,7 @@ func (s *SQLiteAppStore) ListAgents(ctx context.Context, envID string, page stor
 		}
 		items = append(items, a)
 	}
-	return store.PageResult[*control.Agent]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 func (s *SQLiteAppStore) DeleteAgent(ctx context.Context, id, deletedBy string) error {
@@ -543,6 +562,44 @@ func (s *SQLiteAppStore) RestoreAgent(ctx context.Context, id, restoredBy string
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE agents SET deleted_at = NULL, updated_by = ?, updated_at = ? WHERE id = ?`,
 		restoredBy, now, id)
+	return err
+}
+
+// ── BudgetStore ──────────────────────────────────────────────────────────────
+
+func (s *SQLiteAppStore) CreateBudget(ctx context.Context, b *control.Budget) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO budgets (id, agent_id, hard_cap_nanos, soft_cap_nanos, period, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(agent_id) DO UPDATE SET
+			hard_cap_nanos = excluded.hard_cap_nanos,
+			soft_cap_nanos = excluded.soft_cap_nanos,
+			period = excluded.period,
+			updated_at = excluded.updated_at`,
+		b.ID, b.AgentID, int64(b.HardCap), int64(b.SoftCap), b.Period, b.CreatedAt, b.UpdatedAt)
+	return err
+}
+
+func (s *SQLiteAppStore) GetBudget(ctx context.Context, agentID string) (*control.Budget, error) {
+	var b control.Budget
+	var hardCapNanos, softCapNanos int64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, agent_id, hard_cap_nanos, soft_cap_nanos, period, created_at, updated_at
+		FROM budgets WHERE agent_id = ?`, agentID).Scan(
+		&b.ID, &b.AgentID, &hardCapNanos, &softCapNanos, &b.Period, &b.CreatedAt, &b.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	b.HardCap = money.Amount(hardCapNanos)
+	b.SoftCap = money.Amount(softCapNanos)
+	return &b, nil
+}
+
+func (s *SQLiteAppStore) DeleteBudget(ctx context.Context, agentID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM budgets WHERE agent_id = ?`, agentID)
 	return err
 }
 
@@ -686,8 +743,7 @@ func (s *SQLiteAppStore) ListRuns(ctx context.Context, filter *runtimemodel.RunF
 		query += ` AND started_at <= ?`
 		args = append(args, *filter.ToMs)
 	}
-	query += ` ORDER BY started_at DESC LIMIT ?`
-	args = append(args, pageLimit(page.Limit))
+	query += ` ORDER BY started_at DESC`
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -703,7 +759,7 @@ func (s *SQLiteAppStore) ListRuns(ctx context.Context, filter *runtimemodel.RunF
 		}
 		items = append(items, r)
 	}
-	return store.PageResult[*runtimemodel.RunRecord]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 func (s *SQLiteAppStore) scanRun(row *sql.Row) (*runtimemodel.RunRecord, error) {
@@ -782,13 +838,12 @@ func (s *SQLiteAppStore) GetAction(ctx context.Context, id string) (*runtimemode
 }
 
 func (s *SQLiteAppStore) ListActionsByRun(ctx context.Context, runID string, page store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, run_id, agent_id, project_id, env_id, parent_id,
 		       action_type, connector, method, input, output, error,
 		       started_at, ended_at, depth, seq, status, source,
 		       metadata, attempt, max_attempts, retry_reason, provider_req_id, external_id, created_at
-		FROM actions WHERE run_id = ? ORDER BY created_at ASC LIMIT ?`, runID, limit)
+		FROM actions WHERE run_id = ? ORDER BY created_at ASC`, runID)
 	if err != nil {
 		return store.PageResult[*runtimemodel.ActionRecord]{}, err
 	}
@@ -802,7 +857,7 @@ func (s *SQLiteAppStore) ListActionsByRun(ctx context.Context, runID string, pag
 		}
 		items = append(items, a)
 	}
-	return store.PageResult[*runtimemodel.ActionRecord]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 func (s *SQLiteAppStore) scanAction(row *sql.Row) (*runtimemodel.ActionRecord, error) {
@@ -1199,12 +1254,11 @@ func (s *SQLiteAppStore) GetToken(ctx context.Context, id string) (*control.Agen
 }
 
 func (s *SQLiteAppStore) ListTokens(ctx context.Context, agentID string, page store.Page) (store.PageResult[*control.AgentToken], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, agent_id, project_id, name, description, token_prefix, hash,
 		       issued_for, issued_by, connectors, methods, budget_cap_nanos, scopes,
 		       not_before, expires_at, last_used_at, revoked_at, revoked_by, revoke_reason, created_at
-		FROM agent_tokens WHERE agent_id = ? ORDER BY created_at DESC LIMIT ?`, agentID, limit)
+		FROM agent_tokens WHERE agent_id = ? ORDER BY created_at DESC`, agentID)
 	if err != nil {
 		return store.PageResult[*control.AgentToken]{}, err
 	}
@@ -1217,7 +1271,7 @@ func (s *SQLiteAppStore) ListTokens(ctx context.Context, agentID string, page st
 		}
 		items = append(items, t)
 	}
-	return store.PageResult[*control.AgentToken]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 func (s *SQLiteAppStore) scanToken(row *sql.Row) (*control.AgentToken, error) {
@@ -1313,15 +1367,14 @@ func (s *SQLiteAppStore) DeleteCredential(ctx context.Context, id string) error 
 }
 
 func (s *SQLiteAppStore) ListCredentials(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.ConnectorCredential], error) {
-	limit := pageLimit(page.Limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, project_id, env_id, connector_type, account_id, label, description,
 		       source_type, encrypted_blob, key_hash, wrapping_key_id,
 		       secret_ref, secret_version, status, version,
 		       expires_at, rotated_at, rotated_by, last_used_at, last_validated_at,
 		       created_by, created_at, updated_at, revoked_at, revoked_by, revoke_reason
-		FROM credentials WHERE env_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT ?`,
-		envID, limit)
+		FROM credentials WHERE env_id = ? AND status = 'active' ORDER BY created_at DESC`,
+		envID)
 	if err != nil {
 		return store.PageResult[*control.ConnectorCredential]{}, err
 	}
@@ -1335,7 +1388,7 @@ func (s *SQLiteAppStore) ListCredentials(ctx context.Context, envID string, page
 		}
 		items = append(items, c)
 	}
-	return store.PageResult[*control.ConnectorCredential]{Items: items}, rows.Err()
+	return store.Paginate(items, page), rows.Err()
 }
 
 func (s *SQLiteAppStore) ResolveCredential(ctx context.Context, filter *control.CredentialFilter) (*control.ConnectorCredential, error) {
@@ -1576,6 +1629,9 @@ func (t *txAppStore) GetOrg(ctx context.Context, id string) (*control.Organizati
 func (t *txAppStore) GetOrgBySlug(ctx context.Context, slug string) (*control.Organization, error) {
 	return t.parent.GetOrgBySlug(ctx, slug)
 }
+func (t *txAppStore) ListOrgs(ctx context.Context, page store.Page) (store.PageResult[*control.Organization], error) {
+	return t.parent.ListOrgs(ctx, page)
+}
 func (t *txAppStore) GetProject(ctx context.Context, id string) (*control.Project, error) {
 	return t.parent.GetProject(ctx, id)
 }
@@ -1596,6 +1652,9 @@ func (t *txAppStore) GetPolicy(ctx context.Context, id string) (*control.PolicyR
 }
 func (t *txAppStore) GetAgentPolicy(ctx context.Context, agentID string) (*control.PolicyRecord, error) {
 	return t.parent.GetAgentPolicy(ctx, agentID)
+}
+func (t *txAppStore) DeletePolicy(ctx context.Context, id string) error {
+	return t.parent.DeletePolicy(ctx, id)
 }
 func (t *txAppStore) GetRunByID(ctx context.Context, id string) (*runtimemodel.RunRecord, error) {
 	return t.parent.GetRunByID(ctx, id)
@@ -1651,12 +1710,12 @@ func (t *txAppStore) GetMembership(ctx context.Context, orgID, userID string) (*
 	return t.parent.GetMembership(ctx, orgID, userID)
 }
 
-func (t *txAppStore) CreateUser(_ context.Context, _ *control.User) error        { return nil }
+func (t *txAppStore) CreateUser(_ context.Context, _ *control.User) error { return nil }
 func (t *txAppStore) UpdateUser(_ context.Context, _ string, _ *control.UserUpdate) error {
 	return nil
 }
-func (t *txAppStore) AddMember(_ context.Context, _ *control.Membership) error   { return nil }
-func (t *txAppStore) RemoveMember(_ context.Context, _, _ string) error           { return nil }
+func (t *txAppStore) AddMember(_ context.Context, _ *control.Membership) error { return nil }
+func (t *txAppStore) RemoveMember(_ context.Context, _, _ string) error        { return nil }
 func (t *txAppStore) ListMembers(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Membership], error) {
 	return store.PageResult[*control.Membership]{}, nil
 }
@@ -1674,6 +1733,25 @@ func (t *txAppStore) ListAgents(_ context.Context, _ string, _ store.Page) (stor
 }
 func (t *txAppStore) DeleteAgent(_ context.Context, _, _ string) error  { return nil }
 func (t *txAppStore) RestoreAgent(_ context.Context, _, _ string) error { return nil }
+func (t *txAppStore) CreateBudget(ctx context.Context, b *control.Budget) error {
+	_, err := t.tx.ExecContext(ctx, `
+		INSERT INTO budgets (id, agent_id, hard_cap_nanos, soft_cap_nanos, period, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(agent_id) DO UPDATE SET
+			hard_cap_nanos = excluded.hard_cap_nanos,
+			soft_cap_nanos = excluded.soft_cap_nanos,
+			period = excluded.period,
+			updated_at = excluded.updated_at`,
+		b.ID, b.AgentID, int64(b.HardCap), int64(b.SoftCap), b.Period, b.CreatedAt, b.UpdatedAt)
+	return err
+}
+func (t *txAppStore) GetBudget(ctx context.Context, agentID string) (*control.Budget, error) {
+	return t.parent.GetBudget(ctx, agentID)
+}
+func (t *txAppStore) DeleteBudget(ctx context.Context, agentID string) error {
+	_, err := t.tx.ExecContext(ctx, `DELETE FROM budgets WHERE agent_id = ?`, agentID)
+	return err
+}
 func (t *txAppStore) ListPolicies(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.PolicyRecord], error) {
 	return store.PageResult[*control.PolicyRecord]{}, nil
 }
@@ -1710,8 +1788,10 @@ func (t *txAppStore) TouchCredential(_ context.Context, _ string) error        {
 func (t *txAppStore) WithTx(_ context.Context, _ func(store.AppStore) error) error {
 	return fmt.Errorf("cannot nest transactions")
 }
-func (t *txAppStore) Migrate(_ context.Context) error { return fmt.Errorf("cannot migrate in transaction") }
-func (t *txAppStore) Close() error                    { return fmt.Errorf("cannot close in transaction") }
+func (t *txAppStore) Migrate(_ context.Context) error {
+	return fmt.Errorf("cannot migrate in transaction")
+}
+func (t *txAppStore) Close() error { return fmt.Errorf("cannot close in transaction") }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

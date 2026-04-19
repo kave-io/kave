@@ -16,6 +16,7 @@ type OrgStore interface {
 	CreateOrg(ctx context.Context, o *controlmodel.Organization) error
 	GetOrg(ctx context.Context, id string) (*controlmodel.Organization, error)
 	GetOrgBySlug(ctx context.Context, slug string) (*controlmodel.Organization, error)
+	ListOrgs(ctx context.Context, page Page) (PageResult[*controlmodel.Organization], error)
 }
 
 // UserStore owns user persistence.
@@ -67,8 +68,16 @@ type PolicyStore interface {
 	CreatePolicy(ctx context.Context, p *controlmodel.PolicyRecord) error
 	GetPolicy(ctx context.Context, id string) (*controlmodel.PolicyRecord, error)
 	UpdatePolicy(ctx context.Context, id string, update *controlmodel.PolicyUpdate) error
+	DeletePolicy(ctx context.Context, id string) error
 	GetAgentPolicy(ctx context.Context, agentID string) (*controlmodel.PolicyRecord, error)
 	ListPolicies(ctx context.Context, envID string, page Page) (PageResult[*controlmodel.PolicyRecord], error)
+}
+
+// BudgetStore owns per-agent budget persistence.
+type BudgetStore interface {
+	CreateBudget(ctx context.Context, b *controlmodel.Budget) error
+	GetBudget(ctx context.Context, agentID string) (*controlmodel.Budget, error)
+	DeleteBudget(ctx context.Context, agentID string) error
 }
 
 // RunStore owns run persistence.
@@ -154,6 +163,7 @@ type AppStore interface {
 	EnvironmentStore
 	AgentStore
 	PolicyStore
+	BudgetStore
 	RunStore
 	ActionStore
 	CostStore

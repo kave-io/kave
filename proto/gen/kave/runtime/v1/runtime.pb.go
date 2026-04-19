@@ -145,7 +145,7 @@ type ListRunsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filter        *RunFilter             `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -194,9 +194,9 @@ func (x *ListRunsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListRunsRequest) GetPageToken() string {
+func (x *ListRunsRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -204,7 +204,7 @@ func (x *ListRunsRequest) GetPageToken() string {
 type ListRunsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Runs          []*RunRecord           `protobuf:"bytes,1,rep,name=runs,proto3" json:"runs,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -246,9 +246,9 @@ func (x *ListRunsResponse) GetRuns() []*RunRecord {
 	return nil
 }
 
-func (x *ListRunsResponse) GetNextPageToken() string {
+func (x *ListRunsResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -558,7 +558,7 @@ type ListActionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filter        *ActionFilter          `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -607,9 +607,9 @@ func (x *ListActionsRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *ListActionsRequest) GetPageToken() string {
+func (x *ListActionsRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -617,7 +617,7 @@ func (x *ListActionsRequest) GetPageToken() string {
 type ListActionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Actions       []*ActionRecord        `protobuf:"bytes,1,rep,name=actions,proto3" json:"actions,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -659,9 +659,9 @@ func (x *ListActionsResponse) GetActions() []*ActionRecord {
 	return nil
 }
 
-func (x *ListActionsResponse) GetNextPageToken() string {
+func (x *ListActionsResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -810,7 +810,7 @@ type QuerySpansRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filter        *SpanFilter            `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	PageToken     string                 `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Cursor        string                 `protobuf:"bytes,3,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -859,9 +859,9 @@ func (x *QuerySpansRequest) GetLimit() int32 {
 	return 0
 }
 
-func (x *QuerySpansRequest) GetPageToken() string {
+func (x *QuerySpansRequest) GetCursor() string {
 	if x != nil {
-		return x.PageToken
+		return x.Cursor
 	}
 	return ""
 }
@@ -869,7 +869,7 @@ func (x *QuerySpansRequest) GetPageToken() string {
 type QuerySpansResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Spans         []*SpanRow             `protobuf:"bytes,1,rep,name=spans,proto3" json:"spans,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -911,9 +911,9 @@ func (x *QuerySpansResponse) GetSpans() []*SpanRow {
 	return nil
 }
 
-func (x *QuerySpansResponse) GetNextPageToken() string {
+func (x *QuerySpansResponse) GetNextCursor() string {
 	if x != nil {
-		return x.NextPageToken
+		return x.NextCursor
 	}
 	return ""
 }
@@ -1013,15 +1013,15 @@ const file_kave_runtime_v1_runtime_proto_rawDesc = "" +
 	"\n" +
 	"_policy_id\"\x1f\n" +
 	"\rGetRunRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"z\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"s\n" +
 	"\x0fListRunsRequest\x122\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1a.kave.runtime.v1.RunFilterR\x06filter\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"j\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"c\n" +
 	"\x10ListRunsResponse\x12.\n" +
-	"\x04runs\x18\x01 \x03(\v2\x1a.kave.runtime.v1.RunRecordR\x04runs\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"V\n" +
+	"\x04runs\x18\x01 \x03(\v2\x1a.kave.runtime.v1.RunRecordR\x04runs\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"V\n" +
 	"\x10UpdateRunRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x06update\x18\x02 \x01(\v2\x1a.kave.runtime.v1.RunUpdateR\x06update\"J\n" +
@@ -1045,30 +1045,30 @@ const file_kave_runtime_v1_runtime_proto_rawDesc = "" +
 	"\tconnector\x18\x06 \x01(\tR\tconnector\x12\x16\n" +
 	"\x06method\x18\a \x01(\tR\x06method\"\"\n" +
 	"\x10GetActionRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x80\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"y\n" +
 	"\x12ListActionsRequest\x125\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1d.kave.runtime.v1.ActionFilterR\x06filter\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"v\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"o\n" +
 	"\x13ListActionsResponse\x127\n" +
-	"\aactions\x18\x01 \x03(\v2\x1d.kave.runtime.v1.ActionRecordR\aactions\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"A\n" +
+	"\aactions\x18\x01 \x03(\v2\x1d.kave.runtime.v1.ActionRecordR\aactions\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"A\n" +
 	"\x0fOpenSpanRequest\x12.\n" +
 	"\x04span\x18\x01 \x01(\v2\x1a.kave.runtime.v1.SpanInputR\x04span\"W\n" +
 	"\x10CloseSpanRequest\x12\x17\n" +
 	"\aspan_id\x18\x01 \x01(\tR\x06spanId\x12*\n" +
 	"\x03end\x18\x02 \x01(\v2\x18.kave.runtime.v1.SpanEndR\x03end\" \n" +
 	"\x0eGetSpanRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"}\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"v\n" +
 	"\x11QuerySpansRequest\x123\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1b.kave.runtime.v1.SpanFilterR\x06filter\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1d\n" +
-	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"l\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\x03 \x01(\tR\x06cursor\"e\n" +
 	"\x12QuerySpansResponse\x12.\n" +
-	"\x05spans\x18\x01 \x03(\v2\x18.kave.runtime.v1.SpanRowR\x05spans\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x15\n" +
+	"\x05spans\x18\x01 \x03(\v2\x18.kave.runtime.v1.SpanRowR\x05spans\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\"\x15\n" +
 	"\x13GetPriceBookRequest\"M\n" +
 	"\x15GetSpendReportRequest\x124\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1c.kave.runtime.v1.SpendFilterR\x06filter2\xb0\t\n" +

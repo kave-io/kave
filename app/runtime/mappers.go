@@ -431,10 +431,108 @@ func spanFilterFromProto(f *runtimev1.SpanFilter) *runtimemodel.SpanFilter {
 	}
 }
 
+func spendFilterFromProto(f *runtimev1.SpendFilter) *runtimemodel.SpendFilter {
+	if f == nil {
+		return &runtimemodel.SpendFilter{}
+	}
+	return &runtimemodel.SpendFilter{
+		ProjectID: f.ProjectId,
+		EnvID:     f.EnvId,
+		PolicyID:  f.PolicyId,
+		AgentID:   f.AgentId,
+		Connector: f.Connector,
+		Model:     f.Model,
+		FromMs:    f.FromMs,
+		ToMs:      f.ToMs,
+	}
+}
+
+// ── Cost ─────────────────────────────────────────────────────────────────────
+
+func priceBookToProto(book *runtimemodel.PriceBook) *runtimev1.PriceBook {
+	if book == nil {
+		return nil
+	}
+	out := &runtimev1.PriceBook{
+		Version: book.Version,
+		Entries: make([]*runtimev1.PriceModel, 0, len(book.Entries)),
+	}
+	for _, entry := range book.Entries {
+		e := entry
+		proto := &runtimev1.PriceModel{
+			Provider:              e.Provider,
+			Match:                 e.Match,
+			Source:                e.Source,
+			Currency:              string(e.Currency),
+			InputPerMillion:       amountToProto(e.InputPerMillion),
+			OutputPerMillion:      amountToProto(e.OutputPerMillion),
+			CacheReadPerMillion:   amountToProto(e.CacheReadPerMillion),
+			CacheWritePerMillion:  amountToProto(e.CacheWritePerMillion),
+			ReasoningPerMillion:   amountToProto(e.ReasoningPerMillion),
+			AudioInputPerMillion:  amountToProto(e.AudioInputPerMillion),
+			AudioOutputPerMillion: amountToProto(e.AudioOutputPerMillion),
+			ImageUnitPrice:        amountToProto(e.ImageUnitPrice),
+			PerRequest:            amountToProto(e.PerRequest),
+			PerComputeMs:          amountToProto(e.PerComputeMs),
+			PerGbStored:           amountToProto(e.PerGBStored),
+			PerGbTransferred:      amountToProto(e.PerGBTransferred),
+			EffectiveFromMs:       e.EffectiveFrom,
+			RevisionNote:          e.RevisionNote,
+		}
+		if e.EffectiveTo != nil {
+			proto.EffectiveToMs = e.EffectiveTo
+		}
+		out.Entries = append(out.Entries, proto)
+	}
+	return out
+}
+
+func spendReportToProto(report *runtimemodel.SpendReport) *runtimev1.SpendReport {
+	if report == nil {
+		return nil
+	}
+	out := &runtimev1.SpendReport{
+		Total:         amountToProto(report.Total),
+		ByProject:     map[string]*commonv1.Amount{},
+		ByEnv:         map[string]*commonv1.Amount{},
+		ByPolicy:      map[string]*commonv1.Amount{},
+		ByAgent:       map[string]*commonv1.Amount{},
+		ByConnector:   map[string]*commonv1.Amount{},
+		ByModel:       map[string]*commonv1.Amount{},
+		PeriodStartMs: report.PeriodStart,
+		PeriodEndMs:   report.PeriodEnd,
+	}
+	for k, v := range report.ByProject {
+		amount := v
+		out.ByProject[k] = amountToProto(amount)
+	}
+	for k, v := range report.ByEnv {
+		amount := v
+		out.ByEnv[k] = amountToProto(amount)
+	}
+	for k, v := range report.ByPolicy {
+		amount := v
+		out.ByPolicy[k] = amountToProto(amount)
+	}
+	for k, v := range report.ByAgent {
+		amount := v
+		out.ByAgent[k] = amountToProto(amount)
+	}
+	for k, v := range report.ByConnector {
+		amount := v
+		out.ByConnector[k] = amountToProto(amount)
+	}
+	for k, v := range report.ByModel {
+		amount := v
+		out.ByModel[k] = amountToProto(amount)
+	}
+	return out
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-func pageFromProto(limit int32) store.Page {
-	return store.Page{Limit: int(limit)}
+func pageFromProto(limit int32, cursor string) store.Page {
+	return store.Page{Limit: int(limit), Cursor: cursor}
 }
 
 // ── Struct helpers ────────────────────────────────────────────────────────────

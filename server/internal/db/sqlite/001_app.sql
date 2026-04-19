@@ -124,6 +124,19 @@ CREATE INDEX IF NOT EXISTS idx_agents_project_id ON agents(project_id);
 CREATE INDEX IF NOT EXISTS idx_agents_env_id ON agents(env_id);
 CREATE INDEX IF NOT EXISTS idx_agents_policy_id ON agents(policy_id);
 
+-- ── Budgets ───────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS budgets (
+    id              TEXT PRIMARY KEY,
+    agent_id        TEXT NOT NULL UNIQUE REFERENCES agents(id) ON DELETE CASCADE,
+    hard_cap_nanos  INTEGER NOT NULL,
+    soft_cap_nanos  INTEGER NOT NULL DEFAULT 0,
+    period          TEXT NOT NULL DEFAULT 'run',
+    created_at      INTEGER NOT NULL,
+    updated_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_budgets_agent_id ON budgets(agent_id);
+
 -- ── Agent Tokens ───────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agent_tokens (

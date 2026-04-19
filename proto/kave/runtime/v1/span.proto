@@ -133,7 +133,7 @@ message SpanEnd {
   optional ValidationMeta validation_meta = 23;
 }
 
-// SpanFilter filters QuerySpans queries. Pagination (limit, page_token) is
+// SpanFilter filters QuerySpans queries. Pagination (limit, cursor) is
 // carried on the enclosing request, not the filter itself.
 message SpanFilter {
   string run_id = 1;
@@ -142,5 +142,5 @@ message SpanFilter {
   optional int64 to_ms = 4;
   optional bool has_error = 5;
   reserved 6, 7;
-  reserved "limit", "page_token";
+  reserved "limit", "cursor";
 }

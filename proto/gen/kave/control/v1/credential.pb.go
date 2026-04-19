@@ -453,7 +453,7 @@ func (x *CredentialUpdate) GetAccountId() string {
 }
 
 // CredentialFilter is used by ListCredentials to find matching credentials.
-// Pagination (limit, page_token) is carried on the enclosing request.
+// Pagination (limit, cursor) is carried on the enclosing request.
 type CredentialFilter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvId         string                 `protobuf:"bytes,1,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
@@ -582,15 +582,14 @@ const file_kave_control_v1_credential_proto_rawDesc = "" +
 	"account_id\x18\x03 \x01(\tH\x02R\taccountId\x88\x01\x01B\b\n" +
 	"\x06_labelB\x0e\n" +
 	"\f_descriptionB\r\n" +
-	"\v_account_id\"\xdf\x01\n" +
+	"\v_account_id\"\xdb\x01\n" +
 	"\x10CredentialFilter\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12%\n" +
 	"\x0econnector_type\x18\x02 \x01(\tR\rconnectorType\x12\x1d\n" +
 	"\n" +
 	"account_id\x18\x03 \x01(\tR\taccountId\x12\x14\n" +
 	"\x05label\x18\x04 \x01(\tR\x05label\x129\n" +
-	"\x06status\x18\x05 \x01(\x0e2!.kave.control.v1.CredentialStatusR\x06statusJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\n" +
-	"page_token*\xd2\x01\n" +
+	"\x06status\x18\x05 \x01(\x0e2!.kave.control.v1.CredentialStatusR\x06statusJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\x06cursor*\xd2\x01\n" +
 	"\x10CredentialSource\x12!\n" +
 	"\x1dCREDENTIAL_SOURCE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCREDENTIAL_SOURCE_ENCRYPTED\x10\x01\x12\x1f\n" +

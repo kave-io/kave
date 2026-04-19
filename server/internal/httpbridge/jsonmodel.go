@@ -1,10 +1,20 @@
-package api
+package httpbridge
 
 import (
 	"github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/server/internal/contract"
 )
+
+const defaultCurrency = "USD"
+
+func isoFromMSPtr(ms *int64) *string {
+	if ms == nil {
+		return nil
+	}
+	s := isoFromMS(*ms)
+	return &s
+}
 
 // Agent is the API representation of a control.Agent.
 type Agent struct {
@@ -177,7 +187,7 @@ func MapAgentToAPI(a *control.Agent) *Agent {
 		DeletedAtMS: a.DeletedAt,
 	}
 	if a.MonthlyBudget != nil {
-		api.MonthlyBudget = &contract.Money{Amount: a.MonthlyBudget.String(), Currency: apiDefaultCurrency}
+		api.MonthlyBudget = &contract.Money{Amount: a.MonthlyBudget.String(), Currency: defaultCurrency}
 	}
 	if a.Metadata == nil {
 		api.Metadata = make(map[string]any)
@@ -222,7 +232,7 @@ func MapPolicyToAPI(p *control.PolicyRecord) *Policy {
 		api.Config = map[string]any{}
 	}
 	if p.BudgetCap > 0 {
-		api.BudgetCap = &contract.Money{Amount: p.BudgetCap.String(), Currency: apiDefaultCurrency}
+		api.BudgetCap = &contract.Money{Amount: p.BudgetCap.String(), Currency: defaultCurrency}
 	}
 	return api
 }
@@ -249,10 +259,10 @@ func MapRunToAPI(r *runtimemodel.RunRecord) *Run {
 		UpdatedAtMS:  r.UpdatedAt,
 	}
 	if r.BudgetCap > 0 {
-		api.BudgetCap = &contract.Money{Amount: r.BudgetCap.String(), Currency: apiDefaultCurrency}
+		api.BudgetCap = &contract.Money{Amount: r.BudgetCap.String(), Currency: defaultCurrency}
 	}
 	if r.Spent > 0 {
-		api.Spent = &contract.Money{Amount: r.Spent.String(), Currency: apiDefaultCurrency}
+		api.Spent = &contract.Money{Amount: r.Spent.String(), Currency: defaultCurrency}
 	}
 	if r.Metadata == nil {
 		api.Metadata = make(map[string]any)
@@ -283,7 +293,7 @@ func MapSpanRowToAPI(s *runtimemodel.SpanRow) *Span {
 		CreatedAtMS:      s.CreatedAt,
 	}
 	if s.Cost != nil {
-		api.Cost = &contract.Money{Amount: s.Cost.String(), Currency: apiDefaultCurrency}
+		api.Cost = &contract.Money{Amount: s.Cost.String(), Currency: defaultCurrency}
 	}
 	return api
 }

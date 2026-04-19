@@ -437,7 +437,7 @@ func (x *ActionRecord) GetCreatedAtMs() int64 {
 	return 0
 }
 
-// ActionFilter filters ListActions queries. Pagination (limit, page_token) is
+// ActionFilter filters ListActions queries. Pagination (limit, cursor) is
 // carried on the enclosing request, not the filter itself.
 type ActionFilter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -559,15 +559,14 @@ const file_kave_runtime_v1_action_proto_rawDesc = "" +
 	"\f_ended_at_msB\x0f\n" +
 	"\r_retry_reasonB\x12\n" +
 	"\x10_provider_req_idB\x0e\n" +
-	"\f_external_id\"\x8b\x02\n" +
+	"\f_external_id\"\x87\x02\n" +
 	"\fActionFilter\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12<\n" +
 	"\vaction_type\x18\x03 \x01(\x0e2\x1b.kave.runtime.v1.ActionTypeR\n" +
 	"actionType\x125\n" +
 	"\x06status\x18\x04 \x01(\x0e2\x1d.kave.runtime.v1.ActionStatusR\x06status\x125\n" +
-	"\x06source\x18\x05 \x01(\x0e2\x1d.kave.runtime.v1.ActionSourceR\x06sourceJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\n" +
-	"page_token*\x9e\x01\n" +
+	"\x06source\x18\x05 \x01(\x0e2\x1d.kave.runtime.v1.ActionSourceR\x06sourceJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\x06cursor*\x9e\x01\n" +
 	"\n" +
 	"ActionType\x12\x1b\n" +
 	"\x17ACTION_TYPE_UNSPECIFIED\x10\x00\x12\x13\n" +
