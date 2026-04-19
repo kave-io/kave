@@ -1,5 +1,5 @@
 .PHONY: help dev dev-server dev-dashboard serve build build-server dashboard-build \
-        test test-fast lint fmt vet migrate clean \
+        test test-fast lint fmt vet migrate clean cli-docs \
         buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
         buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev
 
@@ -28,6 +28,7 @@ help:
 	@echo "  make lint              staticcheck on all Go modules"
 	@echo "  make fmt               gofmt all Go files"
 	@echo "  make vet               go vet all modules"
+	@echo "  make cli-docs          Regenerate Cobra CLI docs"
 	@echo ""
 	@echo "Ops:"
 	@echo "  make migrate           Run database migrations"
@@ -159,3 +160,6 @@ clean:
 	find . -name "*.test" -type f -delete
 	go clean -testcache
 	@echo "Cleaned"
+
+cli-docs:
+	cd cli && env GOCACHE=/tmp/go-build go run ./tools/gen-docs ../docs/src/content/docs/cli/reference

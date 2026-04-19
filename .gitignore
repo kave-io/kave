@@ -59,6 +59,7 @@ sdk/typescript/dist/
 
 # ── Docs ──────────────────────────────────────────────────────────────────────
 docs/.mintlify/
+cli/docs/
 
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
@@ -83,3 +84,5 @@ kave-data/
 *.duckdb
 *.duckdb.wal
 server/tmp/
+gen-docs
+kave
