@@ -8,6 +8,7 @@ import (
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	GRPC     GRPCConfig     `mapstructure:"grpc"`
+	FX       FXConfig       `mapstructure:"fx"`
 	Security SecurityConfig `mapstructure:"security"`
 	Postgres PostgresConfig `mapstructure:"postgres"`
 	Storage  StorageConfig  `mapstructure:"storage"`
@@ -33,12 +34,16 @@ type SecurityConfig struct {
 
 type ServerConfig struct {
 	Port           int    `mapstructure:"port"`
+	Address        string `mapstructure:"addr"`
 	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
 	Environment    string `mapstructure:"environment"`
 	Domain         string `mapstructure:"domain"`
 }
 
 func (s ServerConfig) Addr() string {
+	if s.Address != "" {
+		return s.Address
+	}
 	return fmt.Sprintf(":%d", s.Port)
 }
 
@@ -48,10 +53,20 @@ func (s ServerConfig) IsDev() bool {
 
 type GRPCConfig struct {
 	Port int `mapstructure:"port"`
+	Address string `mapstructure:"addr"`
 }
 
 func (g GRPCConfig) Addr() string {
+	if g.Address != "" {
+		return g.Address
+	}
 	return fmt.Sprintf(":%d", g.Port)
+}
+
+// ── FX ───────────────────────────────────────────────────────────────────────
+
+type FXConfig struct {
+	RefreshIntervalSeconds int `mapstructure:"refresh_interval_seconds"`
 }
 
 // ── Postgres ──────────────────────────────────────────────────────────────────
@@ -363,6 +378,9 @@ func (c *Config) Validate() error {
 	}
 	if c.GRPC.Port == 0 {
 		c.GRPC.Port = 9090
+	}
+	if c.FX.RefreshIntervalSeconds == 0 {
+		c.FX.RefreshIntervalSeconds = 3600
 	}
 
 	// Postgres

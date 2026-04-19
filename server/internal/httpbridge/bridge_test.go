@@ -25,6 +25,7 @@ func TestRegisterMapsGrpcErrors(t *testing.T) {
 		{name: "already exists", code: codes.AlreadyExists, wantHTTP: http.StatusConflict, wantCode: "agent.already_exists"},
 		{name: "permission denied", code: codes.PermissionDenied, wantHTTP: http.StatusForbidden, wantCode: "auth.forbidden"},
 		{name: "unauthenticated", code: codes.Unauthenticated, wantHTTP: http.StatusUnauthorized, wantCode: "auth.unauthenticated"},
+		{name: "failed precondition", code: codes.FailedPrecondition, wantHTTP: http.StatusConflict, wantCode: "config.invalid"},
 		{name: "unimplemented", code: codes.Unimplemented, wantHTTP: http.StatusNotImplemented, wantCode: "server.unimplemented"},
 		{name: "internal", code: codes.Internal, wantHTTP: http.StatusInternalServerError, wantCode: "server.internal"},
 	}

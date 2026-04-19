@@ -1,58 +1,114 @@
-// Package bus provides a lightweight in-process pub/sub for run events.
-// One goroutine publishes; N gRPC stream handlers subscribe.
-// Slow subscribers are dropped (non-blocking send) to protect the publisher.
+// Package bus provides a lightweight in-process pub/sub for typed events.
+// Slow subscribers are dropped (non-blocking send) to protect publishers.
 package bus
 
-import "sync"
+import (
+	"encoding/json"
+	"strings"
+	"sync"
+)
 
-// RunEvent is published after every intercepted action completes.
-// It carries a snapshot of the current run state at that point in time.
-type RunEvent struct {
-	RunID     string
-	ProjectID string
-	EnvID     string
-	AgentID   string
-	Status    string
-	SpanID    string
+// Event is the typed envelope published across the in-process bus.
+type Event struct {
+	Kind      string          `json:"kind"`
+	ProjectID string          `json:"project_id,omitempty"`
+	EnvID     string          `json:"env_id,omitempty"`
+	RunID     string          `json:"run_id,omitempty"`
+	AgentID   string          `json:"agent_id,omitempty"`
+	SpanID    string          `json:"span_id,omitempty"`
+	At        int64           `json:"at_ms"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
 }
 
-// Bus fans out RunEvents to all active subscribers.
-// Safe for concurrent use. Subscribe/Unsubscribe are O(n) on subscriber count,
-// which is fine — number of live watchers is always tiny.
+// Filter narrows the events delivered to one subscriber.
+type Filter struct {
+	Kinds     []string
+	ProjectID string
+	EnvID     string
+	RunID     string
+}
+
+type subscriber struct {
+	filter Filter
+	ch     chan Event
+	once   sync.Once
+}
+
+// Bus fans out typed events to active subscribers.
+// Safe for concurrent use.
 type Bus struct {
 	mu   sync.RWMutex
-	subs map[chan RunEvent]struct{}
+	subs map[chan Event]*subscriber
 }
 
 // New returns a ready-to-use Bus.
 func New() *Bus {
-	return &Bus{subs: make(map[chan RunEvent]struct{})}
+	return &Bus{subs: make(map[chan Event]*subscriber)}
 }
 
-// Publish sends ev to all subscribers. Drops slow subscribers (non-blocking).
-func (b *Bus) Publish(ev RunEvent) {
+// Publish sends ev to all matching subscribers. Slow subscribers are dropped.
+func (b *Bus) Publish(ev Event) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	for ch := range b.subs {
+	for _, sub := range b.subs {
+		if !matches(sub.filter, ev) {
+			continue
+		}
 		select {
-		case ch <- ev:
-		default: // subscriber too slow — drop rather than block the publisher
+		case sub.ch <- ev:
+		default:
 		}
 	}
 }
 
-// Subscribe returns a buffered channel that receives RunEvents and a cancel
-// function the caller must invoke when done.
-func (b *Bus) Subscribe() (<-chan RunEvent, func()) {
-	ch := make(chan RunEvent, 64)
+// Subscribe returns a buffered channel that receives matching Events and a
+// cancel function the caller must invoke when done.
+func (b *Bus) Subscribe(filter Filter) (<-chan Event, func()) {
+	ch := make(chan Event, 64)
+	sub := &subscriber{filter: filter, ch: ch}
+
 	b.mu.Lock()
-	b.subs[ch] = struct{}{}
+	b.subs[ch] = sub
 	b.mu.Unlock()
+
 	cancel := func() {
-		b.mu.Lock()
-		delete(b.subs, ch)
-		b.mu.Unlock()
-		close(ch)
+		sub.once.Do(func() {
+			b.mu.Lock()
+			delete(b.subs, ch)
+			b.mu.Unlock()
+			close(ch)
+		})
 	}
 	return ch, cancel
+}
+
+// SubscriberCount returns the number of active subscribers.
+func (b *Bus) SubscriberCount() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.subs)
+}
+
+func matches(filter Filter, ev Event) bool {
+	if filter.ProjectID != "" && filter.ProjectID != ev.ProjectID {
+		return false
+	}
+	if filter.EnvID != "" && filter.EnvID != ev.EnvID {
+		return false
+	}
+	if filter.RunID != "" && filter.RunID != ev.RunID {
+		return false
+	}
+	if len(filter.Kinds) == 0 {
+		return true
+	}
+	for _, kind := range filter.Kinds {
+		if kind == "" {
+			continue
+		}
+		if strings.HasPrefix(ev.Kind, kind) {
+			return true
+		}
+	}
+	return false
 }

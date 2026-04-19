@@ -2,8 +2,10 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
+	"github.com/kave-io/kave/core/bus"
 	"github.com/kave-io/kave/core/model/control"
 	"github.com/kave-io/kave/core/store"
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
@@ -19,11 +21,12 @@ type Server struct {
 	controlv1.UnimplementedControlPlaneServiceServer
 
 	appStore store.AppStore
+	bus      *bus.Bus
 }
 
 // New creates a new ControlPlaneAPI server.
-func New(appStore store.AppStore) *Server {
-	return &Server{appStore: appStore}
+func New(appStore store.AppStore, b *bus.Bus) *Server {
+	return &Server{appStore: appStore, bus: b}
 }
 
 // Register registers the ControlPlaneService server with gRPC.
@@ -182,6 +185,7 @@ func (s *Server) CreateAgent(ctx context.Context, req *controlv1.CreateAgentRequ
 	if err := s.appStore.CreateAgent(ctx, agent); err != nil {
 		return nil, err
 	}
+	s.publish("agent.created", agent)
 	return agentToProto(agent), nil
 }
 
@@ -238,13 +242,22 @@ func (s *Server) UpdateAgent(ctx context.Context, req *controlv1.UpdateAgentRequ
 	if err := s.appStore.UpdateAgent(ctx, req.Id, update); err != nil {
 		return nil, err
 	}
-	return s.GetAgent(ctx, &controlv1.GetAgentRequest{Id: req.Id})
+	agent, err := s.GetAgent(ctx, &controlv1.GetAgentRequest{Id: req.Id})
+	if err == nil {
+		s.publish("agent.updated", protoToAgent(agent))
+	}
+	return agent, err
 }
 
 func (s *Server) DeleteAgent(ctx context.Context, req *controlv1.DeleteAgentRequest) (*emptypb.Empty, error) {
+	agent, err := s.GetAgent(ctx, &controlv1.GetAgentRequest{Id: req.Id})
+	if err != nil {
+		return nil, err
+	}
 	if err := s.appStore.DeleteAgent(ctx, req.Id, "system"); err != nil {
 		return nil, err
 	}
+	s.publish("agent.deleted", protoToAgent(agent))
 	return &emptypb.Empty{}, nil
 }
 
@@ -252,7 +265,11 @@ func (s *Server) RestoreAgent(ctx context.Context, req *controlv1.RestoreAgentRe
 	if err := s.appStore.RestoreAgent(ctx, req.Id, "system"); err != nil {
 		return nil, err
 	}
-	return s.GetAgent(ctx, &controlv1.GetAgentRequest{Id: req.Id})
+	agent, err := s.GetAgent(ctx, &controlv1.GetAgentRequest{Id: req.Id})
+	if err == nil {
+		s.publish("agent.restored", protoToAgent(agent))
+	}
+	return agent, err
 }
 
 // ── Policy Operations ──────────────────────────────────────────────────────
@@ -284,6 +301,7 @@ func (s *Server) CreatePolicy(ctx context.Context, req *controlv1.CreatePolicyRe
 	if err := s.appStore.CreatePolicy(ctx, pol); err != nil {
 		return nil, err
 	}
+	s.publish("policy.updated", pol)
 	return policyToProto(pol), nil
 }
 
@@ -361,13 +379,22 @@ func (s *Server) UpdatePolicy(ctx context.Context, req *controlv1.UpdatePolicyRe
 	if err := s.appStore.UpdatePolicy(ctx, req.Id, update); err != nil {
 		return nil, err
 	}
-	return s.GetPolicy(ctx, &controlv1.GetPolicyRequest{Id: req.Id})
+	pol, err := s.GetPolicy(ctx, &controlv1.GetPolicyRequest{Id: req.Id})
+	if err == nil {
+		s.publish("policy.updated", protoToPolicy(pol))
+	}
+	return pol, err
 }
 
 func (s *Server) DeletePolicy(ctx context.Context, req *controlv1.DeletePolicyRequest) (*emptypb.Empty, error) {
+	pol, err := s.GetPolicy(ctx, &controlv1.GetPolicyRequest{Id: req.Id})
+	if err != nil {
+		return nil, err
+	}
 	if err := s.appStore.DeletePolicy(ctx, req.Id); err != nil {
 		return nil, err
 	}
+	s.publish("policy.deleted", protoToPolicy(pol))
 	return &emptypb.Empty{}, nil
 }
 
@@ -479,6 +506,7 @@ func (s *Server) CreateCredential(ctx context.Context, req *controlv1.CreateCred
 	if err := s.appStore.StoreCredential(ctx, cred); err != nil {
 		return nil, err
 	}
+	s.publish("credential.created", cred)
 	return credentialToProto(cred), nil
 }
 
@@ -534,6 +562,7 @@ func (s *Server) UpdateCredential(ctx context.Context, req *controlv1.UpdateCred
 	if err := s.appStore.StoreCredential(ctx, cred); err != nil {
 		return nil, err
 	}
+	s.publish("credential.updated", cred)
 	return credentialToProto(cred), nil
 }
 
@@ -541,20 +570,30 @@ func (s *Server) RotateCredential(ctx context.Context, req *controlv1.RotateCred
 	if err := s.appStore.RotateCredential(ctx, req.Id, req.NewEncryptedBlob, "", "system"); err != nil {
 		return nil, err
 	}
-	return s.GetCredential(ctx, &controlv1.GetCredentialRequest{Id: req.Id})
+	cred, err := s.GetCredential(ctx, &controlv1.GetCredentialRequest{Id: req.Id})
+	if err == nil {
+		s.publish("credential.rotated", protoToCredential(cred))
+	}
+	return cred, err
 }
 
 func (s *Server) RevokeCredential(ctx context.Context, req *controlv1.RevokeCredentialRequest) (*emptypb.Empty, error) {
 	if err := s.appStore.RevokeCredential(ctx, req.Id, "system", req.Reason); err != nil {
 		return nil, err
 	}
+	s.publish("credential.revoked", &control.ConnectorCredential{ID: req.Id})
 	return &emptypb.Empty{}, nil
 }
 
 func (s *Server) DeleteCredential(ctx context.Context, req *controlv1.DeleteCredentialRequest) (*emptypb.Empty, error) {
+	cred, err := s.GetCredential(ctx, &controlv1.GetCredentialRequest{Id: req.Id})
+	if err != nil {
+		return nil, err
+	}
 	if err := s.appStore.DeleteCredential(ctx, req.Id); err != nil {
 		return nil, err
 	}
+	s.publish("credential.deleted", protoToCredential(cred))
 	return &emptypb.Empty{}, nil
 }
 
@@ -574,6 +613,7 @@ func (s *Server) CreateBudget(ctx context.Context, req *controlv1.CreateBudgetRe
 	if err := s.appStore.CreateBudget(ctx, budget); err != nil {
 		return nil, err
 	}
+	s.publish("budget.updated", budget)
 	return budgetToProto(budget), nil
 }
 
@@ -589,10 +629,180 @@ func (s *Server) GetBudget(ctx context.Context, req *controlv1.GetBudgetRequest)
 }
 
 func (s *Server) DeleteBudget(ctx context.Context, req *controlv1.DeleteBudgetRequest) (*emptypb.Empty, error) {
+	budget, err := s.GetBudget(ctx, &controlv1.GetBudgetRequest{AgentId: req.AgentId})
+	if err != nil {
+		return nil, err
+	}
 	if err := s.appStore.DeleteBudget(ctx, req.AgentId); err != nil {
 		return nil, err
 	}
+	s.publish("budget.deleted", budgetFromProto(budget))
 	return &emptypb.Empty{}, nil
+}
+
+func (s *Server) publish(kind string, v any) {
+	if s == nil || s.bus == nil || v == nil {
+		return
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return
+	}
+	ev := bus.Event{
+		Kind:    kind,
+		At:      nowMS(),
+		Payload: raw,
+	}
+	switch x := v.(type) {
+	case *control.Agent:
+		ev.ProjectID = x.ProjectID
+		ev.EnvID = x.EnvID
+		ev.AgentID = x.ID
+	case *control.PolicyRecord:
+		ev.ProjectID = x.ProjectID
+		ev.EnvID = x.EnvID
+	case *control.ConnectorCredential:
+		ev.ProjectID = x.ProjectID
+		ev.EnvID = x.EnvID
+	case *control.Budget:
+		ev.AgentID = x.AgentID
+	case *controlv1.Agent:
+		ev.ProjectID = x.ProjectId
+		ev.EnvID = x.EnvId
+		ev.AgentID = x.Id
+	case *controlv1.PolicyRecord:
+		ev.ProjectID = x.ProjectId
+		ev.EnvID = x.EnvId
+	case *controlv1.ConnectorCredential:
+		ev.ProjectID = x.ProjectId
+		ev.EnvID = x.EnvId
+	case *controlv1.Budget:
+		ev.AgentID = x.AgentId
+	}
+	s.bus.Publish(ev)
+}
+
+func protoToAgent(a *controlv1.Agent) *control.Agent {
+	if a == nil {
+		return nil
+	}
+	model := &control.Agent{
+		ID:          a.Id,
+		ProjectID:   a.ProjectId,
+		EnvID:       a.EnvId,
+		Name:        a.Name,
+		Description: a.Description,
+		PolicyID:    a.PolicyId,
+		Status:      agentStatusFromProto(a.Status),
+		Metadata:    structToMap(a.Metadata),
+		CreatedBy:   a.CreatedBy,
+		UpdatedBy:   a.UpdatedBy,
+		DeletedAt:   a.DeletedAtMs,
+		CreatedAt:   a.CreatedAtMs,
+		UpdatedAt:   a.UpdatedAtMs,
+	}
+	if a.MonthlyBudget != nil {
+		amount := amountFromProto(a.MonthlyBudget)
+		model.MonthlyBudget = &amount
+	}
+	return model
+}
+
+func protoToPolicy(p *controlv1.PolicyRecord) *control.PolicyRecord {
+	if p == nil {
+		return nil
+	}
+	model := &control.PolicyRecord{
+		ID:                p.Id,
+		ProjectID:         p.ProjectId,
+		EnvID:             p.EnvId,
+		Name:              p.Name,
+		Description:       p.Description,
+		AllowedTypes:      append([]string(nil), p.AllowedTypes...),
+		AllowedConnectors: append([]string(nil), p.AllowedConnectors...),
+		AllowedMethods:    append([]string(nil), p.AllowedMethods...),
+		BudgetPeriod:      budgetPeriodFromProto(p.BudgetPeriod),
+		BudgetBehavior:    budgetBehaviorFromProto(p.BudgetBehavior),
+		TraceInput:        p.TraceInput,
+		TraceOutput:       p.TraceOutput,
+		RetentionDays:     int(p.RetentionDays),
+		Config:            structToMap(p.Config),
+		Version:           int(p.Version),
+		Mode:              policyModeFromProto(p.Mode),
+		Status:            policyStatusFromProto(p.Status),
+		CreatedBy:         p.CreatedBy,
+		UpdatedBy:         p.UpdatedBy,
+		CreatedAt:         p.CreatedAtMs,
+		UpdatedAt:         p.UpdatedAtMs,
+	}
+	if p.BudgetCap != nil {
+		amount := amountFromProto(p.BudgetCap)
+		model.BudgetCap = amount
+	}
+	return model
+}
+
+func protoToCredential(c *controlv1.ConnectorCredential) *control.ConnectorCredential {
+	if c == nil {
+		return nil
+	}
+	model := &control.ConnectorCredential{
+		ID:            c.Id,
+		ProjectID:     c.ProjectId,
+		EnvID:         c.EnvId,
+		ConnectorType: c.ConnectorType,
+		AccountID:     c.AccountId,
+		Label:         c.Label,
+		Description:   c.Description,
+		SourceType:    credentialSourceFromProto(c.SourceType),
+		KeyHash:       c.KeyHash,
+		WrappingKeyID: c.WrappingKeyId,
+		SecretRef:     c.SecretRef,
+		SecretVersion: c.SecretVersion,
+		Status:        credentialStatusFromProto(c.Status),
+		Version:       int(c.Version),
+		ExpiresAt:     c.ExpiresAtMs,
+		RotatedAt:     c.RotatedAtMs,
+		RotatedBy:     c.RotatedBy,
+		LastUsedAt:    c.LastUsedAtMs,
+		CreatedBy:     c.CreatedBy,
+		CreatedAt:     c.CreatedAtMs,
+		UpdatedAt:     c.UpdatedAtMs,
+		RevokedAt:     c.RevokedAtMs,
+		RevokedBy:     c.RevokedBy,
+		RevokeReason:  c.RevokeReason,
+	}
+	return model
+}
+
+func credentialSourceFromProto(s controlv1.CredentialSource) string {
+	switch s {
+	case controlv1.CredentialSource_CREDENTIAL_SOURCE_ENCRYPTED:
+		return "encrypted"
+	case controlv1.CredentialSource_CREDENTIAL_SOURCE_VAULT_REF:
+		return "vault_ref"
+	case controlv1.CredentialSource_CREDENTIAL_SOURCE_OAUTH:
+		return "oauth"
+	case controlv1.CredentialSource_CREDENTIAL_SOURCE_STS:
+		return "sts"
+	case controlv1.CredentialSource_CREDENTIAL_SOURCE_PASSTHROUGH:
+		return "passthrough"
+	default:
+		return ""
+	}
+}
+
+func credentialStatusFromProto(s controlv1.CredentialStatus) string {
+	switch s {
+	case controlv1.CredentialStatus_CREDENTIAL_STATUS_ACTIVE:
+		return "active"
+	case controlv1.CredentialStatus_CREDENTIAL_STATUS_REVOKED:
+		return "revoked"
+	case controlv1.CredentialStatus_CREDENTIAL_STATUS_EXPIRED:
+		return "expired"
+	default:
+		return ""
+	}
 }
 
 type policyYAMLDocument struct {

@@ -144,11 +144,12 @@ func (m *Manager) Migrate(ctx context.Context) error {
 func newAppStoreFromSpec(ctx context.Context, spec config.StoreSpec, postgresCfg config.PostgresConfig) (store.AppStore, error) {
 	switch spec.Kind {
 	case "postgres":
-		pool, err := postgresdb.NewWithDSN(ctx, storeDSN(spec, postgresCfg), postgresCfg)
+		dsn := storeDSN(spec, postgresCfg)
+		pool, err := postgresdb.NewWithDSN(ctx, dsn, postgresCfg)
 		if err != nil {
 			return nil, err
 		}
-		return postgresimpl.New(pool), nil
+		return postgresimpl.New(pool, dsn), nil
 
 	case "sqlite", "":
 		path := spec.Path
@@ -165,11 +166,12 @@ func newAppStoreFromSpec(ctx context.Context, spec config.StoreSpec, postgresCfg
 func newSpanStoreFromSpec(ctx context.Context, spec config.StoreSpec, postgresCfg config.PostgresConfig) (store.SpanStore, error) {
 	switch spec.Kind {
 	case "postgres":
-		pool, err := postgresdb.NewWithDSN(ctx, storeDSN(spec, postgresCfg), postgresCfg)
+		dsn := storeDSN(spec, postgresCfg)
+		pool, err := postgresdb.NewWithDSN(ctx, dsn, postgresCfg)
 		if err != nil {
 			return nil, err
 		}
-		return postgresimpl.NewSpanStore(pool), nil
+		return postgresimpl.NewSpanStore(pool, dsn), nil
 
 	case "duckdb", "":
 		path := spec.Path

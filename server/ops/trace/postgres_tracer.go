@@ -2,6 +2,7 @@ package trace
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/kave-io/kave/core/bus"
@@ -113,14 +114,19 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 		return err
 	}
 	if t.bus != nil {
-		t.bus.Publish(bus.RunEvent{
-			RunID:     action.RunID,
-			ProjectID: action.ProjectID,
-			EnvID:     action.EnvID,
-			AgentID:   action.AgentID,
-			Status:    "active",
-			SpanID:    spanID,
-		})
+		raw, err := json.Marshal(row)
+		if err == nil {
+			t.bus.Publish(bus.Event{
+				Kind:      "span.completed",
+				ProjectID: action.ProjectID,
+				EnvID:     action.EnvID,
+				RunID:     action.RunID,
+				AgentID:   action.AgentID,
+				SpanID:    spanID,
+				At:        endedAtMS,
+				Payload:   raw,
+			})
+		}
 	}
 	return nil
 }

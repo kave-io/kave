@@ -36,6 +36,7 @@ type Service struct {
 	client   *http.Client
 	baseURL  string
 	interval time.Duration
+	reloadCh chan time.Duration
 
 	mu         sync.RWMutex
 	rates      map[string]runtimemodel.FXRateRecord
@@ -51,6 +52,7 @@ func NewService(app store.AppStore, interval time.Duration) *Service {
 		client:     &http.Client{Timeout: 15 * time.Second},
 		baseURL:    "https://api.frankfurter.dev/v2",
 		interval:   interval,
+		reloadCh:   make(chan time.Duration, 1),
 		rates:      make(map[string]runtimemodel.FXRateRecord),
 		currencies: make(map[money.CurrencyCode]runtimemodel.FXCurrencyRecord),
 	}
@@ -92,19 +94,74 @@ func (s *Service) EnsureFresh(ctx context.Context) error {
 }
 
 func (s *Service) Start(ctx context.Context) {
-	ticker := time.NewTicker(s.interval)
 	go func() {
+		s.mu.RLock()
+		interval := s.interval
+		s.mu.RUnlock()
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				_ = s.Refresh(context.Background())
 				_ = s.Load(context.Background())
+			case newInterval := <-s.reloadCh:
+				if newInterval <= 0 {
+					continue
+				}
+				ticker.Stop()
+				ticker = time.NewTicker(newInterval)
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
+}
+
+// SetInterval updates the refresh cadence for the background loop.
+func (s *Service) SetInterval(interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	s.mu.Lock()
+	s.interval = interval
+	s.mu.Unlock()
+	select {
+	case s.reloadCh <- interval:
+	default:
+	}
+}
+
+// Snapshot summarizes the cached FX state for status and doctor probes.
+func (s *Service) Snapshot() map[string]any {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	loaded := len(s.rates) > 0 || len(s.currencies) > 0
+	var lastRefreshMs int64
+	for _, rate := range s.rates {
+		if rate.FetchedAt > lastRefreshMs {
+			lastRefreshMs = rate.FetchedAt
+		}
+	}
+	for _, item := range s.currencies {
+		if item.FetchedAt > lastRefreshMs {
+			lastRefreshMs = item.FetchedAt
+		}
+	}
+
+	ageMs := int64(0)
+	if lastRefreshMs > 0 {
+		ageMs = time.Now().UnixMilli() - lastRefreshMs
+	}
+
+	return map[string]any{
+		"loaded":           loaded,
+		"last_refresh_ms":  lastRefreshMs,
+		"stale":            loaded && ageMs > int64(24*time.Hour/time.Millisecond),
+		"age_ms":           ageMs,
+		"refresh_interval": s.interval.Milliseconds(),
+	}
 }
 
 func (s *Service) Refresh(ctx context.Context) error {

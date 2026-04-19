@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ const (
 // A single background goroutine owns the DuckDB connection and writes batches.
 type DuckDBSpanStore struct {
 	db   *sql.DB
+	path string
 	ch   chan writeReq
 	done chan struct{}
 	once sync.Once
@@ -59,6 +61,7 @@ func New(path string) (*DuckDBSpanStore, error) {
 
 	s := &DuckDBSpanStore{
 		db:   db,
+		path: path,
 		ch:   make(chan writeReq, defaultBufferSize),
 		done: make(chan struct{}),
 	}
@@ -88,6 +91,23 @@ func (s *DuckDBSpanStore) Close() error {
 // Migrate runs pending migrations.
 func (s *DuckDBSpanStore) Migrate(ctx context.Context) error {
 	return dbduckdb.Migrate(ctx, s.db)
+}
+
+func (s *DuckDBSpanStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
+func (s *DuckDBSpanStore) Stats(ctx context.Context) (map[string]any, error) {
+	stats := map[string]any{
+		"backend": "duckdb",
+		"path":    s.path,
+	}
+	if info, err := os.Stat(s.path); err == nil {
+		stats["size_bytes"] = info.Size()
+	}
+	var count int64
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM spans`).Scan(&count); err == nil {
+		stats["tables"] = map[string]int64{"spans": count}
+	}
+	return stats, nil
 }
 
 // OpenSpan inserts a new span (buffered, async).

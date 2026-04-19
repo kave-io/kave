@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,10 +20,11 @@ import (
 // PostgresAppStore implements store.AppStore using Postgres via pgxpool.
 type PostgresAppStore struct {
 	pool *pgxpool.Pool
+	dsn  string
 }
 
-func New(pool *pgxpool.Pool) *PostgresAppStore {
-	return &PostgresAppStore{pool: pool}
+func New(pool *pgxpool.Pool, dsn string) *PostgresAppStore {
+	return &PostgresAppStore{pool: pool, dsn: dsn}
 }
 
 func (p *PostgresAppStore) Close() error {
@@ -32,6 +34,43 @@ func (p *PostgresAppStore) Close() error {
 
 func (p *PostgresAppStore) Migrate(ctx context.Context) error {
 	return postgresdb.Migrate(ctx, p.pool)
+}
+
+func (p *PostgresAppStore) Ping(ctx context.Context) error { return p.pool.Ping(ctx) }
+
+func (p *PostgresAppStore) Stats(ctx context.Context) (map[string]any, error) {
+	stats := map[string]any{
+		"backend": "postgres",
+		"dsn":     redactDSN(p.dsn),
+	}
+	tables := []string{
+		"workspaces", "users", "memberships", "agents", "policies",
+		"runs", "actions", "price_book", "fx_rates", "fx_currencies",
+		"agent_tokens", "connector_credentials", "budgets",
+	}
+	counts := make(map[string]int64, len(tables))
+	for _, table := range tables {
+		var n int64
+		if err := p.pool.QueryRow(ctx, "SELECT COUNT(*) FROM "+table).Scan(&n); err != nil {
+			continue
+		}
+		counts[table] = n
+	}
+	stats["tables"] = counts
+	return stats, nil
+}
+
+func redactDSN(dsn string) string {
+	if dsn == "" {
+		return ""
+	}
+	parts := strings.Fields(dsn)
+	for i, part := range parts {
+		if strings.HasPrefix(strings.ToLower(part), "password=") {
+			parts[i] = "password=***"
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // ── OrgStore ─────────────────────────────────────────────────────────────────

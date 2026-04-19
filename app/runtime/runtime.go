@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/kave-io/kave/core/bus"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
@@ -50,6 +51,7 @@ func (s *Server) CreateRun(ctx context.Context, req *runtimev1.CreateRunRequest)
 	if err := s.appStore.CreateRun(ctx, run); err != nil {
 		return nil, err
 	}
+	s.publishRun("run.started", run)
 	return runToProto(run), nil
 }
 
@@ -105,7 +107,13 @@ func (s *Server) UpdateRun(ctx context.Context, req *runtimev1.UpdateRunRequest)
 	if err := s.appStore.UpdateRun(ctx, req.Id, update); err != nil {
 		return nil, err
 	}
-	return s.GetRun(ctx, &runtimev1.GetRunRequest{Id: req.Id})
+	updatedRun, err := s.GetRun(ctx, &runtimev1.GetRunRequest{Id: req.Id})
+	if err == nil {
+		if kind, ok := runEventKindFromString(runStatusFromProto(updatedRun.GetStatus())); ok {
+			s.publishRun(kind, runToModel(updatedRun))
+		}
+	}
+	return updatedRun, err
 }
 
 func (s *Server) CancelRun(ctx context.Context, req *runtimev1.CancelRunRequest) (*runtimev1.RunRecord, error) {
@@ -127,14 +135,18 @@ func (s *Server) CancelRun(ctx context.Context, req *runtimev1.CancelRunRequest)
 	if err := s.appStore.UpdateRun(ctx, req.Id, update); err != nil {
 		return nil, err
 	}
-	return s.GetRun(ctx, &runtimev1.GetRunRequest{Id: req.Id})
+	updatedRun, err := s.GetRun(ctx, &runtimev1.GetRunRequest{Id: req.Id})
+	if err == nil {
+		s.publishRun("run.canceled", runToModel(updatedRun))
+	}
+	return updatedRun, err
 }
 
 func (s *Server) WatchRuns(req *runtimev1.WatchRunsRequest, stream grpc.ServerStreamingServer[runtimev1.RunRecord]) error {
 	if s.bus == nil {
 		return status.Error(codes.Unavailable, "event bus not configured")
 	}
-	ch, cancel := s.bus.Subscribe()
+	ch, cancel := s.bus.Subscribe(bus.Filter{Kinds: []string{"run."}, EnvID: req.EnvId})
 	defer cancel()
 
 	// Build status filter set (empty = all).
@@ -159,12 +171,12 @@ func (s *Server) WatchRuns(req *runtimev1.WatchRunsRequest, stream grpc.ServerSt
 			if req.AgentId != nil && ev.AgentID != *req.AgentId {
 				continue
 			}
-			if len(wantStatus) > 0 && !wantStatus[ev.Status] {
-				continue
-			}
 			// Fetch current run state and stream it.
 			run, err := s.appStore.GetRunByID(ctx, ev.RunID)
 			if err != nil || run == nil {
+				continue
+			}
+			if len(wantStatus) > 0 && !wantStatus[run.Status] {
 				continue
 			}
 			if err := stream.Send(runToProto(run)); err != nil {
@@ -172,6 +184,68 @@ func (s *Server) WatchRuns(req *runtimev1.WatchRunsRequest, stream grpc.ServerSt
 			}
 		}
 	}
+}
+
+func (s *Server) publishRun(kind string, run *runtimemodel.RunRecord) {
+	if s == nil || s.bus == nil || run == nil {
+		return
+	}
+	raw, err := json.Marshal(runToProto(run))
+	if err != nil {
+		return
+	}
+	s.bus.Publish(bus.Event{
+		Kind:      kind,
+		ProjectID: run.ProjectID,
+		EnvID:     run.EnvID,
+		RunID:     run.ID,
+		AgentID:   run.AgentID,
+		At:        nowMS(),
+		Payload:   raw,
+	})
+}
+
+func runEventKindFromString(status string) (string, bool) {
+	switch status {
+	case "completed":
+		return "run.completed", true
+	case "failed":
+		return "run.failed", true
+	case "cancelled":
+		return "run.canceled", true
+	default:
+		return "", false
+	}
+}
+
+func runToModel(r *runtimev1.RunRecord) *runtimemodel.RunRecord {
+	if r == nil {
+		return nil
+	}
+	model := &runtimemodel.RunRecord{
+		ID:           r.Id,
+		ProjectID:    r.ProjectId,
+		EnvID:        r.EnvId,
+		AgentID:      r.AgentId,
+		PolicyID:     r.PolicyId,
+		Name:         r.Name,
+		Status:       runStatusFromProto(r.Status),
+		Metadata:     structToMap(r.Metadata),
+		ErrorMessage: r.ErrorMessage,
+		StartedAt:    r.StartedAtMs,
+		EndedAt:      r.EndedAtMs,
+		CreatedAt:    r.CreatedAtMs,
+		UpdatedAt:    r.UpdatedAtMs,
+	}
+	if r.BudgetCap != nil {
+		amount := amountFromProto(r.BudgetCap)
+		model.BudgetCap = amount
+	}
+	if r.Spent != nil {
+		amount := amountFromProto(r.Spent)
+		model.Spent = amount
+	}
+	return model
 }
 
 // ── Action Operations ──────────────────────────────────────────────────────

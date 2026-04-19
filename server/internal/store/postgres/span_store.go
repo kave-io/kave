@@ -19,11 +19,12 @@ var _ store.SpanStore = (*PostgresSpanStore)(nil)
 // Unlike DuckDB, Postgres handles concurrent writes natively so no buffering is needed.
 type PostgresSpanStore struct {
 	pool *pgxpool.Pool
+	dsn  string
 }
 
 // NewSpanStore creates a new Postgres span store.
-func NewSpanStore(pool *pgxpool.Pool) *PostgresSpanStore {
-	return &PostgresSpanStore{pool: pool}
+func NewSpanStore(pool *pgxpool.Pool, dsn string) *PostgresSpanStore {
+	return &PostgresSpanStore{pool: pool, dsn: dsn}
 }
 
 // Close closes the connection pool.
@@ -35,6 +36,22 @@ func (p *PostgresSpanStore) Close() error {
 // Migrate is a no-op for Postgres (migrations are handled by the main pool).
 func (p *PostgresSpanStore) Migrate(ctx context.Context) error {
 	return nil
+}
+
+func (p *PostgresSpanStore) Ping(ctx context.Context) error { return p.pool.Ping(ctx) }
+
+func (p *PostgresSpanStore) Stats(ctx context.Context) (map[string]any, error) {
+	var count int64
+	if err := p.pool.QueryRow(ctx, `SELECT COUNT(*) FROM spans`).Scan(&count); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"backend": "postgres",
+		"dsn":     redactDSN(p.dsn),
+		"tables": map[string]int64{
+			"spans": count,
+		},
+	}, nil
 }
 
 // OpenSpan inserts a new span.

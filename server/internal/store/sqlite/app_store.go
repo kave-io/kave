@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/kave-io/kave/core/model/control"
@@ -19,7 +20,8 @@ import (
 
 // SQLiteAppStore implements store.AppStore using SQLite with WAL mode.
 type SQLiteAppStore struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
 // New creates a new SQLite app store with the given file path.
@@ -35,7 +37,7 @@ func New(path string) (*SQLiteAppStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("sqlite: ping database: %w", err)
 	}
-	s := &SQLiteAppStore{db: db}
+	s := &SQLiteAppStore{db: db, path: path}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := s.Migrate(ctx); err != nil {
@@ -48,6 +50,33 @@ func New(path string) (*SQLiteAppStore, error) {
 func (s *SQLiteAppStore) Close() error { return s.db.Close() }
 
 func (s *SQLiteAppStore) Migrate(ctx context.Context) error { return sqlite.Migrate(ctx, s.db) }
+
+func (s *SQLiteAppStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
+
+func (s *SQLiteAppStore) Stats(ctx context.Context) (map[string]any, error) {
+	stats := map[string]any{
+		"backend": "sqlite",
+		"path":    s.path,
+	}
+	if info, err := os.Stat(s.path); err == nil {
+		stats["size_bytes"] = info.Size()
+	}
+	tables := []string{
+		"orgs", "users", "memberships", "projects", "environments",
+		"policies", "agents", "budgets", "runs", "actions",
+		"price_book", "fx_rates", "fx_currencies", "agent_tokens", "credentials",
+	}
+	counts := make(map[string]int64, len(tables))
+	for _, table := range tables {
+		var n int64
+		if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&n); err != nil {
+			continue
+		}
+		counts[table] = n
+	}
+	stats["tables"] = counts
+	return stats, nil
+}
 
 // ── OrgStore ──────────────────────────────────────────────────────────────────
 

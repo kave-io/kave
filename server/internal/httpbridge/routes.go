@@ -89,17 +89,7 @@ func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app sto
 		{Path: "GET /api/v1/settings/pricing", Invoke: getPriceBook(app)},
 		{Path: "PUT /api/v1/settings/pricing", Invoke: updatePriceBook(app)},
 
-		// Unimplemented CLI-facing endpoints.
-		{Path: "GET /api/v1/trace/tail", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "GET /api/v1/events/tail", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "GET /api/v1/logs/tail", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "GET /api/v1/status", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "GET /api/v1/doctor", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "GET /api/v1/config/view", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "POST /api/v1/config/reload", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "GET /api/v1/admin/store", Invoke: unimplementedRoute("server.unimplemented")},
 		{Path: "POST /api/v1/apply", Invoke: unimplementedRoute("server.unimplemented")},
-		{Path: "GET /api/v1/diff", Invoke: unimplementedRoute("server.unimplemented")},
 		{Path: "GET /api/v1/watch", Invoke: unimplementedRoute("server.unimplemented")},
 	}
 }

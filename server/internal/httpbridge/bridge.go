@@ -126,6 +126,8 @@ func bridgeErrorDetails(code codes.Code, kind string) (string, int) {
 		return "auth.forbidden", http.StatusForbidden
 	case codes.Unauthenticated:
 		return "auth.unauthenticated", http.StatusUnauthorized
+	case codes.FailedPrecondition:
+		return "config.invalid", http.StatusConflict
 	case codes.Unimplemented:
 		return "server.unimplemented", http.StatusNotImplemented
 	default:

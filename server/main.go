@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	appcontrol "github.com/kave-io/kave/app/control"
@@ -17,10 +20,12 @@ import (
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
+	"github.com/kave-io/kave/server/internal/daemon"
 	"github.com/kave-io/kave/server/internal/config"
 	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/internal/gateway"
 	"github.com/kave-io/kave/server/internal/httpbridge"
+	"github.com/kave-io/kave/server/internal/logsink"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
 	"github.com/kave-io/kave/server/ops/cost"
 	"github.com/kave-io/kave/server/ops/fx"
@@ -28,6 +33,8 @@ import (
 	portgrpc "github.com/kave-io/kave/server/port/grpc"
 	"github.com/kave-io/kave/server/ui"
 )
+
+var buildVersion = "dev"
 
 func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -49,7 +56,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("create cost service: %v", err)
 	}
-	fxService := fx.NewService(appStore, time.Hour)
+	fxService := fx.NewService(appStore, time.Duration(cfg.FX.RefreshIntervalSeconds)*time.Second)
 	if err := fxService.Load(ctx); err != nil {
 		log.Fatalf("load fx rates: %v", err)
 	}
@@ -63,7 +70,10 @@ func main() {
 	}
 
 	eventBus := bus.New()
-	controlServer := appcontrol.New(appStore)
+	log.SetFlags(0)
+	log.SetOutput(logsink.New(os.Stderr, eventBus))
+
+	controlServer := appcontrol.New(appStore, eventBus)
 	runtimeServer := appruntime.New(appStore, defaultSpanStore, eventBus)
 	grpcServer := portgrpc.New(controlServer, runtimeServer)
 
@@ -100,8 +110,20 @@ func main() {
 
 	bridgeMux := http.NewServeMux()
 	httpbridge.Register(bridgeMux, httpbridge.BuildRoutes(controlServer, runtimeServer, appStore, defaultSpanStore))
-	httpbridge.RegisterStreams(bridgeMux, defaultSpanStore, eventBus)
-	log.Printf("warn: unimplemented HTTP bridge routes: /api/v1/trace/tail, /api/v1/events/tail, /api/v1/logs/tail, /api/v1/status, /api/v1/doctor, /api/v1/config/view, /api/v1/config/reload, /api/v1/admin/store, /api/v1/apply, /api/v1/diff, /api/v1/watch")
+	daemonState := daemon.New(".", cfg, appStore, defaultSpanStore, fxService, costService, eventBus, buildVersion)
+	httpbridge.Register(bridgeMux, httpbridge.BuildDaemonRoutes(daemonState))
+	httpbridge.RegisterStreams(bridgeMux, appStore, defaultSpanStore, eventBus)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGHUP)
+	go func() {
+		for range sigCh {
+			if _, err := daemonState.Reload(context.Background()); err != nil {
+				log.Printf("warn: daemon reload failed: %v", err)
+				continue
+			}
+			log.Printf("info: daemon config reloaded")
+		}
+	}()
 
 	// Register health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
