@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kave-io/kave/core/pkg/money"
+	"github.com/kave-io/kave/server/internal/contract"
 )
 
 func TestHTTPRoutesRatesAndConvert(t *testing.T) {
@@ -36,20 +37,25 @@ func TestHTTPRoutesRatesAndConvert(t *testing.T) {
 			t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
 		}
 		var payload struct {
-			Rates []struct {
-				BaseCurrency  money.CurrencyCode `json:"BaseCurrency"`
-				QuoteCurrency money.CurrencyCode `json:"QuoteCurrency"`
-				Rate          string             `json:"Rate"`
-			} `json:"rates"`
+			SchemaVersion int    `json:"schema_version"`
+			Kind          string `json:"kind"`
+			Data          []struct {
+				BaseCurrency  string `json:"base_currency"`
+				QuoteCurrency string `json:"quote_currency"`
+				Rate          string `json:"rate"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 			t.Fatal(err)
 		}
-		if len(payload.Rates) != 2 {
-			t.Fatalf("len=%d", len(payload.Rates))
+		if payload.SchemaVersion != contract.SchemaVersion || payload.Kind != "FXRateList" {
+			t.Fatalf("unexpected envelope: %+v", payload)
 		}
-		if payload.Rates[1].QuoteCurrency != money.IRT || payload.Rates[1].Rate != "5000" {
-			t.Fatalf("unexpected rate %+v", payload.Rates[1])
+		if len(payload.Data) != 2 {
+			t.Fatalf("len=%d", len(payload.Data))
+		}
+		if payload.Data[1].QuoteCurrency != string(money.IRT) || payload.Data[1].Rate != "5000" {
+			t.Fatalf("unexpected rate %+v", payload.Data[1])
 		}
 	})
 
@@ -61,16 +67,22 @@ func TestHTTPRoutesRatesAndConvert(t *testing.T) {
 			t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
 		}
 		var payload struct {
-			Output struct {
-				Amount   string             `json:"amount"`
-				Currency money.CurrencyCode `json:"currency"`
-			} `json:"output"`
+			Kind string `json:"kind"`
+			Data struct {
+				Output struct {
+					Amount   string             `json:"amount"`
+					Currency money.CurrencyCode `json:"currency"`
+				} `json:"output"`
+			} `json:"data"`
 		}
 		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 			t.Fatal(err)
 		}
-		if payload.Output.Amount != "15000" || payload.Output.Currency != money.IRT {
-			t.Fatalf("unexpected output %+v", payload.Output)
+		if payload.Kind != "FXConversion" {
+			t.Fatalf("unexpected kind: %s", payload.Kind)
+		}
+		if payload.Data.Output.Amount != "15000" || payload.Data.Output.Currency != money.IRT {
+			t.Fatalf("unexpected output %+v", payload.Data.Output)
 		}
 	})
 }
@@ -94,6 +106,18 @@ func TestHTTPRoutesRefreshAndErrors(t *testing.T) {
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Fatalf("code=%d", rec.Code)
 		}
+		var payload struct {
+			Kind  string `json:"kind"`
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Kind != "Error" || payload.Error.Code != "request.method_not_allowed" {
+			t.Fatalf("unexpected error payload: %+v", payload)
+		}
 	})
 
 	t.Run("refresh post", func(t *testing.T) {
@@ -103,6 +127,19 @@ func TestHTTPRoutesRefreshAndErrors(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
 		}
+		var payload struct {
+			Kind string `json:"kind"`
+			Data struct {
+				Status string `json:"status"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Kind != "FXRefreshResult" || payload.Data.Status != "ok" {
+			t.Fatalf("unexpected payload: %+v", payload)
+		}
+
 		rate, err := app.GetFXRate(ctx, money.USD, money.IRT)
 		if err != nil {
 			t.Fatal(err)
@@ -119,6 +156,17 @@ func TestHTTPRoutesRefreshAndErrors(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("code=%d", rec.Code)
 		}
+		var payload struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Error.Code != "request.invalid" {
+			t.Fatalf("unexpected error code: %+v", payload)
+		}
 	})
 
 	t.Run("rates not found", func(t *testing.T) {
@@ -127,6 +175,17 @@ func TestHTTPRoutesRefreshAndErrors(t *testing.T) {
 		mux.ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var payload struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload.Error.Code != "fx.rate_not_found" {
+			t.Fatalf("unexpected error code: %+v", payload)
 		}
 	})
 }

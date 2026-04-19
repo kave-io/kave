@@ -3,17 +3,29 @@ package api
 import (
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/kave-io/kave/core/pkg/ids"
 )
 
-// generateID generates a new UUID-based ID.
-func generateID() string {
-	return uuid.New().String()
-}
+// generateID generates a prefixed ULID (e.g. agn_01H...).
+func generateID(prefix string) string { return ids.New(prefix) }
+
+const apiDefaultCurrency = "USD"
 
 // getCurrentTimeMs returns the current time in milliseconds since epoch.
 func getCurrentTimeMs() int64 {
 	return time.Now().UnixMilli()
+}
+
+func isoFromMS(ms int64) string {
+	return time.UnixMilli(ms).UTC().Format(time.RFC3339Nano)
+}
+
+func isoFromMSPtr(ms *int64) *string {
+	if ms == nil {
+		return nil
+	}
+	iso := isoFromMS(*ms)
+	return &iso
 }
 
 // stringOrEmpty returns the string value or empty string if nil.

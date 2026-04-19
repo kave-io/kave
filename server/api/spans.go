@@ -8,6 +8,7 @@ import (
 
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/store"
+	"github.com/kave-io/kave/server/internal/contract"
 )
 
 // listSpans returns all spans matching the filter.
@@ -25,16 +26,16 @@ func (h *Handler) listSpans(w http.ResponseWriter, r *http.Request) {
 	page := pageQuery(r)
 	spans, err := h.spans.QuerySpans(ctx, filter, page)
 	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, err.Error())
+		errorJSON(w, http.StatusInternalServerError, "store.list_failed", err.Error())
 		return
 	}
 
 	result := make([]*Span, 0, len(spans.Items))
 	for _, s := range spans.Items {
-		result = append(result, MapSpanRowToAPI(s, nil))
+		result = append(result, MapSpanRowToAPI(s))
 	}
 
-	responseJSON(w, http.StatusOK, result)
+	pagedResponseJSON(w, http.StatusOK, "SpanList", result, page.Limit, spans.NextCursor, nil)
 }
 
 // streamSpans streams run events via SSE.
@@ -46,17 +47,17 @@ func (h *Handler) streamSpans(w http.ResponseWriter, r *http.Request) {
 	envID := getQueryParam(r, "env_id")
 	runID := getQueryParam(r, "run_id")
 
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		errorJSON(w, http.StatusInternalServerError, "stream.unsupported", "streaming unsupported")
+		return
+	}
+
 	// Set SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
 
 	// Subscribe to run events from the bus
 	eventCh, cancel := h.bus.Subscribe()
@@ -88,13 +89,23 @@ func (h *Handler) streamSpans(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Convert to API format
-			apiSpan := MapSpanRowToAPI(spans.Items[0], nil)
+			apiSpan := MapSpanRowToAPI(spans.Items[0])
 			data, err := json.Marshal(apiSpan)
 			if err != nil {
 				continue
 			}
+			envelope, err := json.Marshal(contract.SuccessEnvelope{
+				SchemaVersion: contract.SchemaVersion,
+				Kind:          "Span",
+				Data:          json.RawMessage(data),
+				Page:          nil,
+				Warnings:      []contract.Warning{},
+			})
+			if err != nil {
+				continue
+			}
 
-			fmt.Fprintf(w, "data: %s\n\n", string(data))
+			fmt.Fprintf(w, "data: %s\n\n", string(envelope))
 			flusher.Flush()
 
 		case <-ctx.Done():

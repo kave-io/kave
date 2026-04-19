@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/kave-io/kave/connectors/runtime"
+	"github.com/kave-io/kave/core/pkg/ids"
 	coreruntime "github.com/kave-io/kave/core/runtime"
 )
 
@@ -46,7 +46,7 @@ func (c *Connector) ParseLLMRequest(req *runtime.Request) (*runtime.LLMCall, err
 		Action: &coreruntime.Action{
 			Invocation: coreruntime.Invocation{
 				InvocationRef: coreruntime.InvocationRef{
-					ID: uuid.NewString(),
+					ID: ids.New("act"),
 				},
 				InvocationTarget: coreruntime.InvocationTarget{
 					Type:      coreruntime.TypeLLM,

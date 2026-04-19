@@ -36,7 +36,7 @@ func (s *Server) Register(srv *grpc.Server) {
 func (s *Server) CreateRun(ctx context.Context, req *runtimev1.CreateRunRequest) (*runtimev1.RunRecord, error) {
 	now := nowMS()
 	run := &runtimemodel.RunRecord{
-		ID:        newID(),
+		ID:        newID("run"),
 		ProjectID: req.ProjectId,
 		EnvID:     req.EnvId,
 		AgentID:   req.AgentId,
@@ -156,7 +156,7 @@ func (s *Server) WatchRuns(req *runtimev1.WatchRunsRequest, stream grpc.ServerSt
 func (s *Server) CreateAction(ctx context.Context, req *runtimev1.CreateActionRequest) (*runtimev1.ActionRecord, error) {
 	now := nowMS()
 	action := &runtimemodel.ActionRecord{
-		ID:         newID(),
+		ID:         newID("act"),
 		RunID:      req.RunId,
 		AgentID:    req.AgentId,
 		ProjectID:  req.ProjectId,

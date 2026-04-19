@@ -14,15 +14,15 @@ func (h *Handler) getPolicy(w http.ResponseWriter, r *http.Request) {
 
 	policy, err := h.app.GetPolicy(ctx, id)
 	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, err.Error())
+		errorJSON(w, http.StatusInternalServerError, "store.get_failed", err.Error())
 		return
 	}
 	if policy == nil {
-		errorJSON(w, http.StatusNotFound, "policy not found")
+		errorJSON(w, http.StatusNotFound, "policy.not_found", "policy not found")
 		return
 	}
 
-	responseJSON(w, http.StatusOK, MapPolicyToAPI(policy))
+	responseJSON(w, http.StatusOK, "Policy", MapPolicyToAPI(policy), nil, nil)
 }
 
 // listPolicies returns all policies in an environment.
@@ -30,14 +30,14 @@ func (h *Handler) listPolicies(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	envID := getQueryParam(r, "env_id")
 	if envID == "" {
-		errorJSON(w, http.StatusBadRequest, "env_id query parameter required")
+		errorJSON(w, http.StatusBadRequest, "request.invalid", "env_id query parameter required")
 		return
 	}
 
 	page := pageQuery(r)
 	policies, err := h.app.ListPolicies(ctx, envID, page)
 	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, err.Error())
+		errorJSON(w, http.StatusInternalServerError, "store.list_failed", err.Error())
 		return
 	}
 
@@ -46,7 +46,7 @@ func (h *Handler) listPolicies(w http.ResponseWriter, r *http.Request) {
 		result = append(result, MapPolicyToAPI(p))
 	}
 
-	responseJSON(w, http.StatusOK, result)
+	pagedResponseJSON(w, http.StatusOK, "PolicyList", result, page.Limit, policies.NextCursor, nil)
 }
 
 // createPolicy creates a new policy.
@@ -54,18 +54,18 @@ func (h *Handler) createPolicy(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var req CreatePolicyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		errorJSON(w, http.StatusBadRequest, "invalid request body")
+		errorJSON(w, http.StatusBadRequest, "request.invalid", "invalid request body")
 		return
 	}
 
 	if req.Name == "" || req.ProjectID == "" || req.EnvID == "" {
-		errorJSON(w, http.StatusBadRequest, "name, project_id, and env_id required")
+		errorJSON(w, http.StatusBadRequest, "request.invalid", "name, project_id, and env_id required")
 		return
 	}
 
 	now := getCurrentTimeMs()
 	policy := &control.PolicyRecord{
-		ID:                generateID(),
+		ID:                generateID("pol"),
 		ProjectID:         req.ProjectID,
 		EnvID:             req.EnvID,
 		Name:              req.Name,
@@ -84,9 +84,9 @@ func (h *Handler) createPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.app.CreatePolicy(ctx, policy); err != nil {
-		errorJSON(w, http.StatusInternalServerError, err.Error())
+		errorJSON(w, http.StatusInternalServerError, "store.create_failed", err.Error())
 		return
 	}
 
-	responseJSON(w, http.StatusCreated, MapPolicyToAPI(policy))
+	responseJSON(w, http.StatusCreated, "Policy", MapPolicyToAPI(policy), nil, nil)
 }

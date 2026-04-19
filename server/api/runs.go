@@ -11,25 +11,25 @@ func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	filter := &runtimemodel.RunFilter{
-		EnvID:    getQueryParam(r, "env_id"),
+		EnvID:     getQueryParam(r, "env_id"),
 		ProjectID: getQueryParam(r, "project_id"),
-		AgentID:  getQueryParam(r, "agent_id"),
-		Status:   getQueryParam(r, "status"),
+		AgentID:   getQueryParam(r, "agent_id"),
+		Status:    getQueryParam(r, "status"),
 	}
 
 	page := pageQuery(r)
 	runs, err := h.app.ListRuns(ctx, filter, page)
 	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, err.Error())
+		errorJSON(w, http.StatusInternalServerError, "store.list_failed", err.Error())
 		return
 	}
 
 	result := make([]*Run, 0, len(runs.Items))
 	for _, r := range runs.Items {
-		result = append(result, MapRunToAPI(r, nil, nil))
+		result = append(result, MapRunToAPI(r))
 	}
 
-	responseJSON(w, http.StatusOK, result)
+	pagedResponseJSON(w, http.StatusOK, "RunList", result, page.Limit, runs.NextCursor, nil)
 }
 
 // getRun returns a single run.
@@ -39,15 +39,15 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 
 	run, err := h.app.GetRunByID(ctx, id)
 	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, err.Error())
+		errorJSON(w, http.StatusInternalServerError, "store.get_failed", err.Error())
 		return
 	}
 	if run == nil {
-		errorJSON(w, http.StatusNotFound, "run not found")
+		errorJSON(w, http.StatusNotFound, "run.not_found", "run not found")
 		return
 	}
 
-	responseJSON(w, http.StatusOK, MapRunToAPI(run, nil, nil))
+	responseJSON(w, http.StatusOK, "Run", MapRunToAPI(run), nil, nil)
 }
 
 // getRunSpans returns all spans for a run.
@@ -62,14 +62,14 @@ func (h *Handler) getRunSpans(w http.ResponseWriter, r *http.Request) {
 
 	spans, err := h.spans.QuerySpans(ctx, filter, page)
 	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, err.Error())
+		errorJSON(w, http.StatusInternalServerError, "store.list_failed", err.Error())
 		return
 	}
 
 	result := make([]*Span, 0, len(spans.Items))
 	for _, s := range spans.Items {
-		result = append(result, MapSpanRowToAPI(s, nil))
+		result = append(result, MapSpanRowToAPI(s))
 	}
 
-	responseJSON(w, http.StatusOK, result)
+	pagedResponseJSON(w, http.StatusOK, "SpanList", result, page.Limit, spans.NextCursor, nil)
 }

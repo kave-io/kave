@@ -3,8 +3,8 @@ package runtime
 import (
 	"time"
 
-	"github.com/google/uuid"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 	commonv1 "github.com/kave-io/kave/proto/gen/kave/common/v1"
@@ -14,7 +14,7 @@ import (
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func newID() string { return uuid.New().String() }
+func newID(prefix string) string { return ids.New(prefix) }
 
 func nowMS() int64 { return time.Now().UnixMilli() }
 
@@ -141,16 +141,16 @@ func actionToProto(a *runtimemodel.ActionRecord) *runtimev1.ActionRecord {
 		return nil
 	}
 	p := &runtimev1.ActionRecord{
-		Id:         a.ID,
-		RunId:      a.RunID,
-		AgentId:    a.AgentID,
-		ProjectId:  a.ProjectID,
-		EnvId:      a.EnvID,
-		ParentId:   a.ParentID,
-		ActionType: actionTypeToProto(a.ActionType),
-		Connector:  a.Connector,
-		Method:     a.Method,
-		Error:      a.Error,
+		Id:          a.ID,
+		RunId:       a.RunID,
+		AgentId:     a.AgentID,
+		ProjectId:   a.ProjectID,
+		EnvId:       a.EnvID,
+		ParentId:    a.ParentID,
+		ActionType:  actionTypeToProto(a.ActionType),
+		Connector:   a.Connector,
+		Method:      a.Method,
+		Error:       a.Error,
 		StartedAtMs: a.StartedAt,
 		EndedAtMs:   a.EndedAt,
 		Depth:       int32(a.Depth),
@@ -254,8 +254,8 @@ func spanToProto(s *runtimemodel.SpanRow) *runtimev1.SpanRow {
 		EndedAtMs:   s.EndedAt,
 		DurationMs:  s.DurationMs,
 		Error:       s.Error,
-		Model:      s.Model,
-		TraceId:    s.TraceID,
+		Model:       s.Model,
+		TraceId:     s.TraceID,
 		RootSpanId:  s.RootSpanID,
 		CreatedAtMs: s.CreatedAt,
 	}
@@ -324,21 +324,21 @@ func spanInputToModel(in *runtimev1.SpanInput) *runtimemodel.SpanRow {
 		return &runtimemodel.SpanRow{}
 	}
 	row := &runtimemodel.SpanRow{
-		ID:        newID(),
-		ProjectID: in.ProjectId,
-		EnvID:     in.EnvId,
-		AgentID:   in.AgentId,
-		RunID:     in.RunId,
-		ActionID:  in.ActionId,
-		ParentID:  in.ParentId,
-		Name:      in.Name,
-		Kind:      spanKindFromProto(in.Kind),
-		Source:    spanSourceFromProto(in.Source),
-		Connector: in.Connector,
-		StartedAt: in.StartedAtMs,
-		TraceID:   in.TraceId,
+		ID:         newID("spn"),
+		ProjectID:  in.ProjectId,
+		EnvID:      in.EnvId,
+		AgentID:    in.AgentId,
+		RunID:      in.RunId,
+		ActionID:   in.ActionId,
+		ParentID:   in.ParentId,
+		Name:       in.Name,
+		Kind:       spanKindFromProto(in.Kind),
+		Source:     spanSourceFromProto(in.Source),
+		Connector:  in.Connector,
+		StartedAt:  in.StartedAtMs,
+		TraceID:    in.TraceId,
 		RootSpanID: in.RootSpanId,
-		CreatedAt: nowMS(),
+		CreatedAt:  nowMS(),
 	}
 	if len(in.Input) > 0 {
 		b := in.Input

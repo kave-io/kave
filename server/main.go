@@ -17,6 +17,7 @@ import (
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/api"
 	"github.com/kave-io/kave/server/internal/config"
+	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/internal/gateway"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
 	"github.com/kave-io/kave/server/ops/cost"
@@ -99,8 +100,16 @@ func main() {
 
 	// Register health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok"}`)
+		if r.Method != http.MethodGet {
+			contract.WriteError(w, http.StatusMethodNotAllowed, "request.method_not_allowed", "method not allowed", nil)
+			return
+		}
+		now := time.Now().UnixMilli()
+		contract.WriteSuccess(w, http.StatusOK, "Health", map[string]any{
+			"status":        "ok",
+			"checked_at":    time.UnixMilli(now).UTC().Format(time.RFC3339Nano),
+			"checked_at_ms": now,
+		}, nil, nil)
 	})
 
 	// Serve dashboard SPA at /

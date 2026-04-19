@@ -8,15 +8,16 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/kave-io/kave/connectors/runtime"
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
+	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/timex"
 	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/kave-io/kave/core/store"
 	serverframework "github.com/kave-io/kave/server/internal/connectors/framework"
+	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/internal/infra/crypto"
 )
 
@@ -44,6 +45,7 @@ func (g *FrameworkGateway) RegisterRoutes(mux *http.ServeMux) {
 
 func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	tw := &trackingResponseWriter{ResponseWriter: w}
 
 	agentID := "default"
 	if auth := r.Header.Get("Authorization"); auth != "" {
@@ -54,7 +56,7 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 
 	agent, err := g.app.GetAgentByID(ctx, agentID)
 	if err != nil || agent == nil {
-		http.Error(w, "agent not found", http.StatusUnauthorized)
+		contract.WriteError(tw, http.StatusUnauthorized, "gateway.agent_not_found", "agent not found", nil)
 		return
 	}
 
@@ -71,12 +73,12 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 		Body:     body,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		contract.WriteError(tw, http.StatusBadRequest, "gateway.bad_request", err.Error(), nil)
 		return
 	}
 	now := int64(timex.Now())
 	run := &runtimemodel.RunRecord{
-		ID:        uuid.NewString(),
+		ID:        ids.New("run"),
 		ProjectID: agent.ProjectID,
 		EnvID:     agent.EnvID,
 		AgentID:   agent.ID,
@@ -88,7 +90,7 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 		UpdatedAt: now,
 	}
 	if err := g.app.CreateRun(ctx, run); err != nil {
-		http.Error(w, "create run failed", http.StatusInternalServerError)
+		contract.WriteError(tw, http.StatusInternalServerError, "gateway.create_run_failed", "create run failed", nil)
 		return
 	}
 
@@ -113,13 +115,13 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 		Metadata:   map[string]any{},
 		CreatedAt:  now,
 	}); err != nil {
-		http.Error(w, "create action failed", http.StatusInternalServerError)
+		contract.WriteError(tw, http.StatusInternalServerError, "gateway.create_action_failed", "create action failed", nil)
 		return
 	}
 
 	provider, err := runtime.RequireProvider(g.claude.Providers, call.Provider)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		contract.WriteError(tw, http.StatusBadRequest, "gateway.provider_not_supported", err.Error(), nil)
 		return
 	}
 
@@ -151,15 +153,15 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 
 		contentType := resp.Header.Get("Content-Type")
 		if strings.Contains(contentType, "event-stream") {
-			return g.handleStream(w, resp, provider)
+			return g.handleStream(tw, resp, provider)
 		}
-		return g.handleBuffered(w, resp, provider)
+		return g.handleBuffered(tw, resp, provider)
 	}
 
 	result, err := g.pipeline.Execute(ctx, call.Action, handler)
 	g.finishRun(ctx, run.ID, err)
-	if err != nil && result == nil {
-		http.Error(w, fmt.Sprintf("gateway error: %v", err), http.StatusBadGateway)
+	if err != nil && result == nil && !tw.WroteHeader() {
+		contract.WriteError(tw, http.StatusBadGateway, "gateway.upstream_error", fmt.Sprintf("gateway error: %v", err), nil)
 	}
 }
 
@@ -275,4 +277,31 @@ func (g *FrameworkGateway) finishRun(ctx context.Context, runID string, runErr e
 		ErrorMessage: message,
 		EndedAt:      &endedAt,
 	})
+}
+
+type trackingResponseWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (t *trackingResponseWriter) WriteHeader(statusCode int) {
+	t.wroteHeader = true
+	t.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (t *trackingResponseWriter) Write(b []byte) (int, error) {
+	if !t.wroteHeader {
+		t.wroteHeader = true
+	}
+	return t.ResponseWriter.Write(b)
+}
+
+func (t *trackingResponseWriter) WroteHeader() bool {
+	return t.wroteHeader
+}
+
+func (t *trackingResponseWriter) Flush() {
+	if f, ok := t.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }

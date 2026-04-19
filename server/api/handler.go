@@ -1,20 +1,20 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/kave-io/kave/core/bus"
 	"github.com/kave-io/kave/core/store"
+	"github.com/kave-io/kave/server/internal/contract"
 )
 
 // Handler is the API HTTP handler registry.
 type Handler struct {
-	app store.AppStore
+	app   store.AppStore
 	spans store.SpanStore
-	bus *bus.Bus
+	bus   *bus.Bus
 }
 
 // New creates a new API handler.
@@ -50,30 +50,36 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/settings/pricing", h.updatePriceBook)
 }
 
-// responseJSON writes a JSON response.
-func responseJSON(w http.ResponseWriter, status int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+// responseJSON writes an envelope JSON response.
+func responseJSON(w http.ResponseWriter, status int, kind string, data any, page *contract.Page, warnings []contract.Warning) {
+	contract.WriteSuccess(w, status, kind, data, page, warnings)
 }
 
-// errorResponse is an error response.
-type errorResponse struct {
-	Error string `json:"error"`
+func pagedResponseJSON(w http.ResponseWriter, status int, kind string, data any, limit int, nextCursor string, warnings []contract.Warning) {
+	var cursor *string
+	if nextCursor != "" {
+		cursor = &nextCursor
+	}
+	responseJSON(w, status, kind, data, &contract.Page{
+		NextCursor: cursor,
+		Limit:      limit,
+	}, warnings)
 }
 
-// errorJSON writes an error response.
-func errorJSON(w http.ResponseWriter, status int, msg string) {
-	responseJSON(w, status, errorResponse{Error: msg})
+func errorJSON(w http.ResponseWriter, status int, code, msg string) {
+	contract.WriteError(w, status, code, msg, nil)
 }
 
 // pageQuery parses limit and cursor from query params.
 func pageQuery(r *http.Request) store.Page {
-	limit := 50
+	limit := 20
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
 			limit = parsed
 		}
+	}
+	if limit > 500 {
+		limit = 500
 	}
 	cursor := r.URL.Query().Get("cursor")
 	return store.Page{Limit: limit, Cursor: cursor}

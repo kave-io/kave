@@ -33,9 +33,11 @@ func (m *mockAppStore) GetAgentByName(_ context.Context, _, _ string) (*controlm
 func (m *mockAppStore) UpdateAgent(_ context.Context, _ string, _ *controlmodel.AgentUpdate) error {
 	return nil
 }
-func (m *mockAppStore) ListAgents(_ context.Context, _ string) ([]*controlmodel.Agent, error) {
-	return nil, nil
+func (m *mockAppStore) ListAgents(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Agent], error) {
+	return store.PageResult[*controlmodel.Agent]{}, nil
 }
+func (m *mockAppStore) DeleteAgent(_ context.Context, _, _ string) error  { return nil }
+func (m *mockAppStore) RestoreAgent(_ context.Context, _, _ string) error { return nil }
 
 // PolicyStore
 func (m *mockAppStore) CreatePolicy(_ context.Context, _ *controlmodel.PolicyRecord) error {
@@ -47,8 +49,11 @@ func (m *mockAppStore) GetPolicy(_ context.Context, _ string) (*controlmodel.Pol
 func (m *mockAppStore) GetAgentPolicy(_ context.Context, _ string) (*controlmodel.PolicyRecord, error) {
 	return nil, nil
 }
-func (m *mockAppStore) ListPolicies(_ context.Context, _ string) ([]*controlmodel.PolicyRecord, error) {
-	return nil, nil
+func (m *mockAppStore) ListPolicies(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.PolicyRecord], error) {
+	return store.PageResult[*controlmodel.PolicyRecord]{}, nil
+}
+func (m *mockAppStore) UpdatePolicy(_ context.Context, _ string, _ *controlmodel.PolicyUpdate) error {
+	return nil
 }
 
 // RunStore
@@ -62,8 +67,8 @@ func (m *mockAppStore) GetRunByIdempotencyKey(_ context.Context, _, _ string) (*
 func (m *mockAppStore) UpdateRun(_ context.Context, _ string, _ *runtimemodel.RunUpdate) error {
 	return nil
 }
-func (m *mockAppStore) ListRuns(_ context.Context, _ *runtimemodel.RunFilter) ([]*runtimemodel.RunRecord, error) {
-	return nil, nil
+func (m *mockAppStore) ListRuns(_ context.Context, _ *runtimemodel.RunFilter, _ store.Page) (store.PageResult[*runtimemodel.RunRecord], error) {
+	return store.PageResult[*runtimemodel.RunRecord]{}, nil
 }
 
 // ActionStore
@@ -73,8 +78,8 @@ func (m *mockAppStore) CreateAction(_ context.Context, _ *runtimemodel.ActionRec
 func (m *mockAppStore) GetAction(_ context.Context, _ string) (*runtimemodel.ActionRecord, error) {
 	return nil, nil
 }
-func (m *mockAppStore) ListActionsByRun(_ context.Context, _ string) ([]*runtimemodel.ActionRecord, error) {
-	return nil, nil
+func (m *mockAppStore) ListActionsByRun(_ context.Context, _ string, _ store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
+	return store.PageResult[*runtimemodel.ActionRecord]{}, nil
 }
 
 // CostStore
@@ -115,10 +120,14 @@ func (m *mockAppStore) InsertAgentToken(_ context.Context, _ *controlmodel.Agent
 func (m *mockAppStore) GetTokenByHash(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
 	return nil, nil
 }
-func (m *mockAppStore) RevokeToken(_ context.Context, _, _, _ string) error      { return nil }
-func (m *mockAppStore) TouchToken(_ context.Context, _ string) error             { return nil }
-func (m *mockAppStore) IsTokenRevoked(_ context.Context, _ string) (bool, error) { return false, nil }
-func (m *mockAppStore) InsertRevokedToken(_ context.Context, _ string) error     { return nil }
+func (m *mockAppStore) GetToken(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListTokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.AgentToken], error) {
+	return store.PageResult[*controlmodel.AgentToken]{}, nil
+}
+func (m *mockAppStore) RevokeToken(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockAppStore) TouchToken(_ context.Context, _ string) error        { return nil }
 
 // CredentialStore
 func (m *mockAppStore) GetCredential(_ context.Context, _ string) (*controlmodel.ConnectorCredential, error) {
@@ -128,8 +137,8 @@ func (m *mockAppStore) StoreCredential(_ context.Context, _ *controlmodel.Connec
 	return nil
 }
 func (m *mockAppStore) DeleteCredential(_ context.Context, _ string) error { return nil }
-func (m *mockAppStore) ListCredentials(_ context.Context, _ string) ([]*controlmodel.ConnectorCredential, error) {
-	return nil, nil
+func (m *mockAppStore) ListCredentials(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.ConnectorCredential], error) {
+	return store.PageResult[*controlmodel.ConnectorCredential]{}, nil
 }
 func (m *mockAppStore) ResolveCredential(_ context.Context, _ *controlmodel.CredentialFilter) (*controlmodel.ConnectorCredential, error) {
 	return m.cred, nil
@@ -166,8 +175,8 @@ func (m *mockAppStore) AddMember(_ context.Context, _ *controlmodel.Membership) 
 func (m *mockAppStore) GetMembership(_ context.Context, _, _ string) (*controlmodel.Membership, error) {
 	return nil, nil
 }
-func (m *mockAppStore) ListMembers(_ context.Context, _ string) ([]*controlmodel.Membership, error) {
-	return nil, nil
+func (m *mockAppStore) ListMembers(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Membership], error) {
+	return store.PageResult[*controlmodel.Membership]{}, nil
 }
 func (m *mockAppStore) RemoveMember(_ context.Context, _, _ string) error { return nil }
 
@@ -176,8 +185,8 @@ func (m *mockAppStore) CreateProject(_ context.Context, _ *controlmodel.Project)
 func (m *mockAppStore) GetProject(_ context.Context, _ string) (*controlmodel.Project, error) {
 	return nil, nil
 }
-func (m *mockAppStore) ListProjects(_ context.Context, _ string) ([]*controlmodel.Project, error) {
-	return nil, nil
+func (m *mockAppStore) ListProjects(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Project], error) {
+	return store.PageResult[*controlmodel.Project]{}, nil
 }
 
 // EnvironmentStore
@@ -190,8 +199,8 @@ func (m *mockAppStore) GetEnvironment(_ context.Context, _ string) (*controlmode
 func (m *mockAppStore) GetEnvironmentBySlug(_ context.Context, _, _ string) (*controlmodel.Environment, error) {
 	return nil, nil
 }
-func (m *mockAppStore) ListEnvironments(_ context.Context, _ string) ([]*controlmodel.Environment, error) {
-	return nil, nil
+func (m *mockAppStore) ListEnvironments(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Environment], error) {
+	return store.PageResult[*controlmodel.Environment]{}, nil
 }
 
 // StoreLifecycle

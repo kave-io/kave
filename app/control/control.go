@@ -34,7 +34,7 @@ func (s *Server) Register(srv *grpc.Server) {
 func (s *Server) CreateOrganization(ctx context.Context, req *controlv1.CreateOrganizationRequest) (*controlv1.Organization, error) {
 	now := nowMS()
 	org := &control.Organization{
-		ID:        newID(),
+		ID:        newID("org"),
 		Name:      req.Name,
 		Slug:      req.Slug,
 		Plan:      "free",
@@ -68,7 +68,7 @@ func (s *Server) ListOrganizations(ctx context.Context, req *controlv1.ListOrgan
 func (s *Server) CreateProject(ctx context.Context, req *controlv1.CreateProjectRequest) (*controlv1.Project, error) {
 	now := nowMS()
 	proj := &control.Project{
-		ID:        newID(),
+		ID:        newID("prj"),
 		OrgID:     req.OrgId,
 		Name:      req.Name,
 		Slug:      req.Slug,
@@ -110,7 +110,7 @@ func (s *Server) ListProjects(ctx context.Context, req *controlv1.ListProjectsRe
 func (s *Server) CreateEnvironment(ctx context.Context, req *controlv1.CreateEnvironmentRequest) (*controlv1.Environment, error) {
 	now := nowMS()
 	env := &control.Environment{
-		ID:        newID(),
+		ID:        newID("env"),
 		ProjectID: req.ProjectId,
 		Name:      req.Name,
 		Slug:      req.Slug,
@@ -153,7 +153,7 @@ func (s *Server) ListEnvironments(ctx context.Context, req *controlv1.ListEnviro
 func (s *Server) CreateAgent(ctx context.Context, req *controlv1.CreateAgentRequest) (*controlv1.Agent, error) {
 	now := nowMS()
 	agent := &control.Agent{
-		ID:          newID(),
+		ID:          newID("agn"),
 		EnvID:       req.EnvId,
 		Name:        req.Name,
 		Description: req.Description,
@@ -240,7 +240,7 @@ func (s *Server) DeleteAgent(ctx context.Context, req *controlv1.DeleteAgentRequ
 func (s *Server) CreatePolicy(ctx context.Context, req *controlv1.CreatePolicyRequest) (*controlv1.PolicyRecord, error) {
 	now := nowMS()
 	pol := &control.PolicyRecord{
-		ID:                newID(),
+		ID:                newID("pol"),
 		EnvID:             req.EnvId,
 		Name:              req.Name,
 		Description:       req.Description,
@@ -347,7 +347,7 @@ func (s *Server) CreateToken(ctx context.Context, req *controlv1.CreateTokenRequ
 	raw, prefix, hash := generateToken()
 	now := nowMS()
 	tok := &control.AgentToken{
-		ID:          newID(),
+		ID:          newID("tok"),
 		AgentID:     req.AgentId,
 		Name:        req.Name,
 		TokenPrefix: prefix,
@@ -402,7 +402,7 @@ func (s *Server) RevokeToken(ctx context.Context, req *controlv1.RevokeTokenRequ
 func (s *Server) CreateCredential(ctx context.Context, req *controlv1.CreateCredentialRequest) (*controlv1.ConnectorCredential, error) {
 	now := nowMS()
 	cred := &control.ConnectorCredential{
-		ID:            newID(),
+		ID:            newID("crd"),
 		EnvID:         req.EnvId,
 		ConnectorType: req.ConnectorType,
 		Label:         req.Label,
@@ -485,4 +485,3 @@ func (s *Server) RevokeCredential(ctx context.Context, req *controlv1.RevokeCred
 	}
 	return &emptypb.Empty{}, nil
 }
-

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/kave-io/kave/core/model/control"
+	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/money"
 	commonv1 "github.com/kave-io/kave/proto/gen/kave/common/v1"
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
@@ -399,9 +399,7 @@ func credentialToProto(c *control.ConnectorCredential) *controlv1.ConnectorCrede
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func newID() string {
-	return uuid.New().String()
-}
+func newID(prefix string) string { return ids.New(prefix) }
 
 func nowMS() int64 {
 	return time.Now().UnixMilli()
