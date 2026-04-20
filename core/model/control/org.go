@@ -26,8 +26,8 @@ type User struct {
 	OrgID        string
 	Email        string
 	Name         string
-	PasswordHash string // bcrypt
-	Status       string // "active" | "suspended"
+	Status       string // active | invited | disabled
+	PasswordHash []byte // argon2id; empty when SSO-only
 	LastLoginAt  *int64 // UnixMilli; nil = never logged in
 	CreatedAt    int64  // UnixMilli
 	UpdatedAt    int64  // UnixMilli

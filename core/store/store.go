@@ -114,17 +114,36 @@ type CostStore interface {
 // TokenStore owns agent token issuance and lifecycle.
 // Stores only the hash of the raw token; raw token is shown once at creation then never persisted.
 type TokenStore interface {
-	// Issuance
-	InsertAgentToken(ctx context.Context, token *controlmodel.AgentToken) error
+	// Sessions
+	InsertSession(ctx context.Context, session *controlmodel.Session) error
+	GetSessionByHash(ctx context.Context, hash string) (*controlmodel.Session, error)
+	GetSession(ctx context.Context, id string) (*controlmodel.Session, error)
+	ListSessions(ctx context.Context, userID string, page Page) (PageResult[*controlmodel.Session], error)
+	RevokeSession(ctx context.Context, sessionID, revokedBy string) error
+	TouchSession(ctx context.Context, sessionID string) error
 
-	// Lookup
+	// API tokens
+	InsertAPIToken(ctx context.Context, token *controlmodel.APIToken) error
+	GetAPITokenByHash(ctx context.Context, hash string) (*controlmodel.APIToken, error)
+	GetAPIToken(ctx context.Context, id string) (*controlmodel.APIToken, error)
+	ListAPITokens(ctx context.Context, userID string, page Page) (PageResult[*controlmodel.APIToken], error)
+	RevokeAPIToken(ctx context.Context, tokenID, revokedBy, reason string) error
+	TouchAPIToken(ctx context.Context, tokenID string) error
+
+	// Agent tokens
+	InsertAgentToken(ctx context.Context, token *controlmodel.AgentToken) error
+	GetAgentTokenByHash(ctx context.Context, hash string) (*controlmodel.AgentToken, error)
+	GetAgentToken(ctx context.Context, id string) (*controlmodel.AgentToken, error)
+	ListAgentTokens(ctx context.Context, agentID string, page Page) (PageResult[*controlmodel.AgentToken], error)
+	RevokeAgentToken(ctx context.Context, tokenID, revokedBy, reason string) error
+	TouchAgentToken(ctx context.Context, tokenID string) error
+
+	// Legacy compatibility shims used by older call sites.
 	GetTokenByHash(ctx context.Context, hash string) (*controlmodel.AgentToken, error)
 	GetToken(ctx context.Context, id string) (*controlmodel.AgentToken, error)
 	ListTokens(ctx context.Context, agentID string, page Page) (PageResult[*controlmodel.AgentToken], error)
-
-	// Lifecycle
 	RevokeToken(ctx context.Context, tokenID, revokedBy, reason string) error
-	TouchToken(ctx context.Context, tokenID string) error // updates last_used_at; async-safe
+	TouchToken(ctx context.Context, tokenID string) error
 }
 
 // CredentialStore owns outbound connector secret persistence.
@@ -145,6 +164,23 @@ type CredentialStore interface {
 	RotateCredential(ctx context.Context, id string, newBlob []byte, wrappingKeyID, rotatedBy string) error
 	RevokeCredential(ctx context.Context, id string, revokedBy, reason string) error
 	TouchCredential(ctx context.Context, id string) error // updates last_used_at; async-safe
+}
+
+// RoleStore owns RBAC roles.
+type RoleStore interface {
+	InsertRole(ctx context.Context, role *controlmodel.Role) error
+	GetRole(ctx context.Context, id string) (*controlmodel.Role, error)
+	ListRoles(ctx context.Context, orgID string, page Page) (PageResult[*controlmodel.Role], error)
+	UpdateRole(ctx context.Context, id string, role *controlmodel.Role) error
+	DeleteRole(ctx context.Context, id string) error
+}
+
+// BindingStore owns RBAC bindings.
+type BindingStore interface {
+	InsertBinding(ctx context.Context, binding *controlmodel.Binding) error
+	GetBinding(ctx context.Context, id string) (*controlmodel.Binding, error)
+	ListBindings(ctx context.Context, orgID string, page Page) (PageResult[*controlmodel.Binding], error)
+	DeleteBinding(ctx context.Context, id string) error
 }
 
 // StoreLifecycle owns transactional and migration behavior.
@@ -169,6 +205,8 @@ type AppStore interface {
 	CostStore
 	TokenStore
 	CredentialStore
+	RoleStore
+	BindingStore
 	StoreLifecycle
 }
 

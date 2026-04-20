@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,13 +13,14 @@ import (
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
+	"github.com/kave-io/kave/core/pkg/authhash"
 	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/timex"
 	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/kave-io/kave/core/store"
 	serverframework "github.com/kave-io/kave/server/internal/connectors/framework"
 	"github.com/kave-io/kave/server/internal/contract"
-	"github.com/kave-io/kave/server/internal/infra/crypto"
+	"github.com/kave-io/kave/server/ops/auth/credresolve"
 )
 
 type FrameworkGateway struct {
@@ -49,8 +51,12 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 
 	agentID := "default"
 	if auth := r.Header.Get("Authorization"); auth != "" {
-		if token := strings.TrimPrefix(auth, "Bearer "); token != auth && isUUID(token) {
-			agentID = token
+		if token := strings.TrimPrefix(auth, "Bearer "); token != auth {
+			if tok, err := g.app.GetAgentTokenByHash(ctx, string(authhash.HashToken(token))); err == nil && tok != nil {
+				agentID = tok.AgentID
+			} else {
+				agentID = token
+			}
 		}
 	}
 
@@ -126,17 +132,8 @@ func (g *FrameworkGateway) handleClaudeCode(w http.ResponseWriter, r *http.Reque
 	}
 
 	credential, credErr := g.resolveCredential(ctx, agent.EnvID, call.Provider)
-
-	// If no stored credential, fallback to client's Authorization header (passthrough mode)
-	if credential == "" && credErr != nil {
-		if auth := r.Header.Get("Authorization"); auth != "" {
-			// Extract token from Bearer scheme
-			if token := strings.TrimPrefix(auth, "Bearer "); token != auth {
-				credential = token
-			} else {
-				credential = auth
-			}
-		}
+	if errors.Is(credErr, credresolve.ErrPassthrough) {
+		credential = r.Header.Get("Authorization")
 	}
 
 	handler := func(ctx context.Context, action *coreruntime.Action) (*pipeline.Result, error) {
@@ -222,18 +219,7 @@ func (g *FrameworkGateway) resolveCredential(ctx context.Context, envID, connect
 	if err != nil || cred == nil {
 		return "", fmt.Errorf("no credential for %s/%s", envID, connector)
 	}
-	if len(g.encKey) == 0 {
-		return string(cred.EncryptedBlob), nil
-	}
-	aes, err := crypto.NewAES(g.encKey)
-	if err != nil {
-		return "", fmt.Errorf("create cipher: %w", err)
-	}
-	decrypted, err := aes.Decrypt(cred.EncryptedBlob, []byte(cred.ProjectID))
-	if err != nil {
-		return "", fmt.Errorf("decrypt credential: %w", err)
-	}
-	return string(decrypted), nil
+	return credresolve.Resolve(ctx, cred, nil)
 }
 
 func copyHeaders(dst, src http.Header) {
@@ -242,25 +228,6 @@ func copyHeaders(dst, src http.Header) {
 			dst.Add(key, value)
 		}
 	}
-}
-
-func isUUID(s string) bool {
-	if len(s) != 36 {
-		return false
-	}
-	for i, c := range s {
-		switch i {
-		case 8, 13, 18, 23:
-			if c != '-' {
-				return false
-			}
-		default:
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func (g *FrameworkGateway) finishRun(ctx context.Context, runID string, runErr error) {

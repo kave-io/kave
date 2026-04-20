@@ -2,47 +2,82 @@ package control
 
 import "github.com/kave-io/kave/core/pkg/money"
 
-// AgentToken is an authorization token issued to an agent.
-// Raw token is shown once at creation, then only the hash is stored.
+// Session is a user -> daemon login session.
+type Session struct {
+	ID         string
+	OrgID      string
+	UserID     string
+	TokenHash  []byte
+	ExpiresAt  int64
+	CreatedAt  int64
+	LastUsedAt *int64
+	UserAgent  string
+	IP         string
+	RevokedAt  *int64
+}
+
+// APIToken is a user-issued machine token.
+type APIToken struct {
+	ID         string
+	OrgID      string
+	UserID     string
+	Name       string
+	TokenHash  []byte
+	Scopes     []string
+	ExpiresAt  *int64
+	LastUsedAt *int64
+	RevokedAt  *int64
+	CreatedAt  int64
+}
+
+// AgentToken is an authorization token issued to an agent process.
 type AgentToken struct {
 	ID        string
+	OrgID     string
 	AgentID   string
-	ProjectID string // for index queries
+	ProjectID string // legacy compatibility
 
 	// UX / identification
-	Name        string // human name; "prod CLI key"
+	Name        string
 	Description string
-	TokenPrefix string // first 8 chars of raw token shown after creation for user identification
-	Hash        string // SHA256(rawToken); used for lookup — raw token never persisted
-
-	// Issuance
-	IssuedFor string // "agent" | "service" | "cli" | "human" | "integration"
-	IssuedBy  string // user ID or "system"
+	TokenPrefix string
+	Hash        string
+	TokenHash   []byte
+	IssuedFor   string
+	IssuedBy    string
 
 	// Scope
 	Connectors []string
 	Methods    []string
+	Scopes     []string
 	BudgetCap  *money.Amount
-	Scopes     []string // extension point for additional scope strings
 
-	// Validity window
-	NotBefore int64 // UnixMilli
-	ExpiresAt int64 // UnixMilli; 0 = no expiry
-
-	// Usage
-	LastUsedAt *int64 // UnixMilli
-
-	// Revocation (soft — for audit trail)
-	RevokedAt    *int64 // UnixMilli; nil = active
-	RevokedBy    string
+	// Validity / usage
+	NotBefore  int64
+	ExpiresAt  int64
+	LastUsedAt *int64
+	RevokedAt  *int64
+	RevokedBy  string
 	RevokeReason string
-
-	CreatedAt int64 // UnixMilli
+	CreatedAt  int64
 }
 
-// AgentTokenUpdate holds partial update fields for a token (mainly revocation).
-type AgentTokenUpdate struct {
-	RevokedAt    *int64
-	RevokedBy    *string
-	RevokeReason *string
+// Role stores a set of Casbin permissions in Kave.
+type Role struct {
+	ID          string
+	OrgID       string
+	Name        string
+	Permissions []string
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
+// Binding assigns a subject to a role within an optional scope.
+type Binding struct {
+	ID        string
+	OrgID     string
+	RoleID    string
+	Subject   string
+	Scope     string
+	CreatedAt int64
 }

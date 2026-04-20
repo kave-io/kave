@@ -1,185 +1,267 @@
-# Plan 06 — Auth, Sessions, Tokens, RBAC
+# Plan 06 — Auth, Sessions, Tokens, RBAC, Credential Sources
 
-**Goal:** replace the placeholder auth (bearer token = agent UUID lookup) with a real user/session/token + RBAC model. Re-enable the auth interceptor in the pipeline. All APIs enforce authorization via Casbin bindings. The framework gateway continues to accept agent-scoped tokens, but those tokens now live in a real store with revocation and expiry.
+**Goal:** implement the auth model from `docs/src/content/docs/concepts/10-authentication.md`. Three separate concerns, never conflated:
+
+1. **User → daemon** — humans/CI authenticate with session tokens stored in `~/.kave/`.
+2. **Agent → daemon** — running agents authenticate with agent tokens.
+3. **Agent → external service** — outbound credentials. Kave holds a *reference*, not the value. Four sources: `env`, `vault`, `passthrough`, `encrypted` (local dev only).
+
+Re-enable the auth interceptor so every API call resolves to a `Principal` and Casbin enforces. No secrets API — credentials are opaque; the value cannot be read back.
 
 ## Read first
 
-- `core/ops/auth/auth.go` — existing primitives (keep, extend). `server/ops/auth/casbin_engine.go` — casbin wrapper (exists but not wired into the HTTP/gRPC path).
-- `server/internal/gateway/gateway.go:51` — current "bearer UUID = agent id" shortcut. Keep the fast path but require the token to be a real `APIToken` record (not a raw agent id).
-- `app/control/control.go` — control server already has token-ish methods around credentials; we're adding *identity* tokens distinct from connector credentials.
-- `server/ops/auth/casbin_engine.go` — Casbin model file + adapter; we will add a store-backed adapter so policies live in the app store rather than on disk.
+- `docs/src/content/docs/concepts/10-authentication.md` — ground truth. Key philosophy: Kave knows *which* credential and *whether* a policy permits it; never serves the value.
+- `core/ops/auth/auth.go`, `server/ops/auth/casbin_engine.go` — existing primitives to extend.
+- `server/internal/gateway/gateway.go:51` — current placeholder (`isUUID(token) → agent`). Replace with real agent-token lookup + credential source dispatch.
+- Existing `ConnectorCredential` model — extend; don't replace. Today it stores a value; we're adding `Source` + per-source fields and removing value access from the API.
 
 ## Design
 
-### 1. Identity model
-New control models in `core/model/control/`:
+### 1. Identity model (concerns 1 & 2)
+
+New `core/model/control/`:
 
 ```go
 type User struct {
     ID, OrgID, Email, Name string
-    Status string // "active"|"invited"|"disabled"
-    PasswordHash []byte  // argon2id; empty if SSO-only
+    Status       string    // active | invited | disabled
+    PasswordHash []byte    // argon2id; empty when SSO-only
     CreatedAt, UpdatedAt int64
 }
 
-type Session struct {
+type Session struct {           // concern 1: user → daemon
     ID, UserID string
-    TokenHash  []byte   // sha256 of bearer token; raw token never stored
-    ExpiresAt  int64
-    CreatedAt  int64
-    LastUsedAt int64
-    UserAgent  string
-    IP         string
+    TokenHash  []byte           // sha256(raw); raw never persisted (doc §"never stored in plaintext")
+    ExpiresAt, CreatedAt, LastUsedAt int64
+    UserAgent, IP string
 }
 
-type APIToken struct {
-    ID, OrgID, UserID string     // UserID optional — machine tokens have empty
+type AgentToken struct {        // concern 2: agent → daemon
+    ID, OrgID, AgentID string
     Name       string
     TokenHash  []byte
-    Scopes     []string          // e.g. "agent:default", "policy:read", "*"
-    ExpiresAt  *int64            // nil = no expiry
+    Scopes     []string          // e.g. "agent:<id>", "connector:anthropic"
+    ExpiresAt  *int64
     LastUsedAt *int64
     CreatedAt  int64
     RevokedAt  *int64
 }
 
-type Role struct { ID, OrgID, Name string; Permissions []string /* casbin p lines */ }
-type Binding struct { ID, OrgID, RoleID string; Subject string /* user:<id> | token:<id> */; Scope string /* project:env or "*" */ }
+type APIToken struct {          // concern 1: machine user → daemon (for CI/scripts)
+    ID, OrgID, UserID string
+    Name       string
+    TokenHash  []byte
+    Scopes     []string
+    ExpiresAt, RevokedAt *int64
+    LastUsedAt *int64
+    CreatedAt  int64
+}
+
+type Role    struct { ID, OrgID, Name string; Permissions []string }   // casbin p-lines
+type Binding struct { ID, OrgID, RoleID string; Subject, Scope string } // subject: user:<id>|token:<id>|agent:<id>
 ```
 
-Migrations: `007_identity.up.sql` creates `users`, `sessions`, `api_tokens`, `roles`, `bindings` with indexes on `token_hash`, `user_id`, `org_id`. Cascade on user delete.
+**AgentToken is distinct from APIToken** — same shape, different lifecycle. Agents don't log in; an operator mints an AgentToken and hands it to the process.
 
-Store interfaces extend `store.AppStore` with CRUD + `LookupSessionByTokenHash`, `LookupAPITokenByHash`, `ListBindingsForSubject`.
+Migrations: `007_identity.up.sql` creates `users`, `sessions`, `agent_tokens`, `api_tokens`, `roles`, `bindings`. Unique index on each `token_hash` column. Cascade on user/agent delete.
 
-### 2. Password + token hashing
+### 2. Credential sources (concern 3)
+
+Extend `core/model/control/ConnectorCredential`:
+
+```go
+type Credential struct {
+    ID, ProjectID, EnvID, Name, Connector string
+
+    Source CredentialSource  // env | vault | passthrough | encrypted
+
+    // Source-specific (exactly one group populated):
+    EnvVar    string                 // source: env
+    VaultRef  string                 // source: vault — e.g. "kv/data/kave/gh-prod#token"
+    Encrypted *EncryptedBlob         // source: encrypted (local dev only)
+    // passthrough: no fields — caller supplies header at request time.
+
+    Metadata map[string]any
+    CreatedAt, UpdatedAt int64
+    RevokedAt *int64
+}
+
+type EncryptedBlob struct {
+    Ciphertext []byte  // AES-256-GCM
+    Nonce      []byte
+    KeyID      string  // keyring entry identifier
+}
+```
+
+**Resolver** in `server/ops/auth/credresolve/`:
+
+- `Resolve(ctx, cred) (string, error)` — returns the raw secret *only* to internal call sites (interceptors/gateway), never through an API handler.
+- `env`: `os.Getenv(cred.EnvVar)`; error if unset.
+- `vault`: pluggable `VaultClient` interface; ship a no-op default that returns `codes.Unimplemented` unless configured (real HashiCorp/AWS/GCP adapters are post-v1 work, but the interface exists so the code path is wired).
+- `passthrough`: returns `""` + a sentinel `ErrPassthrough` that signals the gateway to forward the caller's `Authorization` header untouched.
+- `encrypted`: decrypt via `keyring` package; on `ErrKeyringUnavailable`, daemon startup and `kave doctor` both flag it (doc §"daemon refuses to start").
+
+**No GET endpoint exposes the resolved value.** `/api/v1/credentials/{id}` returns metadata only. `POST /api/v1/credentials/{id}/test` calls Resolve + a light upstream probe and returns `{ok, latency_ms, error}` — never the secret.
+
+### 3. Keyring integration (encrypted tier)
+
+`core/pkg/keyring/keyring.go` — thin wrapper over `github.com/zalando/go-keyring` (cross-platform: Keychain / GNOME / DPAPI).
+
+- `GetOrCreateMasterKey(ctx) ([]byte, error)` — 32-byte key, created on first use.
+- Daemon startup: if any `credential.source == encrypted` exists, call `GetOrCreateMasterKey`; hard-fail on error.
+- `kave doctor` check `credentials_resolve` extends: for each `encrypted` credential, attempt unwrap; any failure → `fail`.
+
+### 4. Password + token hashing
+
 `core/pkg/authhash/`:
 
-- `HashPassword(pw) []byte` + `VerifyPassword(hash, pw) bool` — argon2id (`golang.org/x/crypto/argon2`).
-- `HashToken(token) []byte` — sha256; deterministic (index on this column).
-- `GenerateToken(prefix) (plain, hash)` — random 32 bytes, URL-safe base64, `"kpat_"` prefix for API tokens, `"ks_"` for session tokens.
+- `HashPassword(pw) []byte` / `VerifyPassword(hash, pw) bool` — argon2id.
+- `HashToken(plain) []byte` — sha256 (deterministic, so `token_hash` can be indexed). Doc explicitly specifies SHA-256 for tokens.
+- `GenerateToken(prefix) (plain, hash)` — 32 random bytes, URL-safe base64. Prefixes: `ks_` (session), `kpat_` (user API token), `kat_` (agent token).
 
-### 3. Auth RPCs (control plane)
+### 5. Auth RPCs
 
-Extend `proto/control/auth.proto` with:
+Extend `proto/control/` with two services:
 
-```
+```proto
 service AuthService {
-  rpc Register(RegisterRequest) returns (Session);      // email + password, returns fresh session
-  rpc Login(LoginRequest) returns (Session);
-  rpc Logout(LogoutRequest) returns (google.protobuf.Empty);
-  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
-  rpc RevokeSession(RevokeSessionRequest) returns (google.protobuf.Empty);
-  rpc WhoAmI(WhoAmIRequest) returns (WhoAmIResponse);
+  // user → daemon
+  rpc Register, Login, Logout, ListSessions, RevokeSession, WhoAmI, ChangePassword
+  rpc CreateAPIToken, ListAPITokens, RevokeAPIToken
 
-  rpc CreateAPIToken(CreateAPITokenRequest) returns (CreateAPITokenResponse);  // returns plain once
-  rpc ListAPITokens(ListAPITokensRequest) returns (ListAPITokensResponse);
-  rpc RevokeAPIToken(RevokeAPITokenRequest) returns (google.protobuf.Empty);
+  // agent → daemon
+  rpc CreateAgentToken, ListAgentTokens, RevokeAgentToken
 }
 
 service RBACService {
-  rpc CreateRole / GetRole / ListRoles / UpdateRole / DeleteRole
-  rpc CreateBinding / ListBindings / DeleteBinding
-  rpc TestPermission(TestPermissionRequest) returns (TestPermissionResponse);
+  rpc CreateRole, GetRole, ListRoles, UpdateRole, DeleteRole
+  rpc CreateBinding, ListBindings, DeleteBinding
+  rpc TestPermission
 }
 ```
 
-Implement in `app/control/auth.go` + `app/control/rbac.go`. Regenerate proto via existing `make` target.
+Implement in `app/control/auth.go` + `app/control/rbac.go`. Each `Create*Token` returns the **plain token once** (doc §"raw token is shown once at creation"); subsequent GETs return metadata only.
 
-### 4. Auth context + interceptor
+Every mutation emits a bus event (`auth.login`, `auth.logout`, `token.created`, `token.revoked`, `credential.created`, `credential.revoked`) **and** writes an append-only audit row via `app/audit` (doc §"Every mutation is audited"). Existing `core/model/audit` already has the shape — wire the writer into each handler.
+
+### 6. Auth context + interceptor
+
 `server/internal/authctx/`:
 
 ```go
 type Principal struct {
-    Kind   string  // "user"|"token"|"anonymous"
-    UserID string
+    Kind    string   // user | api_token | agent | anonymous
+    OrgID   string
+    UserID  string   // when Kind in {user, api_token}
+    AgentID string   // when Kind == agent
     TokenID string
-    OrgID  string
-    Scopes []string
+    Scopes  []string
 }
-
 func FromContext(ctx) (Principal, bool)
-func WithPrincipal(ctx, Principal) ctx
+func WithPrincipal(ctx, Principal) context.Context
 ```
 
-**Unary gRPC interceptor** in `server/ops/auth/interceptor.go`:
+Unary gRPC + bridge interceptor (`server/ops/auth/interceptor.go`):
 
-1. Extract `Authorization: Bearer <token>` from incoming metadata / HTTP header (bridge copies header → metadata).
-2. Hash, look up `Session` first, then `APIToken`. If either hit and not expired/revoked, build `Principal`.
-3. Otherwise `Principal{Kind:"anonymous"}` — still allowed, but casbin will reject most actions.
-4. Call casbin: `enforcer.Enforce(subject, object, action, scope)`. `subject = "user:<id>"|"token:<id>"|"anonymous"`, `object = <service.Method>`, `action = <verb>`, `scope = "<project>:<env>"` or `"*"`.
-5. On deny: `codes.PermissionDenied` (→ bridge maps to 403).
-6. Update `LastUsedAt` async (non-blocking goroutine, no await).
+1. Extract `Authorization: Bearer <token>`. Hash with `HashToken`.
+2. Look up in order: `Session` → `APIToken` → `AgentToken`. First hit wins; check expiry+revocation.
+3. Build `Principal`. No token → `Kind: anonymous`.
+4. Casbin enforce: `subject = <Kind>:<ID or "anonymous">`, `object = <service.Method>`, `action = <verb>`, `scope = "<project>:<env>"` or `"*"`.
+5. Deny → `codes.PermissionDenied` (bridge → 403).
+6. Fire-and-forget `UPDATE ... SET last_used_at = ?`.
 
-Plug the interceptor into `pipeline.New(authInterceptor, costInterceptor, traceInterceptor)` — **first** in order.
+Pipeline order: `pipeline.New(authInterceptor, costInterceptor, traceInterceptor)` — auth first.
 
-### 5. Casbin wiring
-- Built-in model: RBAC with domains (`p, sub, obj, act, dom`).
-- Adapter: store-backed (`Binding` rows → casbin policy lines on startup + `LoadPolicy()` on role/binding change). Avoid file adapter.
-- Seed: on first boot, create role `admin` with `p, admin, *, *, *`. The first registered user gets bound to `admin` at `*:*`. Subsequent users get nothing until bound.
-- Cache: keep the enforcer in memory; reload on mutation via `CasbinEngine.Reload()` called from the RBAC handlers.
+### 7. Casbin wiring
 
-### 6. Bridge routes
-In `server/internal/httpbridge/routes.go` add for the new RPCs — they're unary so the existing bridge handles them. The `Authorization` header flows through; the interceptor on the gRPC side enforces.
+- Model: RBAC with domains (`p, sub, obj, act, dom`).
+- Adapter: store-backed — `Binding` rows become casbin policy lines at boot and on any role/binding mutation. No file adapter.
+- Seed: built-in `admin` role (`p, admin, *, *, *`). First user who registers gets bound to `admin` at `*:*`. Later users get nothing until bound.
+- `CasbinEngine.Reload()` called from RBAC handlers after writes.
 
-Dedicated routes:
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/auth/logout`
-- `GET  /api/v1/auth/whoami`
-- `GET  /api/v1/auth/sessions`
-- `DELETE /api/v1/auth/sessions/{id}`
-- `POST /api/v1/auth/tokens` (create)
-- `GET  /api/v1/auth/tokens`
-- `DELETE /api/v1/auth/tokens/{id}`
-- Full `/api/v1/rbac/roles{,/{id}}` and `/api/v1/rbac/bindings{,/{id}}` CRUD.
-- `POST /api/v1/rbac/test` → permission check.
+### 8. Gateway hardening
 
-### 7. Gateway hardening
 `server/internal/gateway/gateway.go`:
 
-- Replace `isUUID(token)` shortcut with `APIToken` lookup. Token must have an `agent:<id>` scope (or `*`) to authorize as that agent.
-- If no token: return 401 `auth.unauthenticated`. No more "anonymous request → default agent" behavior in prod. Keep an opt-in flag `gateway.allow_anonymous` (defaulting to **false**) that restores the default-agent fallback for local dev. Wire through config in Plan 05 shape.
-- Emit `auth.login`/`auth.logout`/`token.created`/`token.revoked` events on the bus (Plan 03 hooks).
+- Remove `isUUID(token)` shortcut.
+- New flow:
+  1. Extract bearer token → look up `AgentToken` → derive `agentID` + scopes.
+  2. Select the `Credential` named by the agent's policy for the target connector.
+  3. Call `credresolve.Resolve`:
+     - On `ErrPassthrough`: forward the caller's original `Authorization` header to the upstream as-is.
+     - Otherwise: inject the resolved secret into the upstream-connector-specific header (`x-api-key` for Anthropic, `Authorization: Bearer` for OpenAI, etc. — per existing connector code).
+  4. **Never** log or trace the resolved secret. Add a test that captures the log+span output and asserts the secret string never appears.
+- Config flag `gateway.allow_anonymous` (default `false`): restores the current default-agent fallback for local dev. When true and no token present, proceeds as `agent:default`. Log a startup WARN when enabled.
 
-### 8. CLI flow sanity
-`kave auth login` → `POST /api/v1/auth/login` → stores plain token in `~/.kave/credentials` (CLI owns this). CLI sends `Authorization: Bearer <token>` on every subsequent call. `kave auth token create --scope 'agent:default'` returns a plain token once — CLI writes it only to stdout.
+### 9. Bridge routes
 
-## Files
+Add to `server/internal/httpbridge/routes.go`:
 
-Create:
-- `core/model/control/{user,session,api_token,role,binding}.go`
-- `core/pkg/authhash/hash.go`
-- `server/internal/authctx/authctx.go`
-- `server/ops/auth/interceptor.go`
-- `server/ops/auth/seed.go` (admin role + first-user binding)
-- `app/control/auth.go`, `app/control/rbac.go`
-- `proto/control/auth.proto`, `proto/control/rbac.proto` (+ generated)
-- Migrations: `007_identity.up.sql` / `.down.sql` for sqlite + postgres
-- `server/ops/auth/interceptor_test.go`, `app/control/auth_test.go`
+- `POST /api/v1/auth/register`, `/login`, `/logout`, `/change-password`
+- `GET  /api/v1/auth/whoami`
+- `GET|DELETE /api/v1/auth/sessions[/{id}]`
+- `POST|GET /api/v1/auth/tokens` (user API tokens); `DELETE /api/v1/auth/tokens/{id}`
+- `POST|GET|DELETE /api/v1/auth/agent-tokens[/{id}]`
+- `POST|GET|DELETE /api/v1/rbac/roles[/{id}]`
+- `POST|GET|DELETE /api/v1/rbac/bindings[/{id}]`
+- `POST /api/v1/rbac/test`
+- `POST /api/v1/credentials/{id}/test` — source probe; returns `{ok,latency_ms,error}`. **No** `GET .../value`.
 
-Modify:
-- `server/internal/gateway/gateway.go` — token-based agent auth.
-- `server/main.go` — build authInterceptor, put first in pipeline.
-- `server/internal/httpbridge/routes.go` — add auth/rbac routes.
-- `app/control/control.go` — accept Publish hooks already added in Plan 03.
+### 10. Config surface (bridges into Plan 05 shape)
+
+```yaml
+credentials:
+  - name: anthropic-prod
+    connector: anthropic
+    source: env
+    env: ANTHROPIC_API_KEY
+
+  - name: github-prod
+    connector: github
+    source: vault
+    ref: kv/data/kave/gh-prod#token
+
+  - name: caller-openai
+    connector: openai
+    source: passthrough
+
+gateway:
+  allow_anonymous: false
+```
+
+The loader validates that `source` ∈ {env, vault, passthrough, encrypted} and that the right per-source field is set. `encrypted` credentials cannot be declared in `kave.yaml` — only minted via `kave credential create --source encrypted` (interactive prompt). The loader rejects encrypted entries in YAML with a clear error.
 
 ## Acceptance
 
-- `POST /api/v1/auth/register {email, password, name}` returns `Session` with plain token; subsequent unauthenticated call to `/api/v1/agents` returns 401; same call with `Authorization: Bearer <token>` succeeds.
-- First registered user can `POST /api/v1/rbac/roles` and `POST /api/v1/rbac/bindings`. Second user cannot until bound.
-- `POST /api/v1/auth/tokens {name, scopes:["agent:default"]}` → plain token; using it at the framework gateway authenticates as the default agent; using it against `/api/v1/policies` returns 403 (scope mismatch).
+- Fresh daemon; `POST /api/v1/auth/register` → returns plain session token; `/api/v1/agents` with that token = 200, without = 401.
+- First user can create roles + bindings. A second registered user gets 403 on `/api/v1/rbac/roles` until bound.
+- `POST /api/v1/auth/tokens {scopes:["agent:default"]}` returns plain token once; reusing it against `/api/v1/policies` is 403.
+- `POST /api/v1/auth/agent-tokens` yields a token the framework gateway accepts. Without the token: 401 (or default-agent fallback only if `gateway.allow_anonymous=true`).
+- Credential with `source: env, env: OPENAI_API_KEY` — unset the env var, `POST /api/v1/credentials/{id}/test` returns `{ok:false, error:"env var unset"}`. Set it, test returns `{ok:true}`.
+- Credential with `source: passthrough` — gateway forwards the caller's own `Authorization` header untouched to the upstream.
+- `GET /api/v1/credentials/{id}` payload never contains the raw value, env-var value, or vault ref contents.
+- Log capture test: make a gateway call with a known secret in the env; grep the captured log/span output — secret must not appear.
+- `encrypted` credential on a machine with the keyring unreachable: daemon startup fails with a clear "keyring unavailable" error; `kave doctor` shows `credentials_resolve: fail` with the same cause.
+- Every token/credential create/revoke writes one audit row and emits one bus event.
 - `DELETE /api/v1/auth/sessions/{id}` invalidates the token on the next request.
-- Interceptor refuses expired sessions/tokens.
-- `TestPermission` matches the enforcer's decision.
-- Anonymous framework-gateway calls: 401 by default; with `gateway.allow_anonymous: true` they fall back to default agent (preserves current dev UX behind a flag).
-- `go build ./... && go test ./...` clean.
+- `go build ./... && go test ./...` clean across modules.
 
 ## Out of scope
-- SSO / OAuth (post-v1).
-- 2FA / WebAuthn (post-v1).
-- Token rotation policy (we support revoke + recreate only).
-- UI for role management (dashboard work).
-- Audit log writes — Plan 08 covers audit storage; here we just emit events.
+- SSO / OIDC / WebAuthn (doc §"not ever, as a matter of design" for SSO for external services; user SSO is post-v1).
+- Real Vault adapter implementations — interface only, stub returns `Unimplemented`.
+- Rotation flows — revoke + recreate only.
+- `file:` credential source (doc mentions it in passing; not in the enumerated list; defer).
+- Audit log UI / query endpoints — Plan 08.
+- Dashboard RBAC screens.
 
 ## Size estimate
-~1200 LOC (proto + generated 300, models + store 250, hash/authctx 120, interceptor 200, handlers 250, tests 200). One large haiku session. If the agent's context runs thin, split between (a) identity + handlers and (b) interceptor + casbin + gateway — but attempt as a single session first.
+~1400 LOC:
+- proto + generated: 350
+- models + migrations + store: 300
+- credresolve + keyring: 180
+- authhash + authctx: 120
+- interceptor + casbin adapter: 220
+- handlers (auth + rbac + credential.test): 200
+- tests: 200 (interceptor, resolver, gateway no-leak test, audit-row assertion)
+
+One long haiku session. If context tightens, split as: (a) identity + RBAC + interceptor, (b) credential sources + gateway hardening + keyring. Attempt single-session first.

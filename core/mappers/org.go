@@ -63,7 +63,7 @@ type UserCreateInput struct {
 	OrgID        string
 	Email        string
 	Name         string
-	PasswordHash string
+	PasswordHash []byte
 	CreatedAt    *int64
 }
 

@@ -148,6 +148,26 @@ func (p *PostgresAppStore) UpdateUser(_ context.Context, _ string, _ *control.Us
 	return nil
 }
 
+// ── RBAC stubs ───────────────────────────────────────────────────────────────
+
+func (p *PostgresAppStore) InsertRole(_ context.Context, _ *control.Role) error { return nil }
+func (p *PostgresAppStore) GetRole(_ context.Context, _ string) (*control.Role, error) {
+	return nil, nil
+}
+func (p *PostgresAppStore) ListRoles(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Role], error) {
+	return store.PageResult[*control.Role]{}, nil
+}
+func (p *PostgresAppStore) UpdateRole(_ context.Context, _ string, _ *control.Role) error { return nil }
+func (p *PostgresAppStore) DeleteRole(_ context.Context, _ string) error                  { return nil }
+func (p *PostgresAppStore) InsertBinding(_ context.Context, _ *control.Binding) error      { return nil }
+func (p *PostgresAppStore) GetBinding(_ context.Context, _ string) (*control.Binding, error) {
+	return nil, nil
+}
+func (p *PostgresAppStore) ListBindings(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Binding], error) {
+	return store.PageResult[*control.Binding]{}, nil
+}
+func (p *PostgresAppStore) DeleteBinding(_ context.Context, _ string) error { return nil }
+
 // ── MembershipStore stubs ─────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) AddMember(_ context.Context, _ *control.Membership) error { return nil }
@@ -876,23 +896,59 @@ func (p *PostgresAppStore) pgAggregateDim(ctx context.Context, dest map[string]m
 
 // ── TokenStore ────────────────────────────────────────────────────────────────
 
-func (p *PostgresAppStore) InsertAgentToken(ctx context.Context, token *control.AgentToken) error {
-	budgetAmount := ptrAmountToDB(token.BudgetCap)
-	_, err := p.pool.Exec(ctx, `
-		INSERT INTO agent_tokens (id, agent_id, connectors, methods, budget_cap_amount_nanos, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, token.ID, token.AgentID, token.Connectors, token.Methods, budgetAmount, toTime(token.ExpiresAt), toTime(token.CreatedAt))
-	return err
+func (p *PostgresAppStore) InsertSession(_ context.Context, _ *control.Session) error { return nil }
+func (p *PostgresAppStore) GetSessionByHash(_ context.Context, _ string) (*control.Session, error) {
+	return nil, nil
 }
+func (p *PostgresAppStore) GetSession(_ context.Context, _ string) (*control.Session, error) {
+	return nil, nil
+}
+func (p *PostgresAppStore) ListSessions(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Session], error) {
+	return store.PageResult[*control.Session]{}, nil
+}
+func (p *PostgresAppStore) RevokeSession(_ context.Context, _, _ string) error { return nil }
+func (p *PostgresAppStore) TouchSession(_ context.Context, _ string) error    { return nil }
 
-func (p *PostgresAppStore) GetTokenByHash(_ context.Context, _ string) (*control.AgentToken, error) {
+func (p *PostgresAppStore) InsertAPIToken(_ context.Context, _ *control.APIToken) error { return nil }
+func (p *PostgresAppStore) GetAPITokenByHash(_ context.Context, _ string) (*control.APIToken, error) {
 	return nil, nil
 }
-func (p *PostgresAppStore) GetToken(_ context.Context, _ string) (*control.AgentToken, error) {
+func (p *PostgresAppStore) GetAPIToken(_ context.Context, _ string) (*control.APIToken, error) {
 	return nil, nil
 }
-func (p *PostgresAppStore) ListTokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.AgentToken], error) {
+func (p *PostgresAppStore) ListAPITokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.APIToken], error) {
+	return store.PageResult[*control.APIToken]{}, nil
+}
+func (p *PostgresAppStore) RevokeAPIToken(_ context.Context, _, _, _ string) error { return nil }
+func (p *PostgresAppStore) TouchAPIToken(_ context.Context, _ string) error        { return nil }
+
+func (p *PostgresAppStore) InsertAgentToken(_ context.Context, _ *control.AgentToken) error { return nil }
+func (p *PostgresAppStore) GetAgentTokenByHash(_ context.Context, _ string) (*control.AgentToken, error) {
+	return nil, nil
+}
+func (p *PostgresAppStore) GetAgentToken(_ context.Context, _ string) (*control.AgentToken, error) {
+	return nil, nil
+}
+func (p *PostgresAppStore) ListAgentTokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.AgentToken], error) {
 	return store.PageResult[*control.AgentToken]{}, nil
+}
+func (p *PostgresAppStore) RevokeAgentToken(_ context.Context, _, _, _ string) error { return nil }
+func (p *PostgresAppStore) TouchAgentToken(_ context.Context, _ string) error        { return nil }
+
+func (p *PostgresAppStore) GetTokenByHash(ctx context.Context, hash string) (*control.AgentToken, error) {
+	return p.GetAgentTokenByHash(ctx, hash)
+}
+func (p *PostgresAppStore) GetToken(ctx context.Context, id string) (*control.AgentToken, error) {
+	return p.GetAgentToken(ctx, id)
+}
+func (p *PostgresAppStore) ListTokens(ctx context.Context, agentID string, page store.Page) (store.PageResult[*control.AgentToken], error) {
+	return p.ListAgentTokens(ctx, agentID, page)
+}
+func (p *PostgresAppStore) RevokeToken(ctx context.Context, tokenID, revokedBy, reason string) error {
+	return p.RevokeAgentToken(ctx, tokenID, revokedBy, reason)
+}
+func (p *PostgresAppStore) TouchToken(ctx context.Context, tokenID string) error {
+	return p.TouchAgentToken(ctx, tokenID)
 }
 func (p *PostgresAppStore) UpdatePolicy(_ context.Context, _ string, _ *control.PolicyUpdate) error {
 	return nil
@@ -901,9 +957,6 @@ func (p *PostgresAppStore) DeletePolicy(ctx context.Context, id string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM policies WHERE id = $1`, id)
 	return err
 }
-func (p *PostgresAppStore) RevokeToken(_ context.Context, _, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchToken(_ context.Context, _ string) error        { return nil }
-
 func (p *PostgresAppStore) IsTokenRevoked(ctx context.Context, tokenID string) (bool, error) {
 	var count int
 	err := p.pool.QueryRow(ctx, `SELECT COUNT(*) FROM revoked_tokens WHERE token_id = $1`, tokenID).Scan(&count)

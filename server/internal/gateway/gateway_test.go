@@ -122,9 +122,46 @@ func (m *mockAppStore) GetSpendReport(_ context.Context, _ *runtimemodel.SpendFi
 }
 
 // TokenStore
+func (m *mockAppStore) InsertSession(_ context.Context, _ *controlmodel.Session) error { return nil }
+func (m *mockAppStore) GetSessionByHash(_ context.Context, _ string) (*controlmodel.Session, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetSession(_ context.Context, _ string) (*controlmodel.Session, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListSessions(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Session], error) {
+	return store.PageResult[*controlmodel.Session]{}, nil
+}
+func (m *mockAppStore) RevokeSession(_ context.Context, _, _ string) error { return nil }
+func (m *mockAppStore) TouchSession(_ context.Context, _ string) error    { return nil }
+
+func (m *mockAppStore) InsertAPIToken(_ context.Context, _ *controlmodel.APIToken) error { return nil }
+func (m *mockAppStore) GetAPITokenByHash(_ context.Context, _ string) (*controlmodel.APIToken, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetAPIToken(_ context.Context, _ string) (*controlmodel.APIToken, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListAPITokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.APIToken], error) {
+	return store.PageResult[*controlmodel.APIToken]{}, nil
+}
+func (m *mockAppStore) RevokeAPIToken(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockAppStore) TouchAPIToken(_ context.Context, _ string) error        { return nil }
+
 func (m *mockAppStore) InsertAgentToken(_ context.Context, _ *controlmodel.AgentToken) error {
 	return nil
 }
+func (m *mockAppStore) GetAgentTokenByHash(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
+	return nil, nil
+}
+func (m *mockAppStore) GetAgentToken(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListAgentTokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.AgentToken], error) {
+	return store.PageResult[*controlmodel.AgentToken]{}, nil
+}
+func (m *mockAppStore) RevokeAgentToken(_ context.Context, _, _, _ string) error { return nil }
+func (m *mockAppStore) TouchAgentToken(_ context.Context, _ string) error        { return nil }
 func (m *mockAppStore) GetTokenByHash(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
 	return nil, nil
 }
@@ -136,6 +173,25 @@ func (m *mockAppStore) ListTokens(_ context.Context, _ string, _ store.Page) (st
 }
 func (m *mockAppStore) RevokeToken(_ context.Context, _, _, _ string) error { return nil }
 func (m *mockAppStore) TouchToken(_ context.Context, _ string) error        { return nil }
+
+// RBACStore
+func (m *mockAppStore) InsertRole(_ context.Context, _ *controlmodel.Role) error { return nil }
+func (m *mockAppStore) GetRole(_ context.Context, _ string) (*controlmodel.Role, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListRoles(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Role], error) {
+	return store.PageResult[*controlmodel.Role]{}, nil
+}
+func (m *mockAppStore) UpdateRole(_ context.Context, _ string, _ *controlmodel.Role) error { return nil }
+func (m *mockAppStore) DeleteRole(_ context.Context, _ string) error                       { return nil }
+func (m *mockAppStore) InsertBinding(_ context.Context, _ *controlmodel.Binding) error     { return nil }
+func (m *mockAppStore) GetBinding(_ context.Context, _ string) (*controlmodel.Binding, error) {
+	return nil, nil
+}
+func (m *mockAppStore) ListBindings(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Binding], error) {
+	return store.PageResult[*controlmodel.Binding]{}, nil
+}
+func (m *mockAppStore) DeleteBinding(_ context.Context, _ string) error { return nil }
 
 // CredentialStore
 func (m *mockAppStore) GetCredential(_ context.Context, _ string) (*controlmodel.ConnectorCredential, error) {

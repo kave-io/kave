@@ -1,12 +1,10 @@
 package config
 
 import (
-	"fmt"
+	"github.com/spf13/viper"
+	"os"
 	"reflect"
 	"strings"
-
-	"github.com/kave-io/kave/core/pkg/constants"
-	"github.com/spf13/viper"
 )
 
 const envPrefix = "KAVE"
@@ -14,35 +12,20 @@ const envPrefix = "KAVE"
 var GlobalConf *Config
 
 func ReadConfig(configPath string) (*Config, error) {
-	v := viper.New()
-	v.SetConfigName(constants.ConfigName)
-	v.SetConfigType(constants.ConfigFormat)
-	v.AddConfigPath(configPath)
-
-	// Explicitly bind every config key to its KAVE_* env var before reading
-	// the file. This fixes Viper's well-known limitation: AutomaticEnv() does
-	// not resolve nested struct keys that are absent from the config file,
-	// making env-only deployments (Docker/K8s) silently produce zero values.
-	bindEnvs(v, Config{}, "")
-
-	// Config file is optional — env vars alone are sufficient for container
-	// deployments. Only fail if the file exists but cannot be parsed.
-	if err := v.ReadInConfig(); err != nil {
-		if _, notFound := err.(viper.ConfigFileNotFoundError); !notFound {
-			return nil, fmt.Errorf("error reading config file: %w", err)
+	opts := LoadOpts{}
+	if configPath != "" {
+		if info, err := os.Stat(configPath); err == nil && info.IsDir() {
+			opts.StartDir = configPath
+		} else {
+			opts.ExplicitPath = configPath
 		}
 	}
-
-	var cfg Config
-	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("unable to decode config: %w", err)
+	result, err := Load(opts)
+	if err != nil {
+		return nil, err
 	}
-
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("configuration validation failed: %w", err)
-	}
-
-	return &cfg, nil
+	GlobalConf = result.Config
+	return result.Config, nil
 }
 
 // bindEnvs walks cfg's mapstructure tags recursively and calls v.BindEnv for

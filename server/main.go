@@ -20,9 +20,9 @@ import (
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
-	"github.com/kave-io/kave/server/internal/daemon"
 	"github.com/kave-io/kave/server/internal/config"
 	"github.com/kave-io/kave/server/internal/contract"
+	"github.com/kave-io/kave/server/internal/daemon"
 	"github.com/kave-io/kave/server/internal/gateway"
 	"github.com/kave-io/kave/server/internal/httpbridge"
 	"github.com/kave-io/kave/server/internal/logsink"
@@ -41,7 +41,11 @@ func main() {
 	defer cancel()
 
 	// Load config from YAML + environment
-	cfg := config.MustReadConfig(".")
+	loadRes, err := config.Load(config.LoadOpts{StartDir: "."})
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+	cfg := loadRes.Config
 
 	storeManager, err := storeimpl.NewManager(ctx, cfg.Storage, cfg.Postgres)
 	if err != nil {
@@ -110,9 +114,17 @@ func main() {
 
 	bridgeMux := http.NewServeMux()
 	httpbridge.Register(bridgeMux, httpbridge.BuildRoutes(controlServer, runtimeServer, appStore, defaultSpanStore))
-	daemonState := daemon.New(".", cfg, appStore, defaultSpanStore, fxService, costService, eventBus, buildVersion)
+	daemonState := daemon.New(config.LoadOpts{StartDir: "."}, loadRes, appStore, defaultSpanStore, fxService, costService, eventBus, buildVersion)
 	httpbridge.Register(bridgeMux, httpbridge.BuildDaemonRoutes(daemonState))
 	httpbridge.RegisterStreams(bridgeMux, appStore, defaultSpanStore, eventBus)
+	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
+		log.Fatalf("build apply plan: %v", err)
+	} else if _, err := daemonState.Apply(context.Background(), plan, false); err != nil {
+		log.Fatalf("apply config resources: %v", err)
+	}
+	if err := daemonState.StartWatch(context.Background()); err != nil {
+		log.Printf("warn: config watch disabled: %v", err)
+	}
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP)
 	go func() {

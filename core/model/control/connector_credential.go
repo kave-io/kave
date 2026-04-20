@@ -1,5 +1,22 @@
 package control
 
+// CredentialSource is the source for a connector credential.
+type CredentialSource string
+
+const (
+	CredentialSourceEnv         CredentialSource = "env"
+	CredentialSourceVault       CredentialSource = "vault"
+	CredentialSourcePassthrough CredentialSource = "passthrough"
+	CredentialSourceEncrypted   CredentialSource = "encrypted"
+)
+
+// EncryptedBlob stores encrypted credential material for local dev only.
+type EncryptedBlob struct {
+	Ciphertext []byte
+	Nonce      []byte
+	KeyID      string
+}
+
 // Credential source type constants — which tier of the four-tier model.
 const (
 	CredSourceEncrypted   = "encrypted"   // Tier 2: encrypted-at-rest in Kave
@@ -24,12 +41,21 @@ type ConnectorCredential struct {
 	ID        string
 	ProjectID string
 	EnvID     string
+	Name      string
+	Connector string
 
 	// What this credential covers
 	ConnectorType string // "openai" | "github" | "postgres" | "stripe" | ...
 	AccountID     string // org/account/project within the connector; "" = default
 	Label         string // "primary" | "billing" | "canary" | custom
 	Description   string
+
+	// New credential model fields.
+	Source    CredentialSource
+	EnvVar    string
+	VaultRef  string
+	Encrypted *EncryptedBlob
+	Metadata  map[string]any
 
 	// Storage tier discriminator (CredSource* constants)
 	SourceType string
@@ -71,3 +97,6 @@ type CredentialFilter struct {
 	Label         string // "" = prefer "primary", then first active
 	Status        string // default: "active"
 }
+
+// Credential is the preferred name in newer auth and config code.
+type Credential = ConnectorCredential

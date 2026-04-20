@@ -2,6 +2,7 @@ package httpbridge
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 
 	"github.com/kave-io/kave/server/internal/daemon"
@@ -16,6 +17,9 @@ func BuildDaemonRoutes(state *daemon.State) []Route {
 		{Path: "GET /api/v1/doctor", Invoke: doctorRoute(state)},
 		{Path: "GET /api/v1/config/view", Invoke: configViewRoute(state)},
 		{Path: "GET /api/v1/config/diff", Invoke: configDiffRoute(state)},
+		{Path: "GET /api/v1/config/paths", Invoke: configPathsRoute(state)},
+		{Path: "GET /api/v1/diff", Invoke: diffRoute(state)},
+		{Path: "POST /api/v1/apply", Invoke: applyRoute(state)},
 		{Path: "POST /api/v1/config/reload", Invoke: configReloadRoute(state)},
 		{Path: "GET /api/v1/admin/store", Invoke: adminStoreRoute(state)},
 	}
@@ -50,6 +54,44 @@ func configDiffRoute(state *daemon.State) InvokeFn {
 			return Outcome{Kind: "ConfigDiff"}, err
 		}
 		return Outcome{Kind: "ConfigDiff", Data: diff}, nil
+	}
+}
+
+func configPathsRoute(state *daemon.State) InvokeFn {
+	return func(ctx context.Context, _ []byte, _ url.Values, _ map[string]string) (Outcome, error) {
+		return Outcome{Kind: "ConfigPaths", Data: state.ConfigPaths()}, nil
+	}
+}
+
+func diffRoute(state *daemon.State) InvokeFn {
+	return func(ctx context.Context, _ []byte, _ url.Values, _ map[string]string) (Outcome, error) {
+		plan, err := state.BuildPlan(ctx)
+		if err != nil {
+			return Outcome{Kind: "ApplyPlan"}, err
+		}
+		return Outcome{Kind: "ApplyPlan", Data: plan}, nil
+	}
+}
+
+func applyRoute(state *daemon.State) InvokeFn {
+	return func(ctx context.Context, body []byte, _ url.Values, _ map[string]string) (Outcome, error) {
+		var req struct {
+			Prune bool `json:"prune"`
+		}
+		if len(body) > 0 {
+			if err := json.Unmarshal(body, &req); err != nil {
+				return Outcome{Kind: "ApplyReport"}, status.Error(codes.InvalidArgument, "invalid request body")
+			}
+		}
+		plan, err := state.BuildPlan(ctx)
+		if err != nil {
+			return Outcome{Kind: "ApplyReport"}, err
+		}
+		report, err := state.Apply(ctx, plan, req.Prune)
+		if err != nil {
+			return Outcome{Kind: "ApplyReport"}, err
+		}
+		return Outcome{Kind: "ApplyReport", Data: report}, nil
 	}
 }
 

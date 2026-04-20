@@ -1222,143 +1222,6 @@ func spendWhere(f *runtimemodel.SpendFilter) (string, []any) {
 	return where, args
 }
 
-// ── TokenStore ────────────────────────────────────────────────────────────────
-
-func (s *SQLiteAppStore) InsertAgentToken(ctx context.Context, token *control.AgentToken) error {
-	connectorsJSON, _ := json.Marshal(token.Connectors)
-	methodsJSON, _ := json.Marshal(token.Methods)
-	scopesJSON, _ := json.Marshal(token.Scopes)
-	var budgetNanos *int64
-	if token.BudgetCap != nil {
-		v := int64(*token.BudgetCap)
-		budgetNanos = &v
-	}
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO agent_tokens (
-			id, agent_id, project_id, name, description, token_prefix, hash,
-			issued_for, issued_by, connectors, methods, budget_cap_nanos, scopes,
-			not_before, expires_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		token.ID, token.AgentID, token.ProjectID, token.Name, token.Description,
-		token.TokenPrefix, token.Hash, token.IssuedFor, token.IssuedBy,
-		string(connectorsJSON), string(methodsJSON), budgetNanos, string(scopesJSON),
-		token.NotBefore, token.ExpiresAt, token.CreatedAt)
-	return err
-}
-
-func (s *SQLiteAppStore) GetTokenByHash(ctx context.Context, hash string) (*control.AgentToken, error) {
-	var t control.AgentToken
-	var connectorsJSON, methodsJSON, scopesJSON string
-	var budgetNanos *int64
-	err := s.db.QueryRowContext(ctx, `
-		SELECT id, agent_id, project_id, name, description, token_prefix, hash,
-		       issued_for, issued_by, connectors, methods, budget_cap_nanos, scopes,
-		       not_before, expires_at, last_used_at, revoked_at, revoked_by, revoke_reason, created_at
-		FROM agent_tokens WHERE hash = ?`, hash).
-		Scan(&t.ID, &t.AgentID, &t.ProjectID, &t.Name, &t.Description, &t.TokenPrefix, &t.Hash,
-			&t.IssuedFor, &t.IssuedBy, &connectorsJSON, &methodsJSON, &budgetNanos, &scopesJSON,
-			&t.NotBefore, &t.ExpiresAt, &t.LastUsedAt, &t.RevokedAt, &t.RevokedBy, &t.RevokeReason, &t.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if budgetNanos != nil {
-		v := money.Amount(*budgetNanos)
-		t.BudgetCap = &v
-	}
-	_ = json.Unmarshal([]byte(connectorsJSON), &t.Connectors)
-	_ = json.Unmarshal([]byte(methodsJSON), &t.Methods)
-	_ = json.Unmarshal([]byte(scopesJSON), &t.Scopes)
-	return &t, nil
-}
-
-func (s *SQLiteAppStore) GetToken(ctx context.Context, id string) (*control.AgentToken, error) {
-	return s.scanToken(s.db.QueryRowContext(ctx, `
-		SELECT id, agent_id, project_id, name, description, token_prefix, hash,
-		       issued_for, issued_by, connectors, methods, budget_cap_nanos, scopes,
-		       not_before, expires_at, last_used_at, revoked_at, revoked_by, revoke_reason, created_at
-		FROM agent_tokens WHERE id = ?`, id))
-}
-
-func (s *SQLiteAppStore) ListTokens(ctx context.Context, agentID string, page store.Page) (store.PageResult[*control.AgentToken], error) {
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, agent_id, project_id, name, description, token_prefix, hash,
-		       issued_for, issued_by, connectors, methods, budget_cap_nanos, scopes,
-		       not_before, expires_at, last_used_at, revoked_at, revoked_by, revoke_reason, created_at
-		FROM agent_tokens WHERE agent_id = ? ORDER BY created_at DESC`, agentID)
-	if err != nil {
-		return store.PageResult[*control.AgentToken]{}, err
-	}
-	defer rows.Close()
-	var items []*control.AgentToken
-	for rows.Next() {
-		t, err := s.scanTokenRow(rows)
-		if err != nil {
-			return store.PageResult[*control.AgentToken]{}, err
-		}
-		items = append(items, t)
-	}
-	return store.Paginate(items, page), rows.Err()
-}
-
-func (s *SQLiteAppStore) scanToken(row *sql.Row) (*control.AgentToken, error) {
-	var t control.AgentToken
-	var connectorsJSON, methodsJSON, scopesJSON string
-	var budgetNanos *int64
-	err := row.Scan(&t.ID, &t.AgentID, &t.ProjectID, &t.Name, &t.Description, &t.TokenPrefix, &t.Hash,
-		&t.IssuedFor, &t.IssuedBy, &connectorsJSON, &methodsJSON, &budgetNanos, &scopesJSON,
-		&t.NotBefore, &t.ExpiresAt, &t.LastUsedAt, &t.RevokedAt, &t.RevokedBy, &t.RevokeReason, &t.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if budgetNanos != nil {
-		v := money.Amount(*budgetNanos)
-		t.BudgetCap = &v
-	}
-	_ = json.Unmarshal([]byte(connectorsJSON), &t.Connectors)
-	_ = json.Unmarshal([]byte(methodsJSON), &t.Methods)
-	_ = json.Unmarshal([]byte(scopesJSON), &t.Scopes)
-	return &t, nil
-}
-
-func (s *SQLiteAppStore) scanTokenRow(rows *sql.Rows) (*control.AgentToken, error) {
-	var t control.AgentToken
-	var connectorsJSON, methodsJSON, scopesJSON string
-	var budgetNanos *int64
-	if err := rows.Scan(&t.ID, &t.AgentID, &t.ProjectID, &t.Name, &t.Description, &t.TokenPrefix, &t.Hash,
-		&t.IssuedFor, &t.IssuedBy, &connectorsJSON, &methodsJSON, &budgetNanos, &scopesJSON,
-		&t.NotBefore, &t.ExpiresAt, &t.LastUsedAt, &t.RevokedAt, &t.RevokedBy, &t.RevokeReason, &t.CreatedAt); err != nil {
-		return nil, err
-	}
-	if budgetNanos != nil {
-		v := money.Amount(*budgetNanos)
-		t.BudgetCap = &v
-	}
-	_ = json.Unmarshal([]byte(connectorsJSON), &t.Connectors)
-	_ = json.Unmarshal([]byte(methodsJSON), &t.Methods)
-	_ = json.Unmarshal([]byte(scopesJSON), &t.Scopes)
-	return &t, nil
-}
-
-func (s *SQLiteAppStore) RevokeToken(ctx context.Context, tokenID, revokedBy, reason string) error {
-	now := time.Now().UnixMilli()
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE agent_tokens SET revoked_at = ?, revoked_by = ?, revoke_reason = ? WHERE id = ?`,
-		now, revokedBy, reason, tokenID)
-	return err
-}
-
-func (s *SQLiteAppStore) TouchToken(ctx context.Context, tokenID string) error {
-	now := time.Now().UnixMilli()
-	_, err := s.db.ExecContext(ctx, `UPDATE agent_tokens SET last_used_at = ? WHERE id = ?`, now, tokenID)
-	return err
-}
-
 // ── CredentialStore ───────────────────────────────────────────────────────────
 
 func (s *SQLiteAppStore) GetCredential(ctx context.Context, id string) (*control.ConnectorCredential, error) {
@@ -1611,28 +1474,6 @@ func (t *txAppStore) AddRunSpend(ctx context.Context, runID string, cost money.A
 	return err
 }
 
-func (t *txAppStore) InsertAgentToken(ctx context.Context, token *control.AgentToken) error {
-	connectorsJSON, _ := json.Marshal(token.Connectors)
-	methodsJSON, _ := json.Marshal(token.Methods)
-	scopesJSON, _ := json.Marshal(token.Scopes)
-	var budgetNanos *int64
-	if token.BudgetCap != nil {
-		v := int64(*token.BudgetCap)
-		budgetNanos = &v
-	}
-	_, err := t.tx.ExecContext(ctx, `
-		INSERT INTO agent_tokens (
-			id, agent_id, project_id, name, description, token_prefix, hash,
-			issued_for, issued_by, connectors, methods, budget_cap_nanos, scopes,
-			not_before, expires_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		token.ID, token.AgentID, token.ProjectID, token.Name, token.Description,
-		token.TokenPrefix, token.Hash, token.IssuedFor, token.IssuedBy,
-		string(connectorsJSON), string(methodsJSON), budgetNanos, string(scopesJSON),
-		token.NotBefore, token.ExpiresAt, token.CreatedAt)
-	return err
-}
-
 func (t *txAppStore) StoreCredential(ctx context.Context, c *control.ConnectorCredential) error {
 	_, err := t.tx.ExecContext(ctx, `
 		INSERT INTO credentials (
@@ -1696,9 +1537,6 @@ func (t *txAppStore) GetAction(ctx context.Context, id string) (*runtimemodel.Ac
 }
 func (t *txAppStore) GetCredential(ctx context.Context, id string) (*control.ConnectorCredential, error) {
 	return t.parent.GetCredential(ctx, id)
-}
-func (t *txAppStore) GetTokenByHash(ctx context.Context, hash string) (*control.AgentToken, error) {
-	return t.parent.GetTokenByHash(ctx, hash)
 }
 func (t *txAppStore) ListFXRates(ctx context.Context) ([]runtimemodel.FXRateRecord, error) {
 	return t.parent.ListFXRates(ctx)
@@ -1795,19 +1633,107 @@ func (t *txAppStore) ListActionsByRun(_ context.Context, _ string, _ store.Page)
 	return store.PageResult[*runtimemodel.ActionRecord]{}, nil
 }
 func (t *txAppStore) SavePriceBook(_ context.Context, _ *runtimemodel.PriceBook) error { return nil }
+func (t *txAppStore) UpdatePolicy(ctx context.Context, id string, u *control.PolicyUpdate) error {
+	return t.parent.UpdatePolicy(ctx, id, u)
+}
+func (t *txAppStore) InsertSession(ctx context.Context, session *control.Session) error {
+	return t.parent.InsertSession(ctx, session)
+}
+func (t *txAppStore) GetSessionByHash(ctx context.Context, hash string) (*control.Session, error) {
+	return t.parent.GetSessionByHash(ctx, hash)
+}
+func (t *txAppStore) GetSession(ctx context.Context, id string) (*control.Session, error) {
+	return t.parent.GetSession(ctx, id)
+}
+func (t *txAppStore) ListSessions(ctx context.Context, userID string, page store.Page) (store.PageResult[*control.Session], error) {
+	return t.parent.ListSessions(ctx, userID, page)
+}
+func (t *txAppStore) RevokeSession(ctx context.Context, sessionID, revokedBy string) error {
+	return t.parent.RevokeSession(ctx, sessionID, revokedBy)
+}
+func (t *txAppStore) TouchSession(ctx context.Context, sessionID string) error {
+	return t.parent.TouchSession(ctx, sessionID)
+}
+func (t *txAppStore) InsertAPIToken(ctx context.Context, token *control.APIToken) error {
+	return t.parent.InsertAPIToken(ctx, token)
+}
+func (t *txAppStore) GetAPITokenByHash(ctx context.Context, hash string) (*control.APIToken, error) {
+	return t.parent.GetAPITokenByHash(ctx, hash)
+}
+func (t *txAppStore) GetAPIToken(ctx context.Context, id string) (*control.APIToken, error) {
+	return t.parent.GetAPIToken(ctx, id)
+}
+func (t *txAppStore) ListAPITokens(ctx context.Context, userID string, page store.Page) (store.PageResult[*control.APIToken], error) {
+	return t.parent.ListAPITokens(ctx, userID, page)
+}
+func (t *txAppStore) RevokeAPIToken(ctx context.Context, tokenID, revokedBy, reason string) error {
+	return t.parent.RevokeAPIToken(ctx, tokenID, revokedBy, reason)
+}
+func (t *txAppStore) TouchAPIToken(ctx context.Context, tokenID string) error {
+	return t.parent.TouchAPIToken(ctx, tokenID)
+}
+func (t *txAppStore) GetAgentToken(ctx context.Context, id string) (*control.AgentToken, error) {
+	return t.parent.GetAgentToken(ctx, id)
+}
+func (t *txAppStore) GetAgentTokenByHash(ctx context.Context, hash string) (*control.AgentToken, error) {
+	return t.parent.GetAgentTokenByHash(ctx, hash)
+}
+func (t *txAppStore) ListAgentTokens(ctx context.Context, agentID string, page store.Page) (store.PageResult[*control.AgentToken], error) {
+	return t.parent.ListAgentTokens(ctx, agentID, page)
+}
+func (t *txAppStore) RevokeAgentToken(ctx context.Context, tokenID, revokedBy, reason string) error {
+	return t.parent.RevokeAgentToken(ctx, tokenID, revokedBy, reason)
+}
+func (t *txAppStore) TouchAgentToken(ctx context.Context, tokenID string) error {
+	return t.parent.TouchAgentToken(ctx, tokenID)
+}
+func (t *txAppStore) InsertAgentToken(ctx context.Context, token *control.AgentToken) error {
+	return t.parent.InsertAgentToken(ctx, token)
+}
+func (t *txAppStore) GetTokenByHash(ctx context.Context, hash string) (*control.AgentToken, error) {
+	return t.parent.GetTokenByHash(ctx, hash)
+}
 func (t *txAppStore) GetToken(ctx context.Context, id string) (*control.AgentToken, error) {
 	return t.parent.GetToken(ctx, id)
 }
 func (t *txAppStore) ListTokens(ctx context.Context, agentID string, page store.Page) (store.PageResult[*control.AgentToken], error) {
 	return t.parent.ListTokens(ctx, agentID, page)
 }
-func (t *txAppStore) UpdatePolicy(ctx context.Context, id string, u *control.PolicyUpdate) error {
-	return t.parent.UpdatePolicy(ctx, id, u)
+func (t *txAppStore) RevokeToken(ctx context.Context, tokenID, revokedBy, reason string) error {
+	return t.parent.RevokeToken(ctx, tokenID, revokedBy, reason)
 }
-func (t *txAppStore) RevokeToken(_ context.Context, _, _, _ string) error { return nil }
-func (t *txAppStore) TouchToken(_ context.Context, _ string) error        { return nil }
+func (t *txAppStore) TouchToken(ctx context.Context, tokenID string) error {
+	return t.parent.TouchToken(ctx, tokenID)
+}
 func (t *txAppStore) ListCredentials(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.ConnectorCredential], error) {
 	return store.PageResult[*control.ConnectorCredential]{}, nil
+}
+func (t *txAppStore) InsertRole(ctx context.Context, role *control.Role) error {
+	return t.parent.InsertRole(ctx, role)
+}
+func (t *txAppStore) GetRole(ctx context.Context, id string) (*control.Role, error) {
+	return t.parent.GetRole(ctx, id)
+}
+func (t *txAppStore) ListRoles(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Role], error) {
+	return t.parent.ListRoles(ctx, orgID, page)
+}
+func (t *txAppStore) UpdateRole(ctx context.Context, id string, role *control.Role) error {
+	return t.parent.UpdateRole(ctx, id, role)
+}
+func (t *txAppStore) DeleteRole(ctx context.Context, id string) error {
+	return t.parent.DeleteRole(ctx, id)
+}
+func (t *txAppStore) InsertBinding(ctx context.Context, binding *control.Binding) error {
+	return t.parent.InsertBinding(ctx, binding)
+}
+func (t *txAppStore) GetBinding(ctx context.Context, id string) (*control.Binding, error) {
+	return t.parent.GetBinding(ctx, id)
+}
+func (t *txAppStore) ListBindings(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Binding], error) {
+	return t.parent.ListBindings(ctx, orgID, page)
+}
+func (t *txAppStore) DeleteBinding(ctx context.Context, id string) error {
+	return t.parent.DeleteBinding(ctx, id)
 }
 func (t *txAppStore) RotateCredential(_ context.Context, _ string, _ []byte, _, _ string) error {
 	return nil

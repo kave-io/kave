@@ -25,10 +25,15 @@ type State struct {
 	Version       string
 	SchemaVersion string
 
-	cfgPath string
+	loadOpts config.LoadOpts
 
 	mu  sync.RWMutex
-	cfg *config.Config
+	res *config.LoadResult
+
+	watchOnce sync.Once
+
+	resourceMu     sync.RWMutex
+	resourceSource map[string]config.Source
 
 	app  store.AppStore
 	span store.SpanStore
@@ -38,20 +43,21 @@ type State struct {
 }
 
 // New creates a daemon state wrapper around the live runtime dependencies.
-func New(cfgPath string, cfg *config.Config, app store.AppStore, span store.SpanStore, fxSvc *fx.Service, costSvc *cost.Service, b *bus.Bus, version string) *State {
+func New(opts config.LoadOpts, res *config.LoadResult, app store.AppStore, span store.SpanStore, fxSvc *fx.Service, costSvc *cost.Service, b *bus.Bus, version string) *State {
 	if version == "" {
 		version = "dev"
 	}
-	if cfg == nil {
-		cfg = &config.Config{}
+	if res == nil {
+		res = &config.LoadResult{Config: &config.Config{}, Origin: map[string]config.Source{}}
 	}
 	return &State{
 		PID:           os.Getpid(),
 		StartedAt:     time.Now().UTC(),
 		Version:       version,
 		SchemaVersion: strconv.Itoa(contract.SchemaVersion),
-		cfgPath:       cfgPath,
-		cfg:           cfg,
+		loadOpts:      opts,
+		res:           res,
+		resourceSource: map[string]config.Source{},
 		app:           app,
 		span:          span,
 		fx:            fxSvc,
@@ -124,25 +130,38 @@ func (s *State) ConfigView() (map[string]any, error) {
 	return redactConfigValue(cfg), nil
 }
 
+// ConfigPaths returns the origin map for the live config.
+func (s *State) ConfigPaths() map[string]config.Source {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.res == nil || s.res.Origin == nil {
+		return map[string]config.Source{}
+	}
+	out := make(map[string]config.Source, len(s.res.Origin))
+	for key, value := range s.res.Origin {
+		out[key] = value
+	}
+	return out
+}
+
 // ConfigDiff compares the on-disk config against the live config.
 func (s *State) ConfigDiff() (ConfigDiffReport, error) {
-	disk, err := config.ReadConfig(s.cfgPath)
+	disk, err := config.Load(s.loadOpts)
 	if err != nil {
 		return ConfigDiffReport{}, err
 	}
-	return diffConfigs(s.currentConfig(), disk), nil
+	return diffConfigs(s.currentConfig(), disk.Config), nil
 }
 
 // Reload rereads the config from disk and swaps the live config if valid.
 func (s *State) Reload(ctx context.Context) (ReloadReport, error) {
-	_ = ctx
-	nextCfg, err := config.ReadConfig(s.cfgPath)
+	nextRes, err := config.Load(s.loadOpts)
 	if err != nil {
 		return ReloadReport{}, &InvalidConfigError{Err: err}
 	}
 
 	current := s.currentConfig()
-	diff := diffConfigPaths(current, nextCfg)
+	diff := diffConfigPaths(current, nextRes.Config)
 	if len(diff) == 0 {
 		return ReloadReport{}, nil
 	}
@@ -153,7 +172,7 @@ func (s *State) Reload(ctx context.Context) (ReloadReport, error) {
 		case "fx.refresh_interval_seconds":
 			report.Applied = append(report.Applied, path)
 			if s.fx != nil {
-				s.fx.SetInterval(time.Duration(nextCfg.FX.RefreshIntervalSeconds) * time.Second)
+				s.fx.SetInterval(time.Duration(nextRes.Config.FX.RefreshIntervalSeconds) * time.Second)
 			} else {
 				report.Warnings = append(report.Warnings, Warning{
 					Code:    "fx.unavailable",
@@ -165,10 +184,19 @@ func (s *State) Reload(ctx context.Context) (ReloadReport, error) {
 		}
 	}
 
+	plan, err := s.buildPlanForConfig(ctx, nextRes.Config)
+	if err != nil {
+		return ReloadReport{}, err
+	}
+
 	s.mu.Lock()
-	s.cfg = nextCfg
+	s.res = nextRes
 	s.mu.Unlock()
-	config.GlobalConf = nextCfg
+	config.GlobalConf = nextRes.Config
+
+	if _, err := s.Apply(ctx, plan, false); err != nil {
+		return report, err
+	}
 
 	return report, nil
 }
@@ -176,10 +204,10 @@ func (s *State) Reload(ctx context.Context) (ReloadReport, error) {
 func (s *State) currentConfig() *config.Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.cfg == nil {
+	if s.res == nil || s.res.Config == nil {
 		return &config.Config{}
 	}
-	return s.cfg
+	return s.res.Config
 }
 
 func probeStatus(ctx context.Context, p any) string {
@@ -200,7 +228,9 @@ func collectStats(ctx context.Context, s any) (map[string]any, error) {
 	if s == nil {
 		return map[string]any{}, nil
 	}
-	statter, ok := s.(interface{ Stats(context.Context) (map[string]any, error) })
+	statter, ok := s.(interface {
+		Stats(context.Context) (map[string]any, error)
+	})
 	if !ok {
 		return map[string]any{}, nil
 	}
@@ -257,8 +287,8 @@ type Status struct {
 	Stores        map[string]string `json:"stores"`
 	FX            map[string]any    `json:"fx"`
 	Pricing       map[string]any    `json:"pricing"`
-	Connectors    map[string]string  `json:"connectors"`
-	Bus           map[string]any     `json:"bus"`
+	Connectors    map[string]string `json:"connectors"`
+	Bus           map[string]any    `json:"bus"`
 }
 
 // Warning is a non-fatal reload note.
@@ -277,7 +307,7 @@ type ReloadReport struct {
 // StoreReport contains admin store details.
 type StoreReport struct {
 	App         map[string]any `json:"app"`
-	SpanDefault  map[string]any `json:"span_default"`
+	SpanDefault map[string]any `json:"span_default"`
 }
 
 // DoctorReport is the result of the daemon health checks.

@@ -6,6 +6,18 @@ import (
 )
 
 type Config struct {
+	Daemon         *DaemonConfig      `mapstructure:"daemon"`
+	Stores         *StoresConfig      `mapstructure:"stores"`
+	Contexts       []ContextConfig    `mapstructure:"contexts"`
+	CurrentContext string             `mapstructure:"currentContext"`
+	Project        *ProjectConfig     `mapstructure:"project"`
+	Connectors     []ConnectorConfig  `mapstructure:"connectors"`
+	Credentials    []CredentialConfig `mapstructure:"credentials"`
+	Policies       []PolicyConfig     `mapstructure:"policies"`
+	Agents         []AgentConfig      `mapstructure:"agents"`
+	Pricing        *PricingConfig     `mapstructure:"pricing"`
+	UI             *UIConfig          `mapstructure:"ui"`
+
 	Server   ServerConfig   `mapstructure:"server"`
 	GRPC     GRPCConfig     `mapstructure:"grpc"`
 	FX       FXConfig       `mapstructure:"fx"`
@@ -18,6 +30,104 @@ type Config struct {
 	Prompt   PromptConfig   `mapstructure:"prompt"`
 	Email    EmailConfig    `mapstructure:"email"`
 	Pools    PoolsConfig    `mapstructure:"pools"`
+}
+
+// ── Layered config document schema ───────────────────────────────────────────
+
+type DaemonConfig struct {
+	Address      string `mapstructure:"address"`
+	ProxyAddress string `mapstructure:"proxy_address"`
+	DataDir      string `mapstructure:"data_dir"`
+	LogLevel     string `mapstructure:"log_level"`
+	LogFormat    string `mapstructure:"log_format"`
+}
+
+type StoreConfig struct {
+	Backend string `mapstructure:"backend"`
+	DSN     string `mapstructure:"dsn"`
+}
+
+type StoresConfig struct {
+	App   *StoreConfig `mapstructure:"app"`
+	Spans *StoreConfig `mapstructure:"spans"`
+	Audit *StoreConfig `mapstructure:"audit"`
+}
+
+type ContextConfig struct {
+	Name    string `mapstructure:"name"`
+	Server  string `mapstructure:"server"`
+	User    string `mapstructure:"user"`
+	Project string `mapstructure:"project"`
+	Env     string `mapstructure:"env"`
+}
+
+type ProjectEnv struct {
+	Name string `mapstructure:"name"`
+	Type string `mapstructure:"type"`
+	Slug string `mapstructure:"slug"`
+}
+
+type ProjectConfig struct {
+	Name        string       `mapstructure:"name"`
+	Slug        string       `mapstructure:"slug"`
+	Description string       `mapstructure:"description"`
+	Envs        []ProjectEnv `mapstructure:"envs"`
+	DefaultEnv  string       `mapstructure:"defaultEnv"`
+}
+
+type ConnectorConfig struct {
+	Name    string         `mapstructure:"name"`
+	Enabled bool           `mapstructure:"enabled"`
+	Config  map[string]any `mapstructure:"config"`
+}
+
+type CredentialConfig struct {
+	Name      string `mapstructure:"name"`
+	Connector string `mapstructure:"connector"`
+	Label     string `mapstructure:"label"`
+	Source    string `mapstructure:"source"`
+	Env       string `mapstructure:"env"`
+	File      string `mapstructure:"file"`
+	Mode      string `mapstructure:"mode"`
+	Ref       string `mapstructure:"ref"`
+}
+
+type PolicyConfig struct {
+	Name        string         `mapstructure:"name"`
+	Description string         `mapstructure:"description"`
+	Mode        string         `mapstructure:"mode"`
+	Auth        map[string]any `mapstructure:"auth"`
+	Cost        map[string]any `mapstructure:"cost"`
+	Trace       map[string]any `mapstructure:"trace"`
+	Validation  map[string]any `mapstructure:"validation"`
+}
+
+type AgentConfig struct {
+	Name          string         `mapstructure:"name"`
+	Description   string         `mapstructure:"description"`
+	Env           string         `mapstructure:"env"`
+	Policy        string         `mapstructure:"policy"`
+	Credentials   []string       `mapstructure:"credentials"`
+	MonthlyBudget *Money         `mapstructure:"monthlyBudget"`
+	Status        string         `mapstructure:"status"`
+	Metadata      map[string]any `mapstructure:"metadata"`
+}
+
+type Money struct {
+	Amount   string `mapstructure:"amount"`
+	Currency string `mapstructure:"currency"`
+}
+
+type PricingConfig struct {
+	PriceBook string           `mapstructure:"priceBook"`
+	Overrides []map[string]any `mapstructure:"overrides"`
+}
+
+type UIConfig struct {
+	PreferredCurrency string `mapstructure:"preferredCurrency"`
+	Locale            string `mapstructure:"locale"`
+	ColorMode         string `mapstructure:"colorMode"`
+	DateStyle         string `mapstructure:"dateStyle"`
 }
 
 // ── Security ──────────────────────────────────────────────────────────────────
@@ -52,7 +162,7 @@ func (s ServerConfig) IsDev() bool {
 }
 
 type GRPCConfig struct {
-	Port int `mapstructure:"port"`
+	Port    int    `mapstructure:"port"`
 	Address string `mapstructure:"addr"`
 }
 

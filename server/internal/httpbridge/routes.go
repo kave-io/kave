@@ -89,7 +89,6 @@ func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app sto
 		{Path: "GET /api/v1/settings/pricing", Invoke: getPriceBook(app)},
 		{Path: "PUT /api/v1/settings/pricing", Invoke: updatePriceBook(app)},
 
-		{Path: "POST /api/v1/apply", Invoke: unimplementedRoute("server.unimplemented")},
 		{Path: "GET /api/v1/watch", Invoke: unimplementedRoute("server.unimplemented")},
 	}
 }
