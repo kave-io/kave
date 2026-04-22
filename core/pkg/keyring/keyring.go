@@ -3,20 +3,57 @@ package keyring
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	osring "github.com/zalando/go-keyring"
 )
 
 var ErrKeyringUnavailable = errors.New("keyring unavailable")
 
-// GetOrCreateMasterKey returns a 32-byte master key.
-// This is a thin local-development fallback that persists under ~/.kave/.
+const (
+	service = "kave"
+	account = "master-key"
+)
+
+// GetOrCreateMasterKey returns a 32-byte master key from the OS keyring.
+// If the OS keyring is unavailable and KAVE_ALLOW_PLAINTEXT_KEY=1, falls back
+// to a 0600 file at ~/.kave/master.key (dev only).
 func GetOrCreateMasterKey(_ context.Context) ([]byte, error) {
 	if os.Getenv("KAVE_KEYRING_DISABLED") == "1" {
 		return nil, ErrKeyringUnavailable
 	}
+
+	if s, err := osring.Get(service, account); err == nil {
+		key, decErr := base64.StdEncoding.DecodeString(s)
+		if decErr == nil && len(key) == 32 {
+			return key, nil
+		}
+	} else if !errors.Is(err, osring.ErrNotFound) {
+		// Keyring reachable but errored, or unreachable — try fallback below.
+		if os.Getenv("KAVE_ALLOW_PLAINTEXT_KEY") != "1" {
+			return nil, fmt.Errorf("%w: %v (set KAVE_ALLOW_PLAINTEXT_KEY=1 for dev fallback)", ErrKeyringUnavailable, err)
+		}
+		return plaintextFallback()
+	}
+
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("%w: generate: %v", ErrKeyringUnavailable, err)
+	}
+	if err := osring.Set(service, account, base64.StdEncoding.EncodeToString(key)); err != nil {
+		if os.Getenv("KAVE_ALLOW_PLAINTEXT_KEY") != "1" {
+			return nil, fmt.Errorf("%w: store: %v (set KAVE_ALLOW_PLAINTEXT_KEY=1 for dev fallback)", ErrKeyringUnavailable, err)
+		}
+		return plaintextFallback()
+	}
+	return key, nil
+}
+
+func plaintextFallback() ([]byte, error) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return nil, ErrKeyringUnavailable

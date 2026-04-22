@@ -53,13 +53,13 @@ type AgentToken struct {
 	BudgetCap  *money.Amount
 
 	// Validity / usage
-	NotBefore  int64
-	ExpiresAt  int64
-	LastUsedAt *int64
-	RevokedAt  *int64
-	RevokedBy  string
+	NotBefore    int64
+	ExpiresAt    int64
+	LastUsedAt   *int64
+	RevokedAt    *int64
+	RevokedBy    string
 	RevokeReason string
-	CreatedAt  int64
+	CreatedAt    int64
 }
 
 // Role stores a set of Casbin permissions in Kave.

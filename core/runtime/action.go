@@ -52,6 +52,10 @@ type Action struct {
 	Invocation
 	Status  ActionStatus
 	Outcome *Outcome
+
+	TraceID  string
+	SpanID   string
+	ParentID string
 }
 
 // ObservedAction is an execution the agent reported to Kave after the fact.

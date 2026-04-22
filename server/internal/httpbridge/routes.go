@@ -27,6 +27,28 @@ import (
 // BuildRoutes returns the HTTP routes served by the bridge.
 func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app store.AppStore, spans store.SpanStore) []Route {
 	return []Route{
+		// Auth / RBAC
+		{Path: "POST /api/v1/auth/register", Invoke: registerAuth(app)},
+		{Path: "POST /api/v1/auth/login", Invoke: loginAuth(app)},
+		{Path: "POST /api/v1/auth/logout", Invoke: logoutAuth(app)},
+		{Path: "GET /api/v1/auth/whoami", Invoke: whoamiAuth(app)},
+		{Path: "POST /api/v1/auth/change-password", Invoke: changePasswordAuth(app)},
+		{Path: "GET /api/v1/auth/sessions", Invoke: listSessionsAuth(app)},
+		{Path: "DELETE /api/v1/auth/sessions/{id}", PathParams: []string{"id"}, Invoke: revokeSessionAuth(app)},
+		{Path: "POST /api/v1/auth/tokens", Invoke: createAPITokenAuth(app)},
+		{Path: "GET /api/v1/auth/tokens", Invoke: listAPITokensAuth(app)},
+		{Path: "DELETE /api/v1/auth/tokens/{id}", PathParams: []string{"id"}, Invoke: revokeAPITokenAuth(app)},
+		{Path: "POST /api/v1/auth/agent-tokens", Invoke: createAgentTokenAuth(app)},
+		{Path: "GET /api/v1/auth/agent-tokens", Invoke: listAgentTokensAuth(app)},
+		{Path: "DELETE /api/v1/auth/agent-tokens/{id}", PathParams: []string{"id"}, Invoke: revokeAgentTokenAuth(app)},
+		{Path: "POST /api/v1/rbac/roles", Invoke: createRoleAuth(app)},
+		{Path: "GET /api/v1/rbac/roles", Invoke: listRolesAuth(app)},
+		{Path: "DELETE /api/v1/rbac/roles/{id}", PathParams: []string{"id"}, Invoke: deleteRoleAuth(app)},
+		{Path: "POST /api/v1/rbac/bindings", Invoke: createBindingAuth(app)},
+		{Path: "GET /api/v1/rbac/bindings", Invoke: listBindingsAuth(app)},
+		{Path: "DELETE /api/v1/rbac/bindings/{id}", PathParams: []string{"id"}, Invoke: deleteBindingAuth(app)},
+		{Path: "POST /api/v1/rbac/test", Invoke: testPermissionAuth(app)},
+
 		// Org / project / environment
 		{Path: "GET /api/v1/orgs", Invoke: listOrgs(control)},
 		{Path: "GET /api/v1/orgs/{id}", PathParams: []string{"id"}, Invoke: getOrg(control)},
@@ -50,6 +72,7 @@ func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app sto
 		{Path: "POST /api/v1/credentials/{id}/rotate", PathParams: []string{"id"}, Invoke: rotateCredential(control)},
 		{Path: "DELETE /api/v1/credentials/{id}", PathParams: []string{"id"}, Invoke: deleteCredential(control)},
 		{Path: "POST /api/v1/credentials/{id}/revoke", PathParams: []string{"id"}, Invoke: revokeCredential(control)},
+		{Path: "POST /api/v1/credentials/{id}/test", PathParams: []string{"id"}, Invoke: credentialTestAuth(app)},
 		{Path: "GET /api/v1/budgets/{agent_id}", PathParams: []string{"agent_id"}, Invoke: getBudget(control)},
 		{Path: "POST /api/v1/budgets", Invoke: createBudget(control)},
 		{Path: "DELETE /api/v1/budgets/{agent_id}", PathParams: []string{"agent_id"}, Invoke: deleteBudget(control)},
@@ -83,13 +106,14 @@ func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app sto
 
 		// Spans
 		{Path: "GET /api/v1/spans", Invoke: listSpans(spans)},
+		{Path: "GET /api/v1/traces", Invoke: listTraces(spans)},
+		{Path: "GET /api/v1/traces/{id}", PathParams: []string{"id"}, Invoke: getTrace(spans)},
 
 		// Cost and pricing
 		{Path: "GET /api/v1/cost/summary", Invoke: getCostSummary(app)},
 		{Path: "GET /api/v1/settings/pricing", Invoke: getPriceBook(app)},
 		{Path: "PUT /api/v1/settings/pricing", Invoke: updatePriceBook(app)},
 
-		{Path: "GET /api/v1/watch", Invoke: unimplementedRoute("server.unimplemented")},
 	}
 }
 

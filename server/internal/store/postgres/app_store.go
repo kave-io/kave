@@ -144,7 +144,8 @@ func (p *PostgresAppStore) GetUser(_ context.Context, _ string) (*control.User, 
 func (p *PostgresAppStore) GetUserByEmail(_ context.Context, _, _ string) (*control.User, error) {
 	return nil, nil
 }
-func (p *PostgresAppStore) UpdateUser(_ context.Context, _ string, _ *control.UserUpdate) error {
+func (p *PostgresAppStore) UpdateUser(_ context.Context, _ string, update *control.UserUpdate) error {
+	_ = update
 	return nil
 }
 
@@ -159,7 +160,7 @@ func (p *PostgresAppStore) ListRoles(_ context.Context, _ string, _ store.Page) 
 }
 func (p *PostgresAppStore) UpdateRole(_ context.Context, _ string, _ *control.Role) error { return nil }
 func (p *PostgresAppStore) DeleteRole(_ context.Context, _ string) error                  { return nil }
-func (p *PostgresAppStore) InsertBinding(_ context.Context, _ *control.Binding) error      { return nil }
+func (p *PostgresAppStore) InsertBinding(_ context.Context, _ *control.Binding) error     { return nil }
 func (p *PostgresAppStore) GetBinding(_ context.Context, _ string) (*control.Binding, error) {
 	return nil, nil
 }
@@ -907,7 +908,7 @@ func (p *PostgresAppStore) ListSessions(_ context.Context, _ string, _ store.Pag
 	return store.PageResult[*control.Session]{}, nil
 }
 func (p *PostgresAppStore) RevokeSession(_ context.Context, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchSession(_ context.Context, _ string) error    { return nil }
+func (p *PostgresAppStore) TouchSession(_ context.Context, _ string) error     { return nil }
 
 func (p *PostgresAppStore) InsertAPIToken(_ context.Context, _ *control.APIToken) error { return nil }
 func (p *PostgresAppStore) GetAPITokenByHash(_ context.Context, _ string) (*control.APIToken, error) {
@@ -922,7 +923,9 @@ func (p *PostgresAppStore) ListAPITokens(_ context.Context, _ string, _ store.Pa
 func (p *PostgresAppStore) RevokeAPIToken(_ context.Context, _, _, _ string) error { return nil }
 func (p *PostgresAppStore) TouchAPIToken(_ context.Context, _ string) error        { return nil }
 
-func (p *PostgresAppStore) InsertAgentToken(_ context.Context, _ *control.AgentToken) error { return nil }
+func (p *PostgresAppStore) InsertAgentToken(_ context.Context, _ *control.AgentToken) error {
+	return nil
+}
 func (p *PostgresAppStore) GetAgentTokenByHash(_ context.Context, _ string) (*control.AgentToken, error) {
 	return nil, nil
 }

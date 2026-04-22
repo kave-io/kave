@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/runtime"
 )
 
@@ -21,6 +22,27 @@ func New(interceptors ...Interceptor) *Pipeline {
 // If both the handler and an After hook fail, errors.Join preserves both errors.
 func (p *Pipeline) Execute(ctx context.Context, action *runtime.Action, handler Handler) (*Result, error) {
 	var err error
+
+	if action.TraceID == "" {
+		action.TraceID = ids.TraceID()
+	}
+	if action.SpanID == "" {
+		action.SpanID = ids.SpanID()
+	}
+
+	traceCtx := runtime.TraceFrom(ctx)
+	if traceCtx.SpanID != "" {
+		action.ParentID = traceCtx.SpanID
+		if action.InvocationRef.ParentID == nil || *action.InvocationRef.ParentID != action.ParentID {
+			parentID := action.ParentID
+			action.InvocationRef.ParentID = &parentID
+		}
+	} else {
+		action.ParentID = ""
+		action.InvocationRef.ParentID = nil
+	}
+
+	ctx = runtime.WithTrace(ctx, action.TraceID, action.SpanID)
 
 	for _, ic := range p.interceptors {
 		action, err = ic.Before(ctx, action)

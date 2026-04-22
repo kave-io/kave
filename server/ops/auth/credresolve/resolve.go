@@ -34,8 +34,8 @@ func Resolve(ctx context.Context, cred *controlmodel.ConnectorCredential, vault 
 	if source == "" {
 		source = controlmodel.CredentialSource(cred.SourceType)
 	}
-	if source == "" && len(cred.EncryptedBlob) > 0 {
-		return string(cred.EncryptedBlob), nil
+	if source == "" {
+		return "", fmt.Errorf("credential %q has no source", cred.ID)
 	}
 	switch source {
 	case controlmodel.CredentialSourceEnv:

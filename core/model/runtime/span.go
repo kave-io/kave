@@ -79,10 +79,19 @@ type SpanEnd struct {
 // SpanFilter narrows QuerySpans queries. Pagination (limit, cursor) is passed
 // separately as a store.Page.
 type SpanFilter struct {
-	ID       string
-	RunID    string
-	ActionID string
-	FromMs   *int64
-	ToMs     *int64
-	HasError *bool
+	ID           string
+	RunID        string
+	ActionID     string
+	TraceID      string
+	ProjectID    string
+	EnvID        string
+	AgentID      string
+	Connector    string
+	Model        string
+	Kind         string
+	NamePrefix   string
+	HasError     *bool
+	FromMs       *int64
+	ToMs         *int64
+	MinCostMicro *int64
 }

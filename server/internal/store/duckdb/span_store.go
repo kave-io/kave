@@ -175,14 +175,14 @@ func (s *DuckDBSpanStore) GetSpan(ctx context.Context, spanID string) (*runtimem
 	)
 
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		SELECT id, run_id, action_id, project_id, env_id, agent_id, parent_id, name, kind, source, connector, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 		       model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		       reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		       compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta
 		FROM spans WHERE id = $1
 	`, spanID).Scan(
-		&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &endedAt, &row.DurationMs,
+		&row.ID, &row.RunID, &row.ActionID, &row.ProjectID, &row.EnvID, &row.AgentID, &row.ParentID, &row.Name, &row.Kind, &row.Source, &row.Connector, &row.StartedAt, &endedAt, &row.DurationMs,
 		&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
 		&model, &costAmount, &priceVersion, &snapshotJSON, &attrs, &row.CreatedAt,
 		&reasoningTokens, &audioInputTokens, &audioOutputTokens, &imageUnits, &requestCount,
@@ -253,40 +253,13 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 	defer s.mu.Unlock()
 
 	query := `
-		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		SELECT id, run_id, action_id, project_id, env_id, agent_id, parent_id, name, kind, source, connector, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 		       model, cost_amount_nanos, attrs, created_at
 		FROM spans WHERE 1=1
 	`
 	var args []any
-
-	if filter.ID != "" {
-		query += ` AND id = $` + fmt.Sprint(len(args)+1)
-		args = append(args, filter.ID)
-	}
-	if filter.RunID != "" {
-		query += ` AND run_id = $` + fmt.Sprint(len(args)+1)
-		args = append(args, filter.RunID)
-	}
-	if filter.ActionID != "" {
-		query += ` AND action_id = $` + fmt.Sprint(len(args)+1)
-		args = append(args, filter.ActionID)
-	}
-	if filter.FromMs != nil {
-		query += ` AND started_at >= $` + fmt.Sprint(len(args)+1)
-		args = append(args, *filter.FromMs)
-	}
-	if filter.ToMs != nil {
-		query += ` AND started_at <= $` + fmt.Sprint(len(args)+1)
-		args = append(args, *filter.ToMs)
-	}
-	if filter.HasError != nil {
-		if *filter.HasError {
-			query += ` AND error IS NOT NULL`
-		} else {
-			query += ` AND error IS NULL`
-		}
-	}
+	query, args = appendSpanFilterDuck(query, args, filter)
 
 	limit := page.Limit
 	if limit <= 0 {
@@ -315,7 +288,7 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 			cacheWriteTokens     sql.NullInt32
 		)
 		if err := rows.Scan(
-			&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &row.StartedAt, &endedAt, &row.DurationMs,
+			&row.ID, &row.RunID, &row.ActionID, &row.ProjectID, &row.EnvID, &row.AgentID, &row.ParentID, &row.Name, &row.Kind, &row.Source, &row.Connector, &row.StartedAt, &endedAt, &row.DurationMs,
 			&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
 			&model, &costAmount, &attrs, &row.CreatedAt,
 		); err != nil {
@@ -364,19 +337,7 @@ func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, 
 		FROM spans WHERE 1=1
 	`, col)
 	var args []any
-
-	if filter.RunID != "" {
-		query += ` AND run_id = $` + fmt.Sprint(len(args)+1)
-		args = append(args, filter.RunID)
-	}
-	if filter.FromMs != nil {
-		query += ` AND started_at >= $` + fmt.Sprint(len(args)+1)
-		args = append(args, *filter.FromMs)
-	}
-	if filter.ToMs != nil {
-		query += ` AND started_at <= $` + fmt.Sprint(len(args)+1)
-		args = append(args, *filter.ToMs)
-	}
+	query, args = appendSpanFilterDuck(query, args, filter)
 	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_amount_nanos) DESC`, col)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -463,14 +424,14 @@ func insertSpan(tx *sql.Tx, span *runtimemodel.SpanRow) error {
 	}
 
 	_, err := tx.Exec(`
-		INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		INSERT INTO spans (id, run_id, action_id, project_id, env_id, agent_id, parent_id, name, kind, source, connector, started_at, ended_at, duration_ms,
 		                   input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 		                   model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		                   reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		                   compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		span.ID, span.RunID, span.ActionID, span.ParentID, span.Name, span.StartedAt, span.EndedAt, span.DurationMs,
+		span.ID, span.RunID, span.ActionID, span.ProjectID, span.EnvID, span.AgentID, span.ParentID, span.Name, span.Kind, span.Source, span.Connector, span.StartedAt, span.EndedAt, span.DurationMs,
 		derefBytes(span.Input), derefBytes(span.Output), span.Error,
 		span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens,
 		span.Model, costAmount, span.PriceVersion, snapshotJSON, derefBytes(span.Attrs), time.Now().UnixMilli(),
@@ -526,7 +487,7 @@ func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
 			price_snapshot    = COALESCE(?, price_snapshot),
 			trace_id          = COALESCE(?, trace_id),
 			root_span_id      = COALESCE(?, root_span_id),
-			validation_meta   = COALESCE(?, validation_meta)
+		validation_meta   = COALESCE(?, validation_meta)
 		WHERE id = ?
 	`,
 		end.EndedAt, end.DurationMs,
@@ -539,6 +500,53 @@ func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
 		spanID,
 	)
 	return err
+}
+
+func appendSpanFilterDuck(query string, args []any, filter *runtimemodel.SpanFilter) (string, []any) {
+	if filter == nil {
+		return query, args
+	}
+	appendEq := func(column, value string) {
+		if value == "" {
+			return
+		}
+		query += ` AND ` + column + ` = $` + fmt.Sprint(len(args)+1)
+		args = append(args, value)
+	}
+	appendEq("id", filter.ID)
+	appendEq("run_id", filter.RunID)
+	appendEq("action_id", filter.ActionID)
+	appendEq("trace_id", filter.TraceID)
+	appendEq("project_id", filter.ProjectID)
+	appendEq("env_id", filter.EnvID)
+	appendEq("agent_id", filter.AgentID)
+	appendEq("connector", filter.Connector)
+	appendEq("model", filter.Model)
+	appendEq("kind", filter.Kind)
+	if filter.NamePrefix != "" {
+		query += ` AND name LIKE $` + fmt.Sprint(len(args)+1)
+		args = append(args, filter.NamePrefix+"%")
+	}
+	if filter.FromMs != nil {
+		query += ` AND started_at >= $` + fmt.Sprint(len(args)+1)
+		args = append(args, *filter.FromMs)
+	}
+	if filter.ToMs != nil {
+		query += ` AND started_at <= $` + fmt.Sprint(len(args)+1)
+		args = append(args, *filter.ToMs)
+	}
+	if filter.HasError != nil {
+		if *filter.HasError {
+			query += ` AND error IS NOT NULL`
+		} else {
+			query += ` AND error IS NULL`
+		}
+	}
+	if filter.MinCostMicro != nil {
+		query += ` AND COALESCE(cost_amount_nanos, 0) >= $` + fmt.Sprint(len(args)+1)
+		args = append(args, *filter.MinCostMicro*int64(money.MicroDollar))
+	}
+	return query, args
 }
 
 // Allowlist for groupBy values in SpendByDimension.

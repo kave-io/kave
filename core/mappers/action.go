@@ -11,13 +11,18 @@ func ActionToRecord(a *runtime.Action) *runtimemodel.ActionRecord {
 		return nil
 	}
 
+	parentID := a.ParentID
+	if parentID == "" && a.InvocationRef.ParentID != nil {
+		parentID = *a.InvocationRef.ParentID
+	}
+
 	return &runtimemodel.ActionRecord{
 		ID:        a.ID,
 		RunID:     a.RunID,
 		AgentID:   a.AgentID,
 		ProjectID: a.ProjectID,
 		EnvID:     a.EnvID,
-		ParentID:  a.ParentID,
+		ParentID:  stringPtr(parentID),
 
 		ActionType: string(a.Type),
 		Connector:  a.Connector,
@@ -121,6 +126,21 @@ func RecordToAction(r *runtimemodel.ActionRecord) *runtime.Action {
 				Seq:       r.Seq,
 			},
 		},
-		Status: runtime.ActionStatus(r.Status),
+		Status:   runtime.ActionStatus(r.Status),
+		ParentID: stringValue(r.ParentID),
 	}
+}
+
+func stringPtr(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func stringValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }

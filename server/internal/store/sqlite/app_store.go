@@ -160,14 +160,31 @@ func (s *SQLiteAppStore) GetUserByEmail(ctx context.Context, orgID, email string
 
 func (s *SQLiteAppStore) UpdateUser(ctx context.Context, id string, update *control.UserUpdate) error {
 	now := time.Now().UnixMilli()
+	var name any
+	if update.Name != nil {
+		name = *update.Name
+	}
+	var status any
+	if update.Status != nil {
+		status = *update.Status
+	}
+	var passwordHash any
+	if update.PasswordHash != nil {
+		passwordHash = *update.PasswordHash
+	}
+	var lastLoginAt any
+	if update.LastLoginAt != nil {
+		lastLoginAt = *update.LastLoginAt
+	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE users SET
 			name         = COALESCE(?, name),
 			status       = COALESCE(?, status),
+			password_hash = COALESCE(?, password_hash),
 			last_login_at = COALESCE(?, last_login_at),
 			updated_at   = ?
 		WHERE id = ?`,
-		update.Name, update.Status, update.LastLoginAt, now, id)
+		name, status, passwordHash, lastLoginAt, now, id)
 	return err
 }
 

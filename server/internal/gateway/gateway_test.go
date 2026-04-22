@@ -19,6 +19,7 @@ import (
 // mockAppStore implements store.AppStore with minimal logic for gateway tests.
 type mockAppStore struct {
 	agent *controlmodel.Agent
+	token *controlmodel.AgentToken
 	cred  *controlmodel.ConnectorCredential
 }
 
@@ -133,7 +134,7 @@ func (m *mockAppStore) ListSessions(_ context.Context, _ string, _ store.Page) (
 	return store.PageResult[*controlmodel.Session]{}, nil
 }
 func (m *mockAppStore) RevokeSession(_ context.Context, _, _ string) error { return nil }
-func (m *mockAppStore) TouchSession(_ context.Context, _ string) error    { return nil }
+func (m *mockAppStore) TouchSession(_ context.Context, _ string) error     { return nil }
 
 func (m *mockAppStore) InsertAPIToken(_ context.Context, _ *controlmodel.APIToken) error { return nil }
 func (m *mockAppStore) GetAPITokenByHash(_ context.Context, _ string) (*controlmodel.APIToken, error) {
@@ -152,7 +153,7 @@ func (m *mockAppStore) InsertAgentToken(_ context.Context, _ *controlmodel.Agent
 	return nil
 }
 func (m *mockAppStore) GetAgentTokenByHash(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
-	return nil, nil
+	return m.token, nil
 }
 func (m *mockAppStore) GetAgentToken(_ context.Context, _ string) (*controlmodel.AgentToken, error) {
 	return nil, nil
@@ -182,9 +183,11 @@ func (m *mockAppStore) GetRole(_ context.Context, _ string) (*controlmodel.Role,
 func (m *mockAppStore) ListRoles(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Role], error) {
 	return store.PageResult[*controlmodel.Role]{}, nil
 }
-func (m *mockAppStore) UpdateRole(_ context.Context, _ string, _ *controlmodel.Role) error { return nil }
-func (m *mockAppStore) DeleteRole(_ context.Context, _ string) error                       { return nil }
-func (m *mockAppStore) InsertBinding(_ context.Context, _ *controlmodel.Binding) error     { return nil }
+func (m *mockAppStore) UpdateRole(_ context.Context, _ string, _ *controlmodel.Role) error {
+	return nil
+}
+func (m *mockAppStore) DeleteRole(_ context.Context, _ string) error                   { return nil }
+func (m *mockAppStore) InsertBinding(_ context.Context, _ *controlmodel.Binding) error { return nil }
 func (m *mockAppStore) GetBinding(_ context.Context, _ string) (*controlmodel.Binding, error) {
 	return nil, nil
 }
@@ -278,7 +281,7 @@ func (m *mockAppStore) Close() error                                            
 var _ store.AppStore = (*mockAppStore)(nil)
 
 func TestGatewayAgentNotFound(t *testing.T) {
-	g := New(&mockAppStore{}, nil, pipeline.New())
+	g := New(&mockAppStore{}, nil, pipeline.New(), NewRegistry())
 	mux := http.NewServeMux()
 	g.RegisterRoutes(mux)
 
@@ -310,10 +313,13 @@ func TestGatewayForwardsClaudeCodeOpenAI(t *testing.T) {
 	}))
 	defer upstream.Close()
 
+	t.Setenv("KAVE_TEST_OPENAI_KEY", "real-key")
+
 	g := New(&mockAppStore{
 		agent: &controlmodel.Agent{ID: "a1", ProjectID: "proj1", EnvID: "default", Status: controlmodel.AgentStatusActive},
-		cred:  &controlmodel.ConnectorCredential{EncryptedBlob: []byte("real-key"), ProjectID: "proj1"},
-	}, nil, pipeline.New())
+		token: &controlmodel.AgentToken{ID: "tok1", AgentID: "a1", OrgID: "default", TokenHash: []byte("ignored")},
+		cred:  &controlmodel.ConnectorCredential{Source: controlmodel.CredentialSourceEnv, EnvVar: "KAVE_TEST_OPENAI_KEY", ProjectID: "proj1"},
+	}, nil, pipeline.New(), NewRegistry())
 	g.transport.client.Transport = rewriteTransport(t, upstream.URL)
 
 	mux := http.NewServeMux()
@@ -324,7 +330,7 @@ func TestGatewayForwardsClaudeCodeOpenAI(t *testing.T) {
 		"messages": []any{},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/frameworks/claude-code/openai/v1/chat/completions", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer a1")
+	req.Header.Set("Authorization", "Bearer real-token")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)

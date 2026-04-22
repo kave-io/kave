@@ -27,8 +27,10 @@ import (
 	"github.com/kave-io/kave/server/internal/httpbridge"
 	"github.com/kave-io/kave/server/internal/logsink"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
+	"github.com/kave-io/kave/server/ops/budget"
 	"github.com/kave-io/kave/server/ops/cost"
 	"github.com/kave-io/kave/server/ops/fx"
+	"github.com/kave-io/kave/server/ops/policy"
 	"github.com/kave-io/kave/server/ops/trace"
 	portgrpc "github.com/kave-io/kave/server/port/grpc"
 	"github.com/kave-io/kave/server/ui"
@@ -81,12 +83,12 @@ func main() {
 	runtimeServer := appruntime.New(appStore, defaultSpanStore, eventBus)
 	grpcServer := portgrpc.New(controlServer, runtimeServer)
 
-	// Create pipeline interceptors in order: cost → trace
-	// (auth requires casbin config, skipped for now in local dev)
-	costInterceptor := cost.New(appStore, costService)
+	// Create pipeline interceptors in order: policy → budget → trace.
+	policyInterceptor := policy.New(appStore)
+	budgetInterceptor := budget.New(appStore, costService)
 	traceInterceptor := trace.New(storeManager, costService, eventBus)
 
-	p := pipeline.New(costInterceptor, traceInterceptor)
+	p := pipeline.New(policyInterceptor, budgetInterceptor, traceInterceptor)
 
 	// Resolve optional encryption key for credential storage
 	var encKey []byte
@@ -107,7 +109,7 @@ func main() {
 	}()
 
 	// Create and register framework gateway
-	gatewayServer := gateway.New(appStore, encKey, p)
+	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistry())
 	mux := http.NewServeMux()
 	gatewayServer.RegisterRoutes(mux)
 	fx.RegisterRoutes(mux, fxService)
@@ -117,6 +119,7 @@ func main() {
 	daemonState := daemon.New(config.LoadOpts{StartDir: "."}, loadRes, appStore, defaultSpanStore, fxService, costService, eventBus, buildVersion)
 	httpbridge.Register(bridgeMux, httpbridge.BuildDaemonRoutes(daemonState))
 	httpbridge.RegisterStreams(bridgeMux, appStore, defaultSpanStore, eventBus)
+	httpbridge.RegisterTraceRoutes(bridgeMux, defaultSpanStore)
 	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
 		log.Fatalf("build apply plan: %v", err)
 	} else if _, err := daemonState.Apply(context.Background(), plan, false); err != nil {

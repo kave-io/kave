@@ -15,6 +15,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type requestHeadersKey struct{}
+
 // Outcome describes the body the bridge should write.
 type Outcome struct {
 	Kind    string
@@ -52,7 +54,8 @@ func Register(mux *http.ServeMux, routes []Route) {
 				pathValues[name] = r.PathValue(name)
 			}
 
-			outcome, err := route.Invoke(r.Context(), body, r.URL.Query(), pathValues)
+			ctx := context.WithValue(r.Context(), requestHeadersKey{}, r.Header.Clone())
+			outcome, err := route.Invoke(ctx, body, r.URL.Query(), pathValues)
 			if err != nil {
 				mapBridgeError(w, err, outcome.Kind)
 				return
@@ -137,4 +140,14 @@ func bridgeErrorDetails(code codes.Code, kind string) (string, int) {
 
 func writeError(w http.ResponseWriter, statusCode int, code, msg string, details map[string]any) {
 	contract.WriteError(w, statusCode, code, msg, details)
+}
+
+func requestHeaders(ctx context.Context) http.Header {
+	if ctx == nil {
+		return nil
+	}
+	if h, ok := ctx.Value(requestHeadersKey{}).(http.Header); ok {
+		return h
+	}
+	return nil
 }

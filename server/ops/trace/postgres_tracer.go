@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/google/uuid"
 	"github.com/kave-io/kave/core/bus"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
+	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/timex"
 	"github.com/kave-io/kave/core/runtime"
 	coreStore "github.com/kave-io/kave/core/store"
@@ -47,9 +47,17 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 		return err
 	}
 
-	spanID := action.ID
+	spanID := action.SpanID
 	if spanID == "" {
-		spanID = uuid.NewString()
+		spanID = ids.SpanID()
+	}
+	traceCtx := runtime.TraceFrom(ctx)
+	rootSpanID := traceCtx.RootSpanID
+	if rootSpanID == "" {
+		rootSpanID = spanID
+	}
+	if action.ParentID == "" {
+		rootSpanID = spanID
 	}
 
 	row := &runtimemodel.SpanRow{
@@ -59,16 +67,17 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 		AgentID:    action.AgentID,
 		RunID:      action.RunID,
 		ActionID:   action.ID,
+		ParentID:   stringPtr(action.ParentID),
 		Name:       action.Connector + "." + action.Method,
-		Kind:       "action",
-		Source:     "intercept",
+		Kind:       string(action.Type),
+		Source:     string(runtime.ActionSourceIntercepted),
 		Connector:  action.Connector,
 		StartedAt:  startedAtMS,
 		EndedAt:    &endedAtMS,
 		DurationMs: durationMs,
 		Error:      action.Error,
-		TraceID:    action.RunID, // Kave-native: TraceID defaults to RunID
-		RootSpanID: spanID,
+		TraceID:    action.TraceID,
+		RootSpanID: rootSpanID,
 		CreatedAt:  endedAtMS,
 	}
 
@@ -134,3 +143,10 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 func (t *Tracer) Name() string { return "tracer" }
 
 var _ pipeline.Interceptor = (*Tracer)(nil)
+
+func stringPtr(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}

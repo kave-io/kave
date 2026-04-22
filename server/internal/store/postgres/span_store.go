@@ -67,14 +67,15 @@ func (p *PostgresSpanStore) OpenSpan(ctx context.Context, span *runtimemodel.Spa
 	}
 
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO spans (id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		INSERT INTO spans (id, run_id, action_id, project_id, env_id, agent_id, parent_id, name, kind, source, connector,
+		                   started_at, ended_at, duration_ms,
 		                   input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 		                   model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		                   reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		                   compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38)
 	`,
-		span.ID, span.RunID, span.ActionID, span.ParentID, span.Name,
+		span.ID, span.RunID, span.ActionID, span.ProjectID, span.EnvID, span.AgentID, span.ParentID, span.Name, span.Kind, span.Source, span.Connector,
 		pgTime(span.StartedAt), ptrPgTime(span.EndedAt), span.DurationMs,
 		derefBytesP(span.Input), derefBytesP(span.Output), span.Error,
 		span.InputTokens, span.OutputTokens, span.CacheReadTokens, span.CacheWriteTokens,
@@ -172,14 +173,14 @@ func (p *PostgresSpanStore) GetSpan(ctx context.Context, spanID string) (*runtim
 	)
 
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		SELECT id, run_id, action_id, project_id, env_id, agent_id, parent_id, name, kind, source, connector, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 		       model, cost_amount_nanos, price_version, price_snapshot, attrs, created_at,
 		       reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units, request_count,
 		       compute_ms, storage_bytes, bandwidth_bytes, trace_id, root_span_id, validation_meta
 		FROM spans WHERE id = $1
 	`, spanID).Scan(
-		&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &startedAt, &endedAt, &row.DurationMs,
+		&row.ID, &row.RunID, &row.ActionID, &row.ProjectID, &row.EnvID, &row.AgentID, &row.ParentID, &row.Name, &row.Kind, &row.Source, &row.Connector, &startedAt, &endedAt, &row.DurationMs,
 		&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
 		&model, &costAmount, &priceVersion, &snapshotJSON, &attrs, &createdAt,
 		&reasoningTokens, &audioInputTokens, &audioOutputTokens, &imageUnits, &requestCount,
@@ -237,46 +238,14 @@ func (p *PostgresSpanStore) GetSpan(ctx context.Context, spanID string) (*runtim
 // QuerySpans retrieves spans matching a filter.
 func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilter, page store.Page) (store.PageResult[*runtimemodel.SpanRow], error) {
 	query := `
-		SELECT id, run_id, action_id, parent_id, name, started_at, ended_at, duration_ms,
+		SELECT id, run_id, action_id, project_id, env_id, agent_id, parent_id, name, kind, source, connector, started_at, ended_at, duration_ms,
 		       input, output, error, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 		       model, cost_amount_nanos, attrs, created_at
 		FROM spans WHERE 1=1
 	`
 	var args []any
 	argNum := 1
-
-	if filter.ID != "" {
-		query += fmt.Sprintf(` AND id = $%d`, argNum)
-		args = append(args, filter.ID)
-		argNum++
-	}
-	if filter.RunID != "" {
-		query += fmt.Sprintf(` AND run_id = $%d`, argNum)
-		args = append(args, filter.RunID)
-		argNum++
-	}
-	if filter.ActionID != "" {
-		query += fmt.Sprintf(` AND action_id = $%d`, argNum)
-		args = append(args, filter.ActionID)
-		argNum++
-	}
-	if filter.FromMs != nil {
-		query += fmt.Sprintf(` AND started_at >= $%d`, argNum)
-		args = append(args, pgTime(*filter.FromMs))
-		argNum++
-	}
-	if filter.ToMs != nil {
-		query += fmt.Sprintf(` AND started_at <= $%d`, argNum)
-		args = append(args, pgTime(*filter.ToMs))
-		argNum++
-	}
-	if filter.HasError != nil {
-		if *filter.HasError {
-			query += ` AND error IS NOT NULL`
-		} else {
-			query += ` AND error IS NULL`
-		}
-	}
+	query, args, argNum = appendSpanFilter(query, args, argNum, filter)
 
 	limit := page.Limit
 	if limit <= 0 {
@@ -306,7 +275,7 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 			cacheWriteTokens     *int32
 		)
 		if err := rows.Scan(
-			&row.ID, &row.RunID, &row.ActionID, &row.ParentID, &row.Name, &startedAt, &endedAt, &row.DurationMs,
+			&row.ID, &row.RunID, &row.ActionID, &row.ProjectID, &row.EnvID, &row.AgentID, &row.ParentID, &row.Name, &row.Kind, &row.Source, &row.Connector, &startedAt, &endedAt, &row.DurationMs,
 			&input, &output, &row.Error, &inputTokens, &outputTokens, &cacheReadTokens, &cacheWriteTokens,
 			&model, &costAmount, &attrs, &createdAt,
 		); err != nil {
@@ -351,27 +320,7 @@ func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string
 	`, col)
 	var args []any
 	argNum := 1
-
-	if filter.ID != "" {
-		query += fmt.Sprintf(` AND id = $%d`, argNum)
-		args = append(args, filter.ID)
-		argNum++
-	}
-	if filter.RunID != "" {
-		query += fmt.Sprintf(` AND run_id = $%d`, argNum)
-		args = append(args, filter.RunID)
-		argNum++
-	}
-	if filter.FromMs != nil {
-		query += fmt.Sprintf(` AND started_at >= $%d`, argNum)
-		args = append(args, pgTime(*filter.FromMs))
-		argNum++
-	}
-	if filter.ToMs != nil {
-		query += fmt.Sprintf(` AND started_at <= $%d`, argNum)
-		args = append(args, pgTime(*filter.ToMs))
-		argNum++
-	}
+	query, args, argNum = appendSpanFilter(query, args, argNum, filter)
 	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_amount_nanos) DESC`, col)
 
 	rows, err := p.pool.Query(ctx, query, args...)
@@ -402,6 +351,59 @@ func ptrPgTime(ms *int64) *time.Time {
 	}
 	t := time.UnixMilli(*ms)
 	return &t
+}
+
+func appendSpanFilter(query string, args []any, argNum int, filter *runtimemodel.SpanFilter) (string, []any, int) {
+	if filter == nil {
+		return query, args, argNum
+	}
+	appendEq := func(column, value string) {
+		if value == "" {
+			return
+		}
+		query += fmt.Sprintf(` AND %s = $%d`, column, argNum)
+		args = append(args, value)
+		argNum++
+	}
+
+	appendEq("id", filter.ID)
+	appendEq("run_id", filter.RunID)
+	appendEq("action_id", filter.ActionID)
+	appendEq("trace_id", filter.TraceID)
+	appendEq("project_id", filter.ProjectID)
+	appendEq("env_id", filter.EnvID)
+	appendEq("agent_id", filter.AgentID)
+	appendEq("connector", filter.Connector)
+	appendEq("model", filter.Model)
+	appendEq("kind", filter.Kind)
+	if filter.NamePrefix != "" {
+		query += fmt.Sprintf(` AND name LIKE $%d`, argNum)
+		args = append(args, filter.NamePrefix+"%")
+		argNum++
+	}
+	if filter.FromMs != nil {
+		query += fmt.Sprintf(` AND started_at >= $%d`, argNum)
+		args = append(args, pgTime(*filter.FromMs))
+		argNum++
+	}
+	if filter.ToMs != nil {
+		query += fmt.Sprintf(` AND started_at <= $%d`, argNum)
+		args = append(args, pgTime(*filter.ToMs))
+		argNum++
+	}
+	if filter.HasError != nil {
+		if *filter.HasError {
+			query += ` AND error IS NOT NULL`
+		} else {
+			query += ` AND error IS NULL`
+		}
+	}
+	if filter.MinCostMicro != nil {
+		query += fmt.Sprintf(` AND COALESCE(cost_amount_nanos, 0) >= $%d`, argNum)
+		args = append(args, *filter.MinCostMicro*int64(money.MicroDollar))
+		argNum++
+	}
+	return query, args, argNum
 }
 
 func derefBytesP(b *[]byte) []byte {

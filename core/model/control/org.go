@@ -35,9 +35,10 @@ type User struct {
 
 // UserUpdate holds partial update fields for a user.
 type UserUpdate struct {
-	Name        *string
-	Status      *string
-	LastLoginAt *int64 // UnixMilli
+	Name         *string
+	Status       *string
+	PasswordHash *[]byte
+	LastLoginAt  *int64 // UnixMilli
 }
 
 // Membership links a User to an Organization with a role.
