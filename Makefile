@@ -162,4 +162,7 @@ clean:
 	@echo "Cleaned"
 
 cli-docs:
-	cd cli && env GOCACHE=/tmp/go-build go run ./tools/gen-docs ../docs/src/content/docs/cli/reference
+	@echo "Docs live in kave-io/kave-docs. Set KAVE_DOCS_DIR to its path, e.g.:"
+	@echo "  KAVE_DOCS_DIR=../kave-docs make cli-docs"
+	@test -n "$(KAVE_DOCS_DIR)" || (echo "error: KAVE_DOCS_DIR not set" && exit 1)
+	cd cli && env GOCACHE=/tmp/go-build go run ./tools/gen-docs $(KAVE_DOCS_DIR)/src/content/docs/cli/reference

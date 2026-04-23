@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/kave-logo.svg" alt="Kave" width="72" />
+  <img src="https://raw.githubusercontent.com/kave-io/kave-docs/main/src/assets/kave-logo.svg" alt="Kave" width="72" />
   <h1>Kave</h1>
   <p><strong>The control plane for AI agents.</strong></p>
   <p>Observe, authorize, validate, and cost-control every agent action — across any framework, any model, any language.</p>

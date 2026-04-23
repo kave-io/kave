@@ -13,7 +13,10 @@ import (
 	"github.com/spf13/cobra/doc"
 )
 
-const defaultDocsReferenceDir = "docs/src/content/docs/cli/reference"
+// defaultDocsReferenceDir is a relative fallback assuming kave-io/kave-docs is
+// checked out next to this repo. Pass an explicit target dir via CLI flag or
+// KAVE_DOCS_DIR (see Makefile cli-docs target) in any CI/automation.
+const defaultDocsReferenceDir = "../kave-docs/src/content/docs/cli/reference"
 
 func GenerateDocs(dir string) error {
 	if dir == "" {
