@@ -268,7 +268,7 @@ require (
 )
 ```
 
-Only `core/` and `proto/gen/` are stable enough to depend on. `server/` internals are cloud's to fork and adapt — cloud copies the gateway/httpbridge pattern rather than depending on it, because cloud's versions are multi-tenant and diverge fast.
+Only `core/` and `proto/gen/` are stable enough to depend on. `server/` internals (including `server/app/`, `server/internal/gateway/connectors/`, the store engines) are cloud's to fork and adapt — cloud's versions are multi-tenant and diverge fast. Connectors are now part of `core/connectors/` after the subtraction sprint, so cloud gets them for free via the `core/` dependency.
 
 ## OSS-side seams this plan requires (do these in THIS repo)
 

@@ -4,6 +4,8 @@ Plans 01–08 are merged. What remains to reach a shippable v1 + a credible clou
 
 One plan = one haiku agent session. Ordered by dependency: auth first (everything else assumes real identity), then correctness (audit, tests), then surface (dashboard, CLI fills), then cloud.
 
+**Baseline note (2026-04-23):** big subtraction sprint already shipped before these plans — 7 modules → 4 (`core`, `server`, `cli`, `proto/gen`), `core/ops/*` collapsed into `core/runtime/*`, `core/ports/` inlined, `core/pkg/{fp,pointer,constants}` deleted, `server/internal/db/*` merged into `server/internal/store/<engine>/migrations/`, `server/ops/auth/casbin_engine.go` deleted, BudgetEntry `Metadata map[string]any` promoted to typed `Blocked/BlockReason/BlockPeriod` fields, default user + membership seeded alongside the other permissive defaults. −445 LOC net. Plans below reflect that baseline.
+
 1. [09-auth-enforcement.md](09-auth-enforcement.md) — wire the auth interceptor, kill the bearer-UUID shortcut, finish vault/keyring credential resolution, reconcile the two casbin homes.
 2. [10-cli-fillout.md](10-cli-fillout.md) — close the ~98 `output.NotImplemented` CLI handlers against the now-complete HTTP bridge + gRPC surface. Includes rebuilding `kave watch` over existing SSE streams.
 3. [11-code-audit.md](11-code-audit.md) — duplicates, dead code, naming drift, undocumented policies, migration-numbering landmines, and doc-in-code gaps surfaced in the v1 sweep.

@@ -7,8 +7,7 @@
 - `server/main.go:86-91` — current pipeline: `policy → budget → trace`. No auth interceptor.
 - `server/internal/authctx/authctx.go` — request-scoped identity container. Populated by HTTP middleware but not consumed in the gateway.
 - `server/internal/gateway/gateway.go` — `handleFramework` / `handleRaw`: today they accept any bearer UUID that matches an `AgentToken`. Zero-config (no token) falls through to the default agent. Both shortcuts must remain available behind `cfg.Security.AllowAnonymous` but otherwise be gated.
-- `server/internal/infra/casbin/*` — real casbin engine with model/policies. Loaded at startup but nothing calls `Enforce`.
-- `server/ops/auth/casbin_engine.go` — a *second* casbin wrapper. One of these two must die (see plan 11).
+- `server/internal/infra/casbin/*` — real casbin engine with model/policies. Loaded at startup but nothing calls `Enforce`. (The duplicate `server/ops/auth/casbin_engine.go` was deleted in the subtraction sprint.)
 - `server/ops/auth/credresolve/resolve.go:25` — `vault resolution unimplemented`. Only env+passthrough+encrypted work today.
 - `core/pkg/keyring/keyring.go` — scaffold for local OS-keyring-backed secret storage; partially filled by plan 06. Used by `credresolve` for encrypted credentials.
 - `server/internal/httpbridge/auth_routes.go` — `/api/v1/auth/login`, `/sessions`, `/tokens` handlers already return PASETO tokens.
@@ -97,9 +96,9 @@ Wire into `credresolve.Resolve` based on `ConnectorCredential.Source`:
 
 Configuration via `cfg.Security.Vault.{Addr, Token, Mount}`. Omit section → `VaultResolver` not constructed → `vault` source returns `credresolve.ErrSourceDisabled`.
 
-### 6. Casbin consolidation (hand-off to plan 11)
+### 6. Casbin consolidation (done in subtraction sprint)
 
-Two homes exist: `server/internal/infra/casbin/` and `server/ops/auth/casbin_engine.go`. Keep `internal/infra/casbin` (owns model + policy file loading + audit hook). Move the policy-evaluation wrapper from `ops/auth/casbin_engine.go` into the infra package and delete the duplicate. Plan 11 covers the broader dup cleanup; touch only the casbin files here.
+`server/internal/infra/casbin/` is now the sole home. Wire its `Enforce` from this plan's auth interceptor. No further consolidation needed.
 
 ### 7. Config
 
