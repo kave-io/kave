@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	appcontrol "github.com/kave-io/kave/app/control"
-	appruntime "github.com/kave-io/kave/app/runtime"
+	appcontrol "github.com/kave-io/kave/server/app/control"
+	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/core/bus"
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
@@ -190,6 +190,21 @@ func seedDefaults(ctx context.Context, app store.AppStore) {
 		_ = app.CreateOrg(ctx, &controlmodel.Organization{
 			ID: "default", Name: "Default", Slug: "default", Plan: "free",
 			CreatedAt: now, UpdatedAt: now,
+		})
+	}
+
+	// Default local user + membership. On self-host they are invisible — the
+	// dashboard hides the Org/Users/Members screens while AllowAnonymous=true.
+	// Cloud populates real users and makes these UI surfaces visible.
+	if u, _ := app.GetUserByEmail(ctx, "default", "local@kave.local"); u == nil {
+		_ = app.CreateUser(ctx, &controlmodel.User{
+			ID: "default", OrgID: "default", Email: "local@kave.local",
+			Name: "Local", Status: "active",
+			CreatedAt: now, UpdatedAt: now,
+		})
+		_ = app.AddMember(ctx, &controlmodel.Membership{
+			ID: "default", OrgID: "default", UserID: "default",
+			Role: "admin", CreatedAt: now,
 		})
 	}
 

@@ -3,7 +3,7 @@ package gateway
 import (
 	"fmt"
 
-	serverframework "github.com/kave-io/kave/server/internal/connectors/framework"
+	serverframework "github.com/kave-io/kave/server/internal/gateway/connectors/framework"
 )
 
 // Registry resolves framework names to their LLM family bundles.

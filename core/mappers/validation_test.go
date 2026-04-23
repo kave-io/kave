@@ -3,7 +3,7 @@ package mappers
 import (
 	"testing"
 
-	"github.com/kave-io/kave/core/ops/validate"
+	"github.com/kave-io/kave/core/runtime/validate"
 )
 
 func TestValidationResultToOutcome(t *testing.T) {

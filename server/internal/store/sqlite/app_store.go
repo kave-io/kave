@@ -14,7 +14,6 @@ import (
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
-	"github.com/kave-io/kave/server/internal/db/sqlite"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -49,7 +48,7 @@ func New(path string) (*SQLiteAppStore, error) {
 
 func (s *SQLiteAppStore) Close() error { return s.db.Close() }
 
-func (s *SQLiteAppStore) Migrate(ctx context.Context) error { return sqlite.Migrate(ctx, s.db) }
+func (s *SQLiteAppStore) Migrate(ctx context.Context) error { return Migrate(ctx, s.db) }
 
 func (s *SQLiteAppStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }
 
@@ -1113,7 +1112,6 @@ func (s *SQLiteAppStore) UpsertFXCurrencies(ctx context.Context, currencies []ru
 }
 
 func (s *SQLiteAppStore) InsertBudgetEntry(ctx context.Context, entry *runtimemodel.BudgetEntry) error {
-	metaJSON, _ := json.Marshal(entry.Metadata)
 	usageJSON, _ := json.Marshal(entry.UsageDetail)
 	snapshotJSON, _ := json.Marshal(entry.PriceSnapshot)
 	_, err := s.db.ExecContext(ctx, `
@@ -1122,15 +1120,17 @@ func (s *SQLiteAppStore) InsertBudgetEntry(ctx context.Context, entry *runtimemo
 			connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 			reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units,
 			request_count, compute_ms, storage_bytes, bandwidth_bytes,
-			cost_nanos, price_version, price_snapshot, usage_detail, metadata, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			cost_nanos, price_version, price_snapshot, usage_detail,
+			blocked, block_reason, block_period, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		entry.ID, entry.ProjectID, entry.EnvID, entry.PolicyID, entry.AgentID,
 		emptyToNil(entry.RunID), entry.ActionID, entry.SpanID,
 		entry.Connector, entry.Model,
 		entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheWriteTokens,
 		entry.ReasoningTokens, entry.AudioInputTokens, entry.AudioOutputTokens, entry.ImageUnits,
 		entry.RequestCount, entry.ComputeMs, entry.StorageBytes, entry.BandwidthBytes,
-		int64(entry.Cost), emptyToNil(entry.PriceVersion), string(snapshotJSON), string(usageJSON), string(metaJSON), entry.CreatedAt)
+		int64(entry.Cost), emptyToNil(entry.PriceVersion), string(snapshotJSON), string(usageJSON),
+		entry.Blocked, emptyToNil(entry.BlockReason), emptyToNil(entry.BlockPeriod), entry.CreatedAt)
 	return err
 }
 
@@ -1465,7 +1465,6 @@ func (t *txAppStore) CreateRun(ctx context.Context, r *runtimemodel.RunRecord) e
 }
 
 func (t *txAppStore) InsertBudgetEntry(ctx context.Context, entry *runtimemodel.BudgetEntry) error {
-	metaJSON, _ := json.Marshal(entry.Metadata)
 	usageJSON, _ := json.Marshal(entry.UsageDetail)
 	snapshotJSON, _ := json.Marshal(entry.PriceSnapshot)
 	_, err := t.tx.ExecContext(ctx, `
@@ -1474,15 +1473,17 @@ func (t *txAppStore) InsertBudgetEntry(ctx context.Context, entry *runtimemodel.
 			connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
 			reasoning_tokens, audio_input_tokens, audio_output_tokens, image_units,
 			request_count, compute_ms, storage_bytes, bandwidth_bytes,
-			cost_nanos, price_version, price_snapshot, usage_detail, metadata, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			cost_nanos, price_version, price_snapshot, usage_detail,
+			blocked, block_reason, block_period, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		entry.ID, entry.ProjectID, entry.EnvID, entry.PolicyID, entry.AgentID,
 		emptyToNil(entry.RunID), entry.ActionID, entry.SpanID,
 		entry.Connector, entry.Model,
 		entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheWriteTokens,
 		entry.ReasoningTokens, entry.AudioInputTokens, entry.AudioOutputTokens, entry.ImageUnits,
 		entry.RequestCount, entry.ComputeMs, entry.StorageBytes, entry.BandwidthBytes,
-		int64(entry.Cost), emptyToNil(entry.PriceVersion), string(snapshotJSON), string(usageJSON), string(metaJSON), entry.CreatedAt)
+		int64(entry.Cost), emptyToNil(entry.PriceVersion), string(snapshotJSON), string(usageJSON),
+		entry.Blocked, emptyToNil(entry.BlockReason), emptyToNil(entry.BlockPeriod), entry.CreatedAt)
 	return err
 }
 

@@ -1,14 +1,13 @@
 package mappers
 
 import (
-	"github.com/kave-io/kave/core/ops"
 	"github.com/kave-io/kave/core/runtime"
 	"github.com/kave-io/kave/core/runtime/policy"
 )
 
-// BuildExecutionContext builds ops.ExecutionContext from run, policy, and optional IDs.
+// BuildExecutionContext builds runtime.ExecutionContext from run, policy, and optional IDs.
 // Explicit IDs override run IDs when provided.
-func BuildExecutionContext(run *runtime.Run, p *policy.Policy, projectID, envID, agentID string) *ops.ExecutionContext {
+func BuildExecutionContext(run *runtime.Run, p *policy.Policy, projectID, envID, agentID string) *runtime.ExecutionContext {
 	if run != nil {
 		if projectID == "" {
 			projectID = run.ProjectID
@@ -21,7 +20,7 @@ func BuildExecutionContext(run *runtime.Run, p *policy.Policy, projectID, envID,
 		}
 	}
 
-	return &ops.ExecutionContext{
+	return &runtime.ExecutionContext{
 		ProjectID: projectID,
 		EnvID:     envID,
 		AgentID:   agentID,
@@ -30,9 +29,9 @@ func BuildExecutionContext(run *runtime.Run, p *policy.Policy, projectID, envID,
 	}
 }
 
-// ActionExecutionContext builds ops.ExecutionContext from action/run/policy.
+// ActionExecutionContext builds runtime.ExecutionContext from action/run/policy.
 // Run values win over action values because run is the authoritative execution root.
-func ActionExecutionContext(action *runtime.Action, run *runtime.Run, p *policy.Policy) *ops.ExecutionContext {
+func ActionExecutionContext(action *runtime.Action, run *runtime.Run, p *policy.Policy) *runtime.ExecutionContext {
 	if run != nil {
 		return BuildExecutionContext(run, p, "", "", "")
 	}

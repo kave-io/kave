@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	appcontrol "github.com/kave-io/kave/app/control"
-	appruntime "github.com/kave-io/kave/app/runtime"
+	appcontrol "github.com/kave-io/kave/server/app/control"
+	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/core/mappers"
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"

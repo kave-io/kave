@@ -17,7 +17,4 @@ require (
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
-replace (
-	github.com/kave-io/kave/connectors => ../connectors
-	github.com/kave-io/kave/core => ../core
-)
+replace github.com/kave-io/kave/core => ../core

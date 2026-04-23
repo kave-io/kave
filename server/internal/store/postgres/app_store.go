@@ -14,7 +14,6 @@ import (
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
-	postgresdb "github.com/kave-io/kave/server/internal/db/postgres"
 )
 
 // PostgresAppStore implements store.AppStore using Postgres via pgxpool.
@@ -33,7 +32,7 @@ func (p *PostgresAppStore) Close() error {
 }
 
 func (p *PostgresAppStore) Migrate(ctx context.Context) error {
-	return postgresdb.Migrate(ctx, p.pool)
+	return Migrate(ctx, p.pool)
 }
 
 func (p *PostgresAppStore) Ping(ctx context.Context) error { return p.pool.Ping(ctx) }
@@ -822,14 +821,14 @@ func (p *PostgresAppStore) UpsertFXCurrencies(ctx context.Context, currencies []
 }
 
 func (p *PostgresAppStore) InsertBudgetEntry(ctx context.Context, entry *runtimemodel.BudgetEntry) error {
-	metaJSON, _ := json.Marshal(entry.Metadata)
 	snapshotJSON, _ := json.Marshal(entry.PriceSnapshot)
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO budget_ledger (workspace_id, agent_id, run_id, action_id, span_id, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_amount_nanos, price_version, price_snapshot, metadata, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		INSERT INTO budget_ledger (workspace_id, agent_id, run_id, action_id, span_id, connector, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_amount_nanos, price_version, price_snapshot, blocked, block_reason, block_period, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 	`, entry.ProjectID, entry.AgentID, nullIfEmpty(entry.RunID), entry.ActionID, entry.SpanID,
 		entry.Connector, entry.Model, entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheWriteTokens,
-		amountToDB(entry.Cost), nullIfEmpty(entry.PriceVersion), snapshotJSON, metaJSON, toTime(entry.CreatedAt))
+		amountToDB(entry.Cost), nullIfEmpty(entry.PriceVersion), snapshotJSON,
+		entry.Blocked, nullIfEmpty(entry.BlockReason), nullIfEmpty(entry.BlockPeriod), toTime(entry.CreatedAt))
 	return err
 }
 

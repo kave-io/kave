@@ -1,3 +1,21 @@
+// Package runtime holds the live, in-memory shapes used during action execution.
+//
+// Action vs Span — the two observability primitives in Kave:
+//
+//   - Action is intercept-mode. Kave sits in the request path (proxy/gateway);
+//     before the upstream call it can authorize, enforce policies, deduct budget,
+//     block. ActionRecord persists the full intercepted lifecycle (request,
+//     response, decision, cost). Use Action when Kave CAN prevent the call.
+//
+//   - Span is observe-mode. An external runtime (LangChain, a customer SDK,
+//     OTLP ingest) reports what already happened. Kave records it for cost,
+//     tracing, and analytics but cannot block. Spans also exist inside the
+//     intercept path as the observability slice of an Action — the pipeline
+//     opens a span per Action to capture timing/cost/errors.
+//
+// Invariant: every Action produces at least one Span (the "action" span at the
+// root of its trace). Nested spans (child tool calls, sub-LLM calls) share the
+// Action's trace_id but are not themselves Actions unless Kave intercepted them.
 package runtime
 
 type ActionType string

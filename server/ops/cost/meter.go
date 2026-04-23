@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
-	coreCost "github.com/kave-io/kave/core/ops/cost"
+	"github.com/kave-io/kave/core/pkg/ids"
+	coreCost "github.com/kave-io/kave/core/runtime/cost"
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/pkg/timex"
@@ -57,7 +57,7 @@ func (m *CostMeter) Record(ctx context.Context, action *runtime.Action, u *runti
 		0, 0, 0, 0)
 
 	entry := &runtimemodel.BudgetEntry{
-		ID:                uuid.NewString(),
+		ID:                ids.New("bge"),
 		ProjectID:         action.ProjectID,
 		EnvID:             action.EnvID,
 		AgentID:           action.AgentID,
@@ -73,7 +73,6 @@ func (m *CostMeter) Record(ctx context.Context, action *runtime.Action, u *runti
 		AudioOutputTokens: u.AudioOutput,
 		ImageUnits:        u.ImageUnits,
 		Cost:              costAmount,
-		Metadata:          map[string]any{},
 		CreatedAt:         int64(timex.Now()),
 	}
 	if snapshot != nil {

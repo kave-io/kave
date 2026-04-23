@@ -126,3 +126,13 @@ func ValidationMetaFrom(ctx context.Context) *ValidationMeta {
 	v, _ := ctx.Value(validationMetaKey).(*ValidationMeta)
 	return v
 }
+
+// ExecutionContext bundles project, env, policy, agent, and run for operation
+// interfaces. Passed to interceptor Before/After hooks for consistent context.
+type ExecutionContext struct {
+	ProjectID string
+	EnvID     string
+	AgentID   string
+	Policy    *policy.Policy
+	Run       *Run
+}

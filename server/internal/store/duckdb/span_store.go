@@ -14,7 +14,6 @@ import (
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
-	dbduckdb "github.com/kave-io/kave/server/internal/db/duckdb"
 	_ "github.com/marcboeker/go-duckdb"
 )
 
@@ -90,7 +89,7 @@ func (s *DuckDBSpanStore) Close() error {
 
 // Migrate runs pending migrations.
 func (s *DuckDBSpanStore) Migrate(ctx context.Context) error {
-	return dbduckdb.Migrate(ctx, s.db)
+	return Migrate(ctx, s.db)
 }
 
 func (s *DuckDBSpanStore) Ping(ctx context.Context) error { return s.db.PingContext(ctx) }

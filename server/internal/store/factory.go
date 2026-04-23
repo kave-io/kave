@@ -9,7 +9,7 @@ import (
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/internal/config"
-	postgresdb "github.com/kave-io/kave/server/internal/db/postgres"
+	postgresdb "github.com/kave-io/kave/server/internal/store/postgres"
 	duckdbimpl "github.com/kave-io/kave/server/internal/store/duckdb"
 	postgresimpl "github.com/kave-io/kave/server/internal/store/postgres"
 	sqliteimpl "github.com/kave-io/kave/server/internal/store/sqlite"

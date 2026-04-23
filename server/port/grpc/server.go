@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	appcontrol "github.com/kave-io/kave/app/control"
-	appruntime "github.com/kave-io/kave/app/runtime"
+	appcontrol "github.com/kave-io/kave/server/app/control"
+	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"google.golang.org/grpc"
 )
 

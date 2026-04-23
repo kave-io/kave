@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kave-io/kave/connectors/runtime"
+	"github.com/kave-io/kave/core/connectors/runtime"
 )
 
 type HTTPTransport struct {

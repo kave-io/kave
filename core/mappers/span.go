@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
-	"github.com/kave-io/kave/core/ops/trace"
+	"github.com/kave-io/kave/core/runtime/trace"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/runtime"
 )

@@ -63,11 +63,7 @@ func (i *Interceptor) Before(ctx context.Context, action *runtime.Action) (*runt
 		return action, nil
 	}
 
-	_ = i.recordEntry(ctx, action, 0, "", map[string]any{
-		"blocked": true,
-		"reason":  "budget exceeded",
-		"period":  period,
-	})
+	_ = i.recordBlock(ctx, action, "budget exceeded", period)
 
 	action.Status = runtime.StatusBlocked
 	action.Outcome = &runtime.Outcome{
@@ -149,7 +145,6 @@ func (i *Interceptor) recordUsage(ctx context.Context, action *runtime.Action, u
 		AudioOutputTokens: u.AudioOutput,
 		ImageUnits:        u.ImageUnits,
 		Cost:              costAmount,
-		Metadata:          map[string]any{},
 		CreatedAt:         int64(timex.Now()),
 	}
 	if snapshot != nil {
@@ -169,18 +164,21 @@ func (i *Interceptor) recordUsage(ctx context.Context, action *runtime.Action, u
 	return nil
 }
 
-func (i *Interceptor) recordEntry(ctx context.Context, action *runtime.Action, costAmount money.Amount, model string, metadata map[string]any) error {
+// recordBlock persists a zero-cost ledger row for a block decision.
+// Plain-typed fields replace the previous untyped metadata map.
+func (i *Interceptor) recordBlock(ctx context.Context, action *runtime.Action, reason, period string) error {
 	entry := &runtimemodel.BudgetEntry{
-		ID:        ids.New("bge"),
-		ProjectID: action.ProjectID,
-		EnvID:     action.EnvID,
-		AgentID:   action.AgentID,
-		RunID:     action.RunID,
-		Connector: action.Connector,
-		Model:     model,
-		Cost:      costAmount,
-		Metadata:  metadata,
-		CreatedAt: int64(timex.Now()),
+		ID:          ids.New("bge"),
+		ProjectID:   action.ProjectID,
+		EnvID:       action.EnvID,
+		AgentID:     action.AgentID,
+		RunID:       action.RunID,
+		Connector:   action.Connector,
+		Cost:        0,
+		Blocked:     true,
+		BlockReason: reason,
+		BlockPeriod: period,
+		CreatedAt:   int64(timex.Now()),
 	}
 	if action.ID != "" {
 		entry.ActionID = &action.ID

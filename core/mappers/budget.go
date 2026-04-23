@@ -20,7 +20,9 @@ type BudgetEntryInput struct {
 	Cost          money.Amount
 	PriceVersion  string
 	PriceSnapshot *runtimemodel.PriceSnapshot
-	Metadata      map[string]any
+	Blocked       bool
+	BlockReason   string
+	BlockPeriod   string
 	CreatedAt     *int64
 }
 
@@ -57,7 +59,9 @@ func BudgetEntryFromUsage(in *BudgetEntryInput) *runtimemodel.BudgetEntry {
 		Cost:             in.Cost,
 		PriceVersion:     in.PriceVersion,
 		PriceSnapshot:    in.PriceSnapshot,
-		Metadata:         in.Metadata,
+		Blocked:          in.Blocked,
+		BlockReason:      in.BlockReason,
+		BlockPeriod:      in.BlockPeriod,
 		CreatedAt:        createdAt,
 	}
 }

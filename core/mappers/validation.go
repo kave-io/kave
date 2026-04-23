@@ -1,7 +1,7 @@
 package mappers
 
 import (
-	"github.com/kave-io/kave/core/ops/validate"
+	"github.com/kave-io/kave/core/runtime/validate"
 	"github.com/kave-io/kave/core/runtime"
 )
 

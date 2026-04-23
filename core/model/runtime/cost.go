@@ -95,8 +95,10 @@ type BudgetEntry struct {
 	PriceVersion      string
 	PriceSnapshot     *PriceSnapshot
 	UsageDetail       map[string]any // serialized Usage struct (non-token fields)
-	Metadata          map[string]any
-	CreatedAt         int64 // UnixMilli
+	Blocked           bool           // true when this entry records a block decision (zero cost)
+	BlockReason       string         // populated when Blocked=true
+	BlockPeriod       string         // "run" | "daily" | "monthly" — matches PolicyRecord.BudgetPeriod
+	CreatedAt         int64          // UnixMilli
 }
 
 // SpendFilter filters spend queries.

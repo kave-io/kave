@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kave-io/kave/connectors/runtime"
+	"github.com/kave-io/kave/core/connectors/runtime"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/authhash"

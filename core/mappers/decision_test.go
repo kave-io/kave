@@ -3,7 +3,7 @@ package mappers
 import (
 	"testing"
 
-	"github.com/kave-io/kave/core/ops/auth"
+	"github.com/kave-io/kave/core/runtime/auth"
 )
 
 func TestAuthDecisionToOutcomeDefaults(t *testing.T) {

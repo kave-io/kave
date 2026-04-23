@@ -1,7 +1,7 @@
 package mappers
 
 import (
-	"github.com/kave-io/kave/core/ops/auth"
+	"github.com/kave-io/kave/core/runtime/auth"
 	"github.com/kave-io/kave/core/runtime"
 )
 
