@@ -50,11 +50,68 @@ type Resolution struct {
 	LoadedConfig *Document   `json:"loaded_config,omitempty" yaml:"loaded_config,omitempty"`
 }
 
+func (r *Resolution) ActiveContextName() string {
+	if r == nil {
+		return ""
+	}
+	for _, candidate := range []string{r.Options.Context, r.Options.Profile} {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	if r.LoadedConfig != nil && r.LoadedConfig.CurrentContext != "" {
+		return r.LoadedConfig.CurrentContext
+	}
+	return ""
+}
+
+func (r *Resolution) ActiveContext() *ContextConfig {
+	if r == nil || r.LoadedConfig == nil {
+		return nil
+	}
+	name := r.ActiveContextName()
+	if name == "" {
+		if len(r.LoadedConfig.Contexts) > 0 {
+			ctx := r.LoadedConfig.Contexts[0]
+			return &ctx
+		}
+		return nil
+	}
+	for _, ctx := range r.LoadedConfig.Contexts {
+		if ctx.Name == name {
+			c := ctx
+			return &c
+		}
+	}
+	return nil
+}
+
+func (r *Resolution) ActiveServer() string {
+	if r == nil {
+		return ""
+	}
+	if server := strings.TrimSpace(r.Options.Server); server != "" {
+		return server
+	}
+	if ctx := r.ActiveContext(); ctx != nil && strings.TrimSpace(ctx.Server) != "" {
+		return ctx.Server
+	}
+	if r.LoadedConfig != nil && r.LoadedConfig.Daemon != nil {
+		if addr := strings.TrimSpace(r.LoadedConfig.Daemon.Address); addr != "" {
+			return addr
+		}
+		if proxy := strings.TrimSpace(r.LoadedConfig.Daemon.ProxyAddress); proxy != "" {
+			return proxy
+		}
+	}
+	return ""
+}
+
 type Document struct {
 	APIVersion     string             `json:"apiVersion,omitempty" yaml:"apiVersion,omitempty"`
 	Kind           string             `json:"kind,omitempty" yaml:"kind,omitempty"`
 	Daemon         *DaemonConfig      `json:"daemon,omitempty" yaml:"daemon,omitempty"`
-	Stores         *StoresConfig      `json:"stores,omitempty" yaml:"stores,omitempty"`
+	Storage        *StorageConfig     `json:"storage,omitempty" yaml:"storage,omitempty"`
 	Contexts       []ContextConfig    `json:"contexts,omitempty" yaml:"contexts,omitempty"`
 	CurrentContext string             `json:"currentContext,omitempty" yaml:"currentContext,omitempty"`
 	Project        *ProjectConfig     `json:"project,omitempty" yaml:"project,omitempty"`
@@ -75,23 +132,33 @@ type DaemonConfig struct {
 	LogFormat    string `json:"log_format,omitempty" yaml:"log_format,omitempty"`
 }
 
-type StoreConfig struct {
-	Backend string `json:"backend,omitempty" yaml:"backend,omitempty"`
-	DSN     string `json:"dsn,omitempty" yaml:"dsn,omitempty"`
-}
-
-type StoresConfig struct {
-	App   *StoreConfig `json:"app,omitempty" yaml:"app,omitempty"`
-	Spans *StoreConfig `json:"spans,omitempty" yaml:"spans,omitempty"`
-	Audit *StoreConfig `json:"audit,omitempty" yaml:"audit,omitempty"`
-}
-
 type ContextConfig struct {
 	Name    string `json:"name,omitempty" yaml:"name,omitempty"`
 	Server  string `json:"server,omitempty" yaml:"server,omitempty"`
 	User    string `json:"user,omitempty" yaml:"user,omitempty"`
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Env     string `json:"env,omitempty" yaml:"env,omitempty"`
+}
+
+type StoreSpec struct {
+	Kind         string `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Path         string `json:"path,omitempty" yaml:"path,omitempty"`
+	PathTemplate string `json:"path_template,omitempty" yaml:"path_template,omitempty"`
+	DSN          string `json:"dsn,omitempty" yaml:"dsn,omitempty"`
+}
+
+type StorageDefaults struct {
+	App  StoreSpec `json:"app,omitempty" yaml:"app,omitempty"`
+	Span StoreSpec `json:"span,omitempty" yaml:"span,omitempty"`
+}
+
+type AgentStorageBinding struct {
+	Span *StoreSpec `json:"span,omitempty" yaml:"span,omitempty"`
+}
+
+type StorageConfig struct {
+	Defaults StorageDefaults                `json:"defaults,omitempty" yaml:"defaults,omitempty"`
+	Agents   map[string]AgentStorageBinding `json:"agents,omitempty" yaml:"agents,omitempty"`
 }
 
 type ProjectEnv struct {
@@ -290,6 +357,9 @@ func Resolve(opts RootOptions) (*Resolution, error) {
 		var doc Document
 		if err := yaml.Unmarshal(raw, &doc); err != nil {
 			return nil, fmt.Errorf("parse config %q: %w", resolution.ConfigPath, err)
+		}
+		if _, ok := doc.Extra["stores"]; ok {
+			return nil, fmt.Errorf("configuration key \"stores\" has been removed; use \"storage.defaults.app\" and \"storage.defaults.span\"")
 		}
 		resolution.LoadedConfig = &doc
 	}

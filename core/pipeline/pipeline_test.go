@@ -47,7 +47,7 @@ func WithPolicy(ctx context.Context, p *Policy) context.Context { return runtime
 func PolicyFrom(ctx context.Context) *Policy                    { return runtime.PolicyFrom(ctx) }
 func WithRun(ctx context.Context, r *Run) context.Context       { return runtime.WithRun(ctx, r) }
 func RunFrom(ctx context.Context) *Run                          { return runtime.RunFrom(ctx) }
-func TokenUsageFrom(ctx context.Context) *TokenUsage { return runtime.TokenUsageFrom(ctx) }
+func TokenUsageFrom(ctx context.Context) *TokenUsage            { return runtime.TokenUsageFrom(ctx) }
 
 // recorder is a test helper that implements Interceptor and logs all calls.
 type recorder struct {

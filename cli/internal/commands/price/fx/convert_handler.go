@@ -10,9 +10,9 @@ type ConvertInput struct {
 }
 
 type ConvertOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunConvert(ctx context.Context, in ConvertInput) (*ConvertOutput, error) {
-	return nil, output.NotImplemented("fx convert")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "fx convert is not exposed by the HTTP bridge yet", Exit: 1}
 }

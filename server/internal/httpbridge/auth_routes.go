@@ -12,7 +12,9 @@ import (
 	"github.com/kave-io/kave/core/pkg/authhash"
 	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/store"
+	"github.com/kave-io/kave/server/internal/authctx"
 	appcasbin "github.com/kave-io/kave/server/internal/infra/casbin"
+	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -23,7 +25,7 @@ type authEnvelope struct {
 	User  any    `json:"user,omitempty"`
 }
 
-func registerAuth(app store.AppStore) InvokeFn {
+func registerAuth(app store.AppStore, tokens *serverauth.TokenManager) InvokeFn {
 	return func(ctx context.Context, body []byte, _ url.Values, _ map[string]string) (Outcome, error) {
 		var req struct {
 			Email    string `json:"email"`
@@ -51,12 +53,13 @@ func registerAuth(app store.AppStore) InvokeFn {
 		if err := app.CreateUser(ctx, user); err != nil {
 			return Outcome{Kind: "Auth"}, err
 		}
-		token, hash, err := authhash.GenerateToken("ks_")
+		sessionID := ids.New("ses")
+		token, hash, err := issueSessionToken(tokens, user.ID, sessionID, user.OrgID)
 		if err != nil {
 			return Outcome{Kind: "Auth"}, err
 		}
 		if err := app.InsertSession(ctx, &control.Session{
-			ID:        ids.New("ses"),
+			ID:        sessionID,
 			OrgID:     user.OrgID,
 			UserID:    user.ID,
 			TokenHash: hash,
@@ -87,7 +90,7 @@ func registerAuth(app store.AppStore) InvokeFn {
 	}
 }
 
-func loginAuth(app store.AppStore) InvokeFn {
+func loginAuth(app store.AppStore, tokens *serverauth.TokenManager) InvokeFn {
 	return func(ctx context.Context, body []byte, _ url.Values, _ map[string]string) (Outcome, error) {
 		var req struct {
 			Email    string `json:"email"`
@@ -103,13 +106,14 @@ func loginAuth(app store.AppStore) InvokeFn {
 		if !authhash.VerifyPassword(user.PasswordHash, req.Password) {
 			return Outcome{Kind: "Auth"}, status.Error(codes.Unauthenticated, "invalid credentials")
 		}
-		token, hash, err := authhash.GenerateToken("ks_")
+		sessionID := ids.New("ses")
+		token, hash, err := issueSessionToken(tokens, user.ID, sessionID, user.OrgID)
 		if err != nil {
 			return Outcome{Kind: "Auth"}, err
 		}
 		now := nowMS()
 		if err := app.InsertSession(ctx, &control.Session{
-			ID:        ids.New("ses"),
+			ID:        sessionID,
 			OrgID:     user.OrgID,
 			UserID:    user.ID,
 			TokenHash: hash,
@@ -280,7 +284,7 @@ func revokeAPITokenAuth(app store.AppStore) InvokeFn {
 	}
 }
 
-func createAgentTokenAuth(app store.AppStore) InvokeFn {
+func createAgentTokenAuth(app store.AppStore, tokens *serverauth.TokenManager) InvokeFn {
 	return func(ctx context.Context, body []byte, _ url.Values, _ map[string]string) (Outcome, error) {
 		var req struct {
 			AgentID string   `json:"agent_id"`
@@ -300,7 +304,7 @@ func createAgentTokenAuth(app store.AppStore) InvokeFn {
 		if req.AgentID == "" {
 			return Outcome{Kind: "AgentToken"}, status.Error(codes.InvalidArgument, "agent_id is required")
 		}
-		token, hash, err := authhash.GenerateToken("kat_")
+		token, hash, err := issueAgentToken(tokens, req.AgentID, "", "", sess.OrgID)
 		if err != nil {
 			return Outcome{Kind: "AgentToken"}, err
 		}
@@ -340,6 +344,30 @@ func revokeAgentTokenAuth(app store.AppStore) InvokeFn {
 		_ = app.RevokeAgentToken(ctx, path["id"], "system", "")
 		return Outcome{Kind: "AgentToken", Data: map[string]any{"status": "ok"}}, nil
 	}
+}
+
+func issueSessionToken(tokens *serverauth.TokenManager, userID, sessionID, orgID string) (string, []byte, error) {
+	if tokens != nil && tokens.Enabled() {
+		token, err := tokens.IssueSession(userID, sessionID, orgID)
+		if err != nil {
+			return "", nil, err
+		}
+		return token, authhash.HashToken(token), nil
+	}
+	token, hash, err := authhash.GenerateToken("ks_")
+	return token, hash, err
+}
+
+func issueAgentToken(tokens *serverauth.TokenManager, agentID, projectID, envID, orgID string) (string, []byte, error) {
+	if tokens != nil && tokens.Enabled() {
+		token, err := tokens.IssueAgentToken(agentID, projectID, envID, orgID)
+		if err != nil {
+			return "", nil, err
+		}
+		return token, authhash.HashToken(token), nil
+	}
+	token, hash, err := authhash.GenerateToken("kav_")
+	return token, hash, err
 }
 
 func createRoleAuth(app store.AppStore) InvokeFn {
@@ -516,6 +544,19 @@ func testPermissionAuth(app store.AppStore) InvokeFn {
 }
 
 func sessionFromRequest(ctx context.Context, app store.AppStore, tokenOverride *string) (*control.Session, error) {
+	if id, ok := authctx.From(ctx); ok && id.SessionID != "" {
+		sess, err := app.GetSession(ctx, id.SessionID)
+		if err == nil && sess != nil {
+			if sess.RevokedAt != nil {
+				return nil, status.Error(codes.Unauthenticated, "session revoked")
+			}
+			if sess.ExpiresAt > 0 && sess.ExpiresAt <= nowMS() {
+				return nil, status.Error(codes.Unauthenticated, "session expired")
+			}
+			_ = app.TouchSession(ctx, sess.ID)
+			return sess, nil
+		}
+	}
 	headers := requestHeaders(ctx)
 	token := ""
 	if tokenOverride != nil {

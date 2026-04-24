@@ -22,14 +22,19 @@ const (
 )
 
 type CreateRunRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	EnvId         string                 `protobuf:"bytes,2,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
-	AgentId       string                 `protobuf:"bytes,3,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	PolicyId      *string                `protobuf:"bytes,4,opt,name=policy_id,json=policyId,proto3,oneof" json:"policy_id,omitempty"`
-	Name          string                 `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId      string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	EnvId          string                 `protobuf:"bytes,2,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
+	AgentId        string                 `protobuf:"bytes,3,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	PolicyId       *string                `protobuf:"bytes,4,opt,name=policy_id,json=policyId,proto3,oneof" json:"policy_id,omitempty"`
+	Name           string                 `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
+	TriggerType    TriggerType            `protobuf:"varint,6,opt,name=trigger_type,json=triggerType,proto3,enum=kave.runtime.v1.TriggerType" json:"trigger_type,omitempty"`
+	TriggerId      *string                `protobuf:"bytes,7,opt,name=trigger_id,json=triggerId,proto3,oneof" json:"trigger_id,omitempty"`
+	CorrelationId  *string                `protobuf:"bytes,8,opt,name=correlation_id,json=correlationId,proto3,oneof" json:"correlation_id,omitempty"`
+	SessionId      *string                `protobuf:"bytes,9,opt,name=session_id,json=sessionId,proto3,oneof" json:"session_id,omitempty"`
+	IdempotencyKey *string                `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3,oneof" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CreateRunRequest) Reset() {
@@ -93,6 +98,41 @@ func (x *CreateRunRequest) GetPolicyId() string {
 func (x *CreateRunRequest) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateRunRequest) GetTriggerType() TriggerType {
+	if x != nil {
+		return x.TriggerType
+	}
+	return TriggerType_TRIGGER_TYPE_UNSPECIFIED
+}
+
+func (x *CreateRunRequest) GetTriggerId() string {
+	if x != nil && x.TriggerId != nil {
+		return *x.TriggerId
+	}
+	return ""
+}
+
+func (x *CreateRunRequest) GetCorrelationId() string {
+	if x != nil && x.CorrelationId != nil {
+		return *x.CorrelationId
+	}
+	return ""
+}
+
+func (x *CreateRunRequest) GetSessionId() string {
+	if x != nil && x.SessionId != nil {
+		return *x.SessionId
+	}
+	return ""
+}
+
+func (x *CreateRunRequest) GetIdempotencyKey() string {
+	if x != nil && x.IdempotencyKey != nil {
+		return *x.IdempotencyKey
 	}
 	return ""
 }
@@ -1002,16 +1042,28 @@ var File_kave_runtime_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_kave_runtime_v1_runtime_proto_rawDesc = "" +
 	"\n" +
-	"\x1dkave/runtime/v1/runtime.proto\x12\x0fkave.runtime.v1\x1a\x1ckave/runtime/v1/action.proto\x1a\x1akave/runtime/v1/cost.proto\x1a\x19kave/runtime/v1/run.proto\x1a\x1akave/runtime/v1/span.proto\"\xa7\x01\n" +
+	"\x1dkave/runtime/v1/runtime.proto\x12\x0fkave.runtime.v1\x1a\x1ckave/runtime/v1/action.proto\x1a\x1akave/runtime/v1/cost.proto\x1a\x19kave/runtime/v1/run.proto\x1a\x1akave/runtime/v1/span.proto\"\xcf\x03\n" +
 	"\x10CreateRunRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x15\n" +
 	"\x06env_id\x18\x02 \x01(\tR\x05envId\x12\x19\n" +
 	"\bagent_id\x18\x03 \x01(\tR\aagentId\x12 \n" +
 	"\tpolicy_id\x18\x04 \x01(\tH\x00R\bpolicyId\x88\x01\x01\x12\x12\n" +
-	"\x04name\x18\x05 \x01(\tR\x04nameB\f\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\x12?\n" +
+	"\ftrigger_type\x18\x06 \x01(\x0e2\x1c.kave.runtime.v1.TriggerTypeR\vtriggerType\x12\"\n" +
 	"\n" +
-	"_policy_id\"\x1f\n" +
+	"trigger_id\x18\a \x01(\tH\x01R\ttriggerId\x88\x01\x01\x12*\n" +
+	"\x0ecorrelation_id\x18\b \x01(\tH\x02R\rcorrelationId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"session_id\x18\t \x01(\tH\x03R\tsessionId\x88\x01\x01\x12,\n" +
+	"\x0fidempotency_key\x18\n" +
+	" \x01(\tH\x04R\x0eidempotencyKey\x88\x01\x01B\f\n" +
+	"\n" +
+	"_policy_idB\r\n" +
+	"\v_trigger_idB\x11\n" +
+	"\x0f_correlation_idB\r\n" +
+	"\v_session_idB\x12\n" +
+	"\x10_idempotency_key\"\x1f\n" +
 	"\rGetRunRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"s\n" +
 	"\x0fListRunsRequest\x122\n" +
@@ -1123,69 +1175,71 @@ var file_kave_runtime_v1_runtime_proto_goTypes = []any{
 	(*QuerySpansResponse)(nil),    // 15: kave.runtime.v1.QuerySpansResponse
 	(*GetPriceBookRequest)(nil),   // 16: kave.runtime.v1.GetPriceBookRequest
 	(*GetSpendReportRequest)(nil), // 17: kave.runtime.v1.GetSpendReportRequest
-	(*RunFilter)(nil),             // 18: kave.runtime.v1.RunFilter
-	(*RunRecord)(nil),             // 19: kave.runtime.v1.RunRecord
-	(*RunUpdate)(nil),             // 20: kave.runtime.v1.RunUpdate
-	(RunStatus)(0),                // 21: kave.runtime.v1.RunStatus
-	(ActionType)(0),               // 22: kave.runtime.v1.ActionType
-	(*ActionFilter)(nil),          // 23: kave.runtime.v1.ActionFilter
-	(*ActionRecord)(nil),          // 24: kave.runtime.v1.ActionRecord
-	(*SpanInput)(nil),             // 25: kave.runtime.v1.SpanInput
-	(*SpanEnd)(nil),               // 26: kave.runtime.v1.SpanEnd
-	(*SpanFilter)(nil),            // 27: kave.runtime.v1.SpanFilter
-	(*SpanRow)(nil),               // 28: kave.runtime.v1.SpanRow
-	(*SpendFilter)(nil),           // 29: kave.runtime.v1.SpendFilter
-	(*PriceBook)(nil),             // 30: kave.runtime.v1.PriceBook
-	(*SpendReport)(nil),           // 31: kave.runtime.v1.SpendReport
+	(TriggerType)(0),              // 18: kave.runtime.v1.TriggerType
+	(*RunFilter)(nil),             // 19: kave.runtime.v1.RunFilter
+	(*RunRecord)(nil),             // 20: kave.runtime.v1.RunRecord
+	(*RunUpdate)(nil),             // 21: kave.runtime.v1.RunUpdate
+	(RunStatus)(0),                // 22: kave.runtime.v1.RunStatus
+	(ActionType)(0),               // 23: kave.runtime.v1.ActionType
+	(*ActionFilter)(nil),          // 24: kave.runtime.v1.ActionFilter
+	(*ActionRecord)(nil),          // 25: kave.runtime.v1.ActionRecord
+	(*SpanInput)(nil),             // 26: kave.runtime.v1.SpanInput
+	(*SpanEnd)(nil),               // 27: kave.runtime.v1.SpanEnd
+	(*SpanFilter)(nil),            // 28: kave.runtime.v1.SpanFilter
+	(*SpanRow)(nil),               // 29: kave.runtime.v1.SpanRow
+	(*SpendFilter)(nil),           // 30: kave.runtime.v1.SpendFilter
+	(*PriceBook)(nil),             // 31: kave.runtime.v1.PriceBook
+	(*SpendReport)(nil),           // 32: kave.runtime.v1.SpendReport
 }
 var file_kave_runtime_v1_runtime_proto_depIdxs = []int32{
-	18, // 0: kave.runtime.v1.ListRunsRequest.filter:type_name -> kave.runtime.v1.RunFilter
-	19, // 1: kave.runtime.v1.ListRunsResponse.runs:type_name -> kave.runtime.v1.RunRecord
-	20, // 2: kave.runtime.v1.UpdateRunRequest.update:type_name -> kave.runtime.v1.RunUpdate
-	21, // 3: kave.runtime.v1.WatchRunsRequest.statuses:type_name -> kave.runtime.v1.RunStatus
-	22, // 4: kave.runtime.v1.CreateActionRequest.action_type:type_name -> kave.runtime.v1.ActionType
-	23, // 5: kave.runtime.v1.ListActionsRequest.filter:type_name -> kave.runtime.v1.ActionFilter
-	24, // 6: kave.runtime.v1.ListActionsResponse.actions:type_name -> kave.runtime.v1.ActionRecord
-	25, // 7: kave.runtime.v1.OpenSpanRequest.span:type_name -> kave.runtime.v1.SpanInput
-	26, // 8: kave.runtime.v1.CloseSpanRequest.end:type_name -> kave.runtime.v1.SpanEnd
-	27, // 9: kave.runtime.v1.QuerySpansRequest.filter:type_name -> kave.runtime.v1.SpanFilter
-	28, // 10: kave.runtime.v1.QuerySpansResponse.spans:type_name -> kave.runtime.v1.SpanRow
-	29, // 11: kave.runtime.v1.GetSpendReportRequest.filter:type_name -> kave.runtime.v1.SpendFilter
-	0,  // 12: kave.runtime.v1.RuntimeService.CreateRun:input_type -> kave.runtime.v1.CreateRunRequest
-	1,  // 13: kave.runtime.v1.RuntimeService.GetRun:input_type -> kave.runtime.v1.GetRunRequest
-	2,  // 14: kave.runtime.v1.RuntimeService.ListRuns:input_type -> kave.runtime.v1.ListRunsRequest
-	4,  // 15: kave.runtime.v1.RuntimeService.UpdateRun:input_type -> kave.runtime.v1.UpdateRunRequest
-	5,  // 16: kave.runtime.v1.RuntimeService.CancelRun:input_type -> kave.runtime.v1.CancelRunRequest
-	6,  // 17: kave.runtime.v1.RuntimeService.WatchRuns:input_type -> kave.runtime.v1.WatchRunsRequest
-	7,  // 18: kave.runtime.v1.RuntimeService.CreateAction:input_type -> kave.runtime.v1.CreateActionRequest
-	8,  // 19: kave.runtime.v1.RuntimeService.GetAction:input_type -> kave.runtime.v1.GetActionRequest
-	9,  // 20: kave.runtime.v1.RuntimeService.ListActions:input_type -> kave.runtime.v1.ListActionsRequest
-	11, // 21: kave.runtime.v1.RuntimeService.OpenSpan:input_type -> kave.runtime.v1.OpenSpanRequest
-	12, // 22: kave.runtime.v1.RuntimeService.CloseSpan:input_type -> kave.runtime.v1.CloseSpanRequest
-	13, // 23: kave.runtime.v1.RuntimeService.GetSpan:input_type -> kave.runtime.v1.GetSpanRequest
-	14, // 24: kave.runtime.v1.RuntimeService.QuerySpans:input_type -> kave.runtime.v1.QuerySpansRequest
-	16, // 25: kave.runtime.v1.RuntimeService.GetPriceBook:input_type -> kave.runtime.v1.GetPriceBookRequest
-	17, // 26: kave.runtime.v1.RuntimeService.GetSpendReport:input_type -> kave.runtime.v1.GetSpendReportRequest
-	19, // 27: kave.runtime.v1.RuntimeService.CreateRun:output_type -> kave.runtime.v1.RunRecord
-	19, // 28: kave.runtime.v1.RuntimeService.GetRun:output_type -> kave.runtime.v1.RunRecord
-	3,  // 29: kave.runtime.v1.RuntimeService.ListRuns:output_type -> kave.runtime.v1.ListRunsResponse
-	19, // 30: kave.runtime.v1.RuntimeService.UpdateRun:output_type -> kave.runtime.v1.RunRecord
-	19, // 31: kave.runtime.v1.RuntimeService.CancelRun:output_type -> kave.runtime.v1.RunRecord
-	19, // 32: kave.runtime.v1.RuntimeService.WatchRuns:output_type -> kave.runtime.v1.RunRecord
-	24, // 33: kave.runtime.v1.RuntimeService.CreateAction:output_type -> kave.runtime.v1.ActionRecord
-	24, // 34: kave.runtime.v1.RuntimeService.GetAction:output_type -> kave.runtime.v1.ActionRecord
-	10, // 35: kave.runtime.v1.RuntimeService.ListActions:output_type -> kave.runtime.v1.ListActionsResponse
-	28, // 36: kave.runtime.v1.RuntimeService.OpenSpan:output_type -> kave.runtime.v1.SpanRow
-	28, // 37: kave.runtime.v1.RuntimeService.CloseSpan:output_type -> kave.runtime.v1.SpanRow
-	28, // 38: kave.runtime.v1.RuntimeService.GetSpan:output_type -> kave.runtime.v1.SpanRow
-	15, // 39: kave.runtime.v1.RuntimeService.QuerySpans:output_type -> kave.runtime.v1.QuerySpansResponse
-	30, // 40: kave.runtime.v1.RuntimeService.GetPriceBook:output_type -> kave.runtime.v1.PriceBook
-	31, // 41: kave.runtime.v1.RuntimeService.GetSpendReport:output_type -> kave.runtime.v1.SpendReport
-	27, // [27:42] is the sub-list for method output_type
-	12, // [12:27] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	18, // 0: kave.runtime.v1.CreateRunRequest.trigger_type:type_name -> kave.runtime.v1.TriggerType
+	19, // 1: kave.runtime.v1.ListRunsRequest.filter:type_name -> kave.runtime.v1.RunFilter
+	20, // 2: kave.runtime.v1.ListRunsResponse.runs:type_name -> kave.runtime.v1.RunRecord
+	21, // 3: kave.runtime.v1.UpdateRunRequest.update:type_name -> kave.runtime.v1.RunUpdate
+	22, // 4: kave.runtime.v1.WatchRunsRequest.statuses:type_name -> kave.runtime.v1.RunStatus
+	23, // 5: kave.runtime.v1.CreateActionRequest.action_type:type_name -> kave.runtime.v1.ActionType
+	24, // 6: kave.runtime.v1.ListActionsRequest.filter:type_name -> kave.runtime.v1.ActionFilter
+	25, // 7: kave.runtime.v1.ListActionsResponse.actions:type_name -> kave.runtime.v1.ActionRecord
+	26, // 8: kave.runtime.v1.OpenSpanRequest.span:type_name -> kave.runtime.v1.SpanInput
+	27, // 9: kave.runtime.v1.CloseSpanRequest.end:type_name -> kave.runtime.v1.SpanEnd
+	28, // 10: kave.runtime.v1.QuerySpansRequest.filter:type_name -> kave.runtime.v1.SpanFilter
+	29, // 11: kave.runtime.v1.QuerySpansResponse.spans:type_name -> kave.runtime.v1.SpanRow
+	30, // 12: kave.runtime.v1.GetSpendReportRequest.filter:type_name -> kave.runtime.v1.SpendFilter
+	0,  // 13: kave.runtime.v1.RuntimeService.CreateRun:input_type -> kave.runtime.v1.CreateRunRequest
+	1,  // 14: kave.runtime.v1.RuntimeService.GetRun:input_type -> kave.runtime.v1.GetRunRequest
+	2,  // 15: kave.runtime.v1.RuntimeService.ListRuns:input_type -> kave.runtime.v1.ListRunsRequest
+	4,  // 16: kave.runtime.v1.RuntimeService.UpdateRun:input_type -> kave.runtime.v1.UpdateRunRequest
+	5,  // 17: kave.runtime.v1.RuntimeService.CancelRun:input_type -> kave.runtime.v1.CancelRunRequest
+	6,  // 18: kave.runtime.v1.RuntimeService.WatchRuns:input_type -> kave.runtime.v1.WatchRunsRequest
+	7,  // 19: kave.runtime.v1.RuntimeService.CreateAction:input_type -> kave.runtime.v1.CreateActionRequest
+	8,  // 20: kave.runtime.v1.RuntimeService.GetAction:input_type -> kave.runtime.v1.GetActionRequest
+	9,  // 21: kave.runtime.v1.RuntimeService.ListActions:input_type -> kave.runtime.v1.ListActionsRequest
+	11, // 22: kave.runtime.v1.RuntimeService.OpenSpan:input_type -> kave.runtime.v1.OpenSpanRequest
+	12, // 23: kave.runtime.v1.RuntimeService.CloseSpan:input_type -> kave.runtime.v1.CloseSpanRequest
+	13, // 24: kave.runtime.v1.RuntimeService.GetSpan:input_type -> kave.runtime.v1.GetSpanRequest
+	14, // 25: kave.runtime.v1.RuntimeService.QuerySpans:input_type -> kave.runtime.v1.QuerySpansRequest
+	16, // 26: kave.runtime.v1.RuntimeService.GetPriceBook:input_type -> kave.runtime.v1.GetPriceBookRequest
+	17, // 27: kave.runtime.v1.RuntimeService.GetSpendReport:input_type -> kave.runtime.v1.GetSpendReportRequest
+	20, // 28: kave.runtime.v1.RuntimeService.CreateRun:output_type -> kave.runtime.v1.RunRecord
+	20, // 29: kave.runtime.v1.RuntimeService.GetRun:output_type -> kave.runtime.v1.RunRecord
+	3,  // 30: kave.runtime.v1.RuntimeService.ListRuns:output_type -> kave.runtime.v1.ListRunsResponse
+	20, // 31: kave.runtime.v1.RuntimeService.UpdateRun:output_type -> kave.runtime.v1.RunRecord
+	20, // 32: kave.runtime.v1.RuntimeService.CancelRun:output_type -> kave.runtime.v1.RunRecord
+	20, // 33: kave.runtime.v1.RuntimeService.WatchRuns:output_type -> kave.runtime.v1.RunRecord
+	25, // 34: kave.runtime.v1.RuntimeService.CreateAction:output_type -> kave.runtime.v1.ActionRecord
+	25, // 35: kave.runtime.v1.RuntimeService.GetAction:output_type -> kave.runtime.v1.ActionRecord
+	10, // 36: kave.runtime.v1.RuntimeService.ListActions:output_type -> kave.runtime.v1.ListActionsResponse
+	29, // 37: kave.runtime.v1.RuntimeService.OpenSpan:output_type -> kave.runtime.v1.SpanRow
+	29, // 38: kave.runtime.v1.RuntimeService.CloseSpan:output_type -> kave.runtime.v1.SpanRow
+	29, // 39: kave.runtime.v1.RuntimeService.GetSpan:output_type -> kave.runtime.v1.SpanRow
+	15, // 40: kave.runtime.v1.RuntimeService.QuerySpans:output_type -> kave.runtime.v1.QuerySpansResponse
+	31, // 41: kave.runtime.v1.RuntimeService.GetPriceBook:output_type -> kave.runtime.v1.PriceBook
+	32, // 42: kave.runtime.v1.RuntimeService.GetSpendReport:output_type -> kave.runtime.v1.SpendReport
+	28, // [28:43] is the sub-list for method output_type
+	13, // [13:28] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_kave_runtime_v1_runtime_proto_init() }

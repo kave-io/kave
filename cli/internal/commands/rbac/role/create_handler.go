@@ -10,9 +10,9 @@ type CreateInput struct {
 }
 
 type CreateOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunCreate(ctx context.Context, in CreateInput) (*CreateOutput, error) {
-	return nil, output.NotImplemented("role create")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "role create is not exposed by the HTTP bridge yet", Exit: 1}
 }

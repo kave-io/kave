@@ -2,8 +2,8 @@ package agent
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
 )
 
 type DeleteInput struct {
@@ -17,5 +17,6 @@ type DeleteOutput struct {
 }
 
 func RunDelete(ctx context.Context, in DeleteInput) (*DeleteOutput, error) {
-	return nil, output.NotImplemented("agent delete")
+	_ = ctx
+	return &DeleteOutput{ID: in.ID, Deleted: false}, fmt.Errorf("agent delete is not exposed by the HTTP bridge yet")
 }

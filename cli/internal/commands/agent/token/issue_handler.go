@@ -16,5 +16,5 @@ type IssueOutput struct {
 }
 
 func RunIssue(ctx context.Context, in IssueInput) (*IssueOutput, error) {
-	return nil, output.NotImplemented("agent token issue")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "agent token issue is not exposed by the HTTP bridge yet", Exit: 1}
 }

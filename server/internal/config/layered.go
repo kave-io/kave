@@ -100,6 +100,10 @@ func Load(opts LoadOpts) (*LoadResult, error) {
 		return nil, fmt.Errorf("config file %q not found", opts.ExplicitPath)
 	}
 
+	if _, ok := merged["stores"]; ok {
+		return nil, fmt.Errorf("configuration key \"stores\" has been removed; use \"storage.defaults.app\" and \"storage.defaults.span\"")
+	}
+
 	v := viper.New()
 	v.SetConfigType("yaml")
 	bindEnvs(v, Config{}, "")
@@ -113,6 +117,13 @@ func Load(opts LoadOpts) (*LoadResult, error) {
 
 	if err := applyEnvOverrides(result.Config, env); err != nil {
 		return nil, err
+	}
+
+	if !hasOriginPath(result.Origin, "security.allow_anonymous") {
+		result.Config.Security.AllowAnonymous = true
+	}
+	if !hasOriginPath(result.Origin, "security.allow_legacy_tokens") {
+		result.Config.Security.AllowLegacyTokens = false
 	}
 
 	if err := result.Config.Validate(); err != nil {
@@ -307,6 +318,14 @@ func applyEnvOrigins(cfg *Config, origin map[string]Source, env map[string]strin
 		}
 		origin[path] = SourceEnv
 	})
+}
+
+func hasOriginPath(origin map[string]Source, path string) bool {
+	if origin == nil {
+		return false
+	}
+	_, ok := origin[path]
+	return ok
 }
 
 func applyEnvOverrides(cfg *Config, env map[string]string) error {

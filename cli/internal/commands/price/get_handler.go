@@ -10,9 +10,9 @@ type GetInput struct {
 }
 
 type GetOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunGet(ctx context.Context, in GetInput) (*GetOutput, error) {
-	return nil, output.NotImplemented("price get")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "price get is not exposed by the HTTP bridge yet", Exit: 1}
 }

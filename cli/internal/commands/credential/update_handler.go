@@ -10,9 +10,9 @@ type UpdateInput struct {
 }
 
 type UpdateOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunUpdate(ctx context.Context, in UpdateInput) (*UpdateOutput, error) {
-	return nil, output.NotImplemented("credential update")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "credential update is not exposed by the HTTP bridge yet", Exit: 1}
 }

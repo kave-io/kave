@@ -330,17 +330,21 @@ func (s *SQLiteAppStore) CreatePolicy(ctx context.Context, p *control.PolicyReco
 	connectorsJSON, _ := json.Marshal(p.AllowedConnectors)
 	methodsJSON, _ := json.Marshal(p.AllowedMethods)
 	configJSON, _ := json.Marshal(p.Config)
+	var casbinDoc any
+	if p.CasbinDocument != "" {
+		casbinDoc = p.CasbinDocument
+	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO policies (
 			id, project_id, env_id, name, description,
 			allowed_types, allowed_connectors, allowed_methods,
-			budget_cap_nanos, budget_period, budget_behavior,
+			casbin_document, budget_cap_nanos, budget_period, budget_behavior,
 			trace_input, trace_output, retention_days, config,
 			version, mode, status, created_by, updated_by, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID, p.ProjectID, p.EnvID, p.Name, p.Description,
 		string(typesJSON), string(connectorsJSON), string(methodsJSON),
-		int64(p.BudgetCap), p.BudgetPeriod, p.BudgetBehavior,
+		casbinDoc, int64(p.BudgetCap), p.BudgetPeriod, p.BudgetBehavior,
 		boolToInt(p.TraceInput), boolToInt(p.TraceOutput), p.RetentionDays, string(configJSON),
 		p.Version, p.Mode, string(p.Status), p.CreatedBy, p.UpdatedBy, p.CreatedAt, p.UpdatedAt)
 	return err
@@ -350,7 +354,7 @@ func (s *SQLiteAppStore) GetPolicy(ctx context.Context, id string) (*control.Pol
 	return s.scanPolicy(s.db.QueryRowContext(ctx, `
 		SELECT id, project_id, env_id, name, description,
 		       allowed_types, allowed_connectors, allowed_methods,
-		       budget_cap_nanos, budget_period, budget_behavior,
+		       COALESCE(casbin_document, ''), budget_cap_nanos, budget_period, budget_behavior,
 		       trace_input, trace_output, retention_days, config,
 		       version, mode, status, created_by, updated_by, created_at, updated_at
 		FROM policies WHERE id = ?`, id))
@@ -369,7 +373,7 @@ func (s *SQLiteAppStore) ListPolicies(ctx context.Context, envID string, page st
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, project_id, env_id, name, description,
 		       allowed_types, allowed_connectors, allowed_methods,
-		       budget_cap_nanos, budget_period, budget_behavior,
+		       COALESCE(casbin_document, ''), budget_cap_nanos, budget_period, budget_behavior,
 		       trace_input, trace_output, retention_days, config,
 		       version, mode, status, created_by, updated_by, created_at, updated_at
 		FROM policies WHERE env_id = ? ORDER BY name ASC`, envID)
@@ -414,6 +418,14 @@ func (s *SQLiteAppStore) UpdatePolicy(ctx context.Context, id string, u *control
 		b, _ := json.Marshal(u.AllowedMethods)
 		query += `, allowed_methods = ?`
 		args = append(args, string(b))
+	}
+	if u.CasbinDocument != nil {
+		query += `, casbin_document = ?`
+		if *u.CasbinDocument == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *u.CasbinDocument)
+		}
 	}
 	if u.ClearBudgetCap {
 		query += `, budget_cap_nanos = 0`
@@ -472,14 +484,14 @@ func (s *SQLiteAppStore) DeletePolicy(ctx context.Context, id string) error {
 
 func (s *SQLiteAppStore) scanPolicy(row *sql.Row) (*control.PolicyRecord, error) {
 	var p control.PolicyRecord
-	var typesJSON, connectorsJSON, methodsJSON, configJSON string
+	var typesJSON, connectorsJSON, methodsJSON, configJSON, casbinDoc string
 	var budgetCapNanos int64
 	var traceInput, traceOutput int
 	var status string
 	err := row.Scan(
 		&p.ID, &p.ProjectID, &p.EnvID, &p.Name, &p.Description,
 		&typesJSON, &connectorsJSON, &methodsJSON,
-		&budgetCapNanos, &p.BudgetPeriod, &p.BudgetBehavior,
+		&casbinDoc, &budgetCapNanos, &p.BudgetPeriod, &p.BudgetBehavior,
 		&traceInput, &traceOutput, &p.RetentionDays, &configJSON,
 		&p.Version, &p.Mode, &status, &p.CreatedBy, &p.UpdatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
@@ -489,6 +501,7 @@ func (s *SQLiteAppStore) scanPolicy(row *sql.Row) (*control.PolicyRecord, error)
 		return nil, err
 	}
 	p.BudgetCap = money.Amount(budgetCapNanos)
+	p.CasbinDocument = casbinDoc
 	p.TraceInput = traceInput == 1
 	p.TraceOutput = traceOutput == 1
 	p.Status = status
@@ -501,18 +514,19 @@ func (s *SQLiteAppStore) scanPolicy(row *sql.Row) (*control.PolicyRecord, error)
 
 func (s *SQLiteAppStore) scanPolicyRow(rows *sql.Rows) (*control.PolicyRecord, error) {
 	var p control.PolicyRecord
-	var typesJSON, connectorsJSON, methodsJSON, configJSON, status string
+	var typesJSON, connectorsJSON, methodsJSON, configJSON, status, casbinDoc string
 	var budgetCapNanos int64
 	var traceInput, traceOutput int
 	if err := rows.Scan(
 		&p.ID, &p.ProjectID, &p.EnvID, &p.Name, &p.Description,
 		&typesJSON, &connectorsJSON, &methodsJSON,
-		&budgetCapNanos, &p.BudgetPeriod, &p.BudgetBehavior,
+		&casbinDoc, &budgetCapNanos, &p.BudgetPeriod, &p.BudgetBehavior,
 		&traceInput, &traceOutput, &p.RetentionDays, &configJSON,
 		&p.Version, &p.Mode, &status, &p.CreatedBy, &p.UpdatedBy, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		return nil, err
 	}
 	p.BudgetCap = money.Amount(budgetCapNanos)
+	p.CasbinDocument = casbinDoc
 	p.TraceInput = traceInput == 1
 	p.TraceOutput = traceOutput == 1
 	p.Status = status

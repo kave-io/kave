@@ -11,6 +11,7 @@ import (
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
+	"github.com/kave-io/kave/server/internal/store/spansql"
 )
 
 var _ store.SpanStore = (*PostgresSpanStore)(nil)
@@ -243,15 +244,15 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 		       model, cost_amount_nanos, attrs, created_at
 		FROM spans WHERE 1=1
 	`
-	var args []any
-	argNum := 1
-	query, args, argNum = appendSpanFilter(query, args, argNum, filter)
+	whereSQL, whereArgs := spansql.BuildWhere(filter, spansql.Postgres)
+	query += whereSQL
+	args := append([]any{}, whereArgs...)
 
 	limit := page.Limit
 	if limit <= 0 {
 		limit = 100
 	}
-	query += fmt.Sprintf(` ORDER BY started_at DESC LIMIT $%d`, argNum)
+	query += fmt.Sprintf(` ORDER BY started_at DESC LIMIT $%d`, len(args)+1)
 	args = append(args, limit)
 
 	rows, err := p.pool.Query(ctx, query, args...)
@@ -318,9 +319,9 @@ func (p *PostgresSpanStore) SpendByDimension(ctx context.Context, groupBy string
 		SELECT COALESCE(%s, 'unknown'), COALESCE(SUM(cost_amount_nanos), 0)
 		FROM spans WHERE 1=1
 	`, col)
-	var args []any
-	argNum := 1
-	query, args, argNum = appendSpanFilter(query, args, argNum, filter)
+	whereSQL, whereArgs := spansql.BuildWhere(filter, spansql.Postgres)
+	query += whereSQL
+	args := append([]any{}, whereArgs...)
 	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_amount_nanos) DESC`, col)
 
 	rows, err := p.pool.Query(ctx, query, args...)
@@ -351,59 +352,6 @@ func ptrPgTime(ms *int64) *time.Time {
 	}
 	t := time.UnixMilli(*ms)
 	return &t
-}
-
-func appendSpanFilter(query string, args []any, argNum int, filter *runtimemodel.SpanFilter) (string, []any, int) {
-	if filter == nil {
-		return query, args, argNum
-	}
-	appendEq := func(column, value string) {
-		if value == "" {
-			return
-		}
-		query += fmt.Sprintf(` AND %s = $%d`, column, argNum)
-		args = append(args, value)
-		argNum++
-	}
-
-	appendEq("id", filter.ID)
-	appendEq("run_id", filter.RunID)
-	appendEq("action_id", filter.ActionID)
-	appendEq("trace_id", filter.TraceID)
-	appendEq("project_id", filter.ProjectID)
-	appendEq("env_id", filter.EnvID)
-	appendEq("agent_id", filter.AgentID)
-	appendEq("connector", filter.Connector)
-	appendEq("model", filter.Model)
-	appendEq("kind", filter.Kind)
-	if filter.NamePrefix != "" {
-		query += fmt.Sprintf(` AND name LIKE $%d`, argNum)
-		args = append(args, filter.NamePrefix+"%")
-		argNum++
-	}
-	if filter.FromMs != nil {
-		query += fmt.Sprintf(` AND started_at >= $%d`, argNum)
-		args = append(args, pgTime(*filter.FromMs))
-		argNum++
-	}
-	if filter.ToMs != nil {
-		query += fmt.Sprintf(` AND started_at <= $%d`, argNum)
-		args = append(args, pgTime(*filter.ToMs))
-		argNum++
-	}
-	if filter.HasError != nil {
-		if *filter.HasError {
-			query += ` AND error IS NOT NULL`
-		} else {
-			query += ` AND error IS NULL`
-		}
-	}
-	if filter.MinCostMicro != nil {
-		query += fmt.Sprintf(` AND COALESCE(cost_amount_nanos, 0) >= $%d`, argNum)
-		args = append(args, *filter.MinCostMicro*int64(money.MicroDollar))
-		argNum++
-	}
-	return query, args, argNum
 }
 
 func derefBytesP(b *[]byte) []byte {

@@ -10,9 +10,9 @@ type RefreshInput struct {
 }
 
 type RefreshOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunRefresh(ctx context.Context, in RefreshInput) (*RefreshOutput, error) {
-	return nil, output.NotImplemented("price refresh")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "price refresh is not exposed by the HTTP bridge yet", Exit: 1}
 }

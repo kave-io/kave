@@ -2,8 +2,8 @@ package agent
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
 )
 
 type RestoreInput struct {
@@ -16,5 +16,6 @@ type RestoreOutput struct {
 }
 
 func RunRestore(ctx context.Context, in RestoreInput) (*RestoreOutput, error) {
-	return nil, output.NotImplemented("agent restore")
+	_ = ctx
+	return &RestoreOutput{ID: in.ID, Restored: false}, fmt.Errorf("agent restore is not exposed by the HTTP bridge yet")
 }

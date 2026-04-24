@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -21,7 +22,9 @@ func TestLoadLayeringAndOrigins(t *testing.T) {
 
 	if err := os.WriteFile(projectFile, []byte(`
 storage:
-  sqlite_path: project.db
+  defaults:
+    app:
+      path: project.db
 fx:
   refresh_interval_seconds: 10
 agents:
@@ -41,7 +44,9 @@ agents:
 
 	if err := os.WriteFile(userFile, []byte(`
 storage:
-  backend: sqlite
+  defaults:
+    app:
+      kind: sqlite
 agents:
   - name: shared
     description: user
@@ -70,21 +75,21 @@ agents:
 	if got := res.Config.FX.RefreshIntervalSeconds; got != 30 {
 		t.Fatalf("FX.RefreshIntervalSeconds = %d, want 30", got)
 	}
-	if got := res.Config.Storage.Backend; got != "sqlite" {
-		t.Fatalf("Storage.Backend = %q, want sqlite", got)
+	if got := res.Config.Storage.Defaults.App.Kind; got != "sqlite" {
+		t.Fatalf("Storage.Defaults.App.Kind = %q, want sqlite", got)
 	}
-	if got := res.Config.Storage.SQLitePath; got != "project.db" {
-		t.Fatalf("Storage.SQLitePath = %q, want project.db", got)
+	if got := res.Config.Storage.Defaults.App.Path; got != "project.db" {
+		t.Fatalf("Storage.Defaults.App.Path = %q, want project.db", got)
 	}
 
 	if got := res.Origin["fx.refresh_interval_seconds"]; got != SourceEnv {
 		t.Fatalf("origin fx.refresh_interval_seconds = %q, want %q", got, SourceEnv)
 	}
-	if got := res.Origin["storage.backend"]; got != SourceUser {
-		t.Fatalf("origin storage.backend = %q, want %q", got, SourceUser)
+	if got := res.Origin["storage.defaults.app.kind"]; got != SourceUser {
+		t.Fatalf("origin storage.defaults.app.kind = %q, want %q", got, SourceUser)
 	}
-	if got := res.Origin["storage.sqlite_path"]; got != SourceProject {
-		t.Fatalf("origin storage.sqlite_path = %q, want %q", got, SourceProject)
+	if got := res.Origin["storage.defaults.app.path"]; got != SourceProject {
+		t.Fatalf("origin storage.defaults.app.path = %q, want %q", got, SourceProject)
 	}
 	if got := res.Origin["agents.shared.description"]; got != SourceProject {
 		t.Fatalf("origin agents.shared.description = %q, want %q", got, SourceProject)
@@ -102,5 +107,27 @@ agents:
 	}
 	if names["project-only"] != "project" || names["user-only"] != "user" {
 		t.Fatalf("unexpected agent set: %#v", names)
+	}
+}
+
+func TestLoadRejectsRemovedStoresKey(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+
+	projectFile := filepath.Join(root, "kave.yaml")
+	if err := os.WriteFile(projectFile, []byte(`
+stores:
+  app:
+    backend: sqlite
+`), 0o644); err != nil {
+		t.Fatalf("write project: %v", err)
+	}
+
+	_, err := Load(LoadOpts{StartDir: root})
+	if err == nil {
+		t.Fatal("Load() error = nil, want removed stores key error")
+	}
+	if want := `configuration key "stores" has been removed`; !strings.Contains(err.Error(), want) {
+		t.Fatalf("Load() error = %q, want substring %q", err.Error(), want)
 	}
 }

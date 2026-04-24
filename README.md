@@ -97,7 +97,7 @@ kave/
 
 ## Draft concepts
 
-- [Counterfactual Runs (shadow execute, replay, and drift branching)](IDEAS.md)
+- [Counterfactual Runs (shadow execute, replay, and drift branching)](docs/internal/IDEAS.md)
 
 ## Self-hosting
 

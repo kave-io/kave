@@ -2,8 +2,9 @@ package agent
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
+	"github.com/kave-io/kave/cli/internal/runtime"
 )
 
 type ExportInput struct {
@@ -11,9 +12,17 @@ type ExportInput struct {
 }
 
 type ExportOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunExport(ctx context.Context, in ExportInput) (*ExportOutput, error) {
-	return nil, output.NotImplemented("agent export")
+	rt, ok := runtime.FromContext(ctx)
+	if !ok || rt == nil {
+		return nil, fmt.Errorf("runtime missing")
+	}
+	var out ExportOutput
+	if err := rt.Client().Get(ctx, "/api/v1/agents/"+in.ID, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

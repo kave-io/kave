@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kave-io/kave/core/pkg/money"
+	serverauth "github.com/kave-io/kave/server/ops/auth"
 	serverbudget "github.com/kave-io/kave/server/ops/budget"
 	serverpolicy "github.com/kave-io/kave/server/ops/policy"
 )
@@ -121,6 +122,10 @@ func mapError(err error) (int, string, string, map[string]any) {
 		return 402, "gateway.budget_exceeded", message, contractDetails(details)
 	case errors.Is(err, ErrQuotaExceeded):
 		return 429, "gateway.quota_exceeded", err.Error(), nil
+	case errors.Is(err, serverauth.ErrUnauthenticated):
+		return 401, "gateway.unauthorized", err.Error(), nil
+	case errors.Is(err, serverauth.ErrUnauthorized):
+		return 403, "gateway.policy_blocked", err.Error(), nil
 	case errors.Is(err, ErrProviderNotFound):
 		return 400, "gateway.provider_not_supported", err.Error(), nil
 	case errors.Is(err, ErrUpstream):

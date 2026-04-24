@@ -12,6 +12,7 @@ import (
 )
 
 var ErrPassthrough = errors.New("passthrough credential")
+var ErrSourceDisabled = errors.New("credential source disabled")
 
 // VaultClient resolves external secret references.
 type VaultClient interface {
@@ -22,7 +23,7 @@ type VaultClient interface {
 type NoopVault struct{}
 
 func (NoopVault) Resolve(context.Context, string) (string, error) {
-	return "", fmt.Errorf("vault resolution unimplemented")
+	return "", ErrSourceDisabled
 }
 
 // Resolve returns the raw secret for a credential source.
@@ -49,7 +50,7 @@ func Resolve(ctx context.Context, cred *controlmodel.ConnectorCredential, vault 
 		return val, nil
 	case controlmodel.CredentialSourceVault:
 		if vault == nil {
-			vault = NoopVault{}
+			return "", ErrSourceDisabled
 		}
 		return vault.Resolve(ctx, cred.VaultRef)
 	case controlmodel.CredentialSourcePassthrough:

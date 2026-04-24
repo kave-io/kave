@@ -25,21 +25,23 @@ daemon:
   log_format: text      # text | json
 
 # =============================================================================
-# 2. Stores
+# 2. Storage
 # =============================================================================
-# Three logical stores. Start with SQLite + DuckDB for local-first; upgrade
-# to Postgres when sharing across users or deploying multi-node.
+# Application metadata and runtime spans use one canonical storage schema.
+# Start with SQLite + DuckDB for local-first; upgrade to Postgres when sharing
+# across users or deploying multi-node.
 
-stores:
-  app:
-    backend: sqlite
-    dsn: file:~/.kave/app.db?_journal=WAL&_busy_timeout=5000
-  spans:
-    backend: duckdb
-    dsn: file:~/.kave/spans.db
-  audit:
-    backend: sqlite
-    dsn: file:~/.kave/audit.db?_journal=WAL
+storage:
+  defaults:
+    app:
+      kind: sqlite
+      path: ${HOME}/.kave/app.db
+    span:
+      kind: duckdb
+      path: ${HOME}/.kave/spans.duckdb
+      # For shared analytical tracing, use:
+      # kind: clickhouse
+      # dsn: clickhouse://user:password@clickhouse.internal:9440/kave?secure=true
 
 # =============================================================================
 # 3. Contexts

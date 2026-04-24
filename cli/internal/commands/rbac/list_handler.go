@@ -10,9 +10,9 @@ type ListInput struct {
 }
 
 type ListOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
-	return nil, output.NotImplemented("rbac list")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "rbac list is not exposed by the HTTP bridge yet", Exit: 1}
 }

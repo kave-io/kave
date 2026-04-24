@@ -281,7 +281,7 @@ func (m *mockAppStore) Close() error                                            
 var _ store.AppStore = (*mockAppStore)(nil)
 
 func TestGatewayAgentNotFound(t *testing.T) {
-	g := New(&mockAppStore{}, nil, pipeline.New(), NewRegistry())
+	g := New(&mockAppStore{}, nil, pipeline.New(), NewRegistry(), true, nil)
 	mux := http.NewServeMux()
 	g.RegisterRoutes(mux)
 
@@ -319,7 +319,7 @@ func TestGatewayForwardsClaudeCodeOpenAI(t *testing.T) {
 		agent: &controlmodel.Agent{ID: "a1", ProjectID: "proj1", EnvID: "default", Status: controlmodel.AgentStatusActive},
 		token: &controlmodel.AgentToken{ID: "tok1", AgentID: "a1", OrgID: "default", TokenHash: []byte("ignored")},
 		cred:  &controlmodel.ConnectorCredential{Source: controlmodel.CredentialSourceEnv, EnvVar: "KAVE_TEST_OPENAI_KEY", ProjectID: "proj1"},
-	}, nil, pipeline.New(), NewRegistry())
+	}, nil, pipeline.New(), NewRegistry(), true, nil)
 	g.transport.client.Transport = rewriteTransport(t, upstream.URL)
 
 	mux := http.NewServeMux()

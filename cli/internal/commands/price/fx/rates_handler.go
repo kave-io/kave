@@ -10,9 +10,9 @@ type RatesInput struct {
 }
 
 type RatesOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunRates(ctx context.Context, in RatesInput) (*RatesOutput, error) {
-	return nil, output.NotImplemented("fx rates")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "fx rates is not exposed by the HTTP bridge yet", Exit: 1}
 }

@@ -1,0 +1,97 @@
+Findings Requiring Attention
+
+  1. Audit is not implemented end-to-end. Methods are TODO/no-op in server/app/audit/audit.go:31 and
+     server/app/audit/audit.go:37, and audit is not registered in gRPC server startup (only
+     control+runtime in server/port/grpc/server.go:27). Required: implement AppendAudit/QueryAudits, add
+     real audit store backend, wire registration.
+  2. CLI still has 57 unavailable handlers ("not exposed by the HTTP bridge yet"), e.g. cli/internal/
+     commands/apply/apply_handler.go:17, cli/internal/commands/policy/update_handler.go:17, cli/internal/
+     commands/credential/create_handler.go:17. Required: complete plan-10 handler fillout.
+  3. HTTP bridge and proto/control surfaces are mismatched. Proto defines delete/restore/update/export/
+     validate methods in proto/kave/control/v1/control.proto:40 and proto/kave/control/v1/
+     control.proto:47, but routes expose only partial agent/policy endpoints in server/internal/
+     httpbridge/routes.go:93 and server/internal/httpbridge/routes.go:99. Required: align HTTP bridge with
+     proto or clearly version/scope-separate.
+  4. CLI lifecycle/ctx/config commands have placeholder behavior. start/stop return static ok in cli/
+     internal/commands/lifecycle/start_handler.go:20 and cli/internal/commands/lifecycle/
+     stop_handler.go:20; watch/logs read one frame with 2s timeout in cli/internal/commands/lifecycle/
+     watch_handler.go:37 and cli/internal/commands/lifecycle/logs_handler.go:24; ctx use does not switch
+     context in cli/internal/commands/ctx/use_handler.go:22; config set does not set anything in cli/
+     internal/commands/config/set_handler.go:23.
+  5. CLI pagination is incomplete. --all exists in cli/internal/flags/page.go:14 but is unused, and
+     envelope page metadata is dropped in runtime decode path cli/internal/runtime/http.go:144. Required:
+     decode/preserve page.next_cursor and implement --all iteration.
+  6. CLI command UX is inconsistent with advertised surface. Root advertises top-level kave start/stop/
+     watch/... in cli/cmd/root.go:71, but commands are under lifecycle in cli/internal/commands/lifecycle/
+     lifecycle.go:11. Also duplicate noun+verb structure exists (version version, apply apply) in cli/
+     internal/commands/version/version.go:11 and cli/internal/commands/apply/apply.go:11.
+  Validation Run Summary
+
+  1. core: go test ./... passed.
+  2. cli: go test ./... passed.
+  3. proto/gen: go test ./... passed.
+  4. server: go test ./... passed (needed escalated run due local socket restrictions in sandbox).
+  5. go vet passed for all four modules.
+
+  Suggested Fix Order Before Plan 13
+
+  1. Close audit end-to-end (proto/service/store/wiring).
+  2. Align HTTP bridge with control/runtime proto surface and unify run/span response contracts.
+  3. Finish CLI fillout (remove remaining 57 placeholders, complete lifecycle/ctx/config semantics,
+     pagination).
+Audit Report (Core / CLI / Server / Proto)
+
+  1. Audit subsystem is not implemented or wired.
+
+- AppendAudit and QueryAudits are TODO stubs in server/app/audit/audit.go:31.
+- Audit service is not registered in gRPC startup in server/port/grpc/server.go:18.
+- No real audit store implementation exists in server stores.
+
+  1. CLI still has 57 unavailable handlers.
+
+- Many commands still return command.unavailable (“not exposed by HTTP bridge yet”), e.g. cli/internal/
+    commands/apply/apply_handler.go:17, cli/internal/commands/policy/update_handler.go:17, cli/internal/
+    commands/credential/create_handler.go:17.
+
+  1. HTTP bridge does not cover the full proto control surface.
+
+- Proto has DeleteAgent/RestoreAgent/UpdatePolicy/DeletePolicy/ExportPolicy/ValidatePolicy in proto/
+    kave/control/v1/control.proto:40, but routes expose only partial agent/policy endpoints in server/
+    internal/httpbridge/routes.go:93.
+
+  1. CLI lifecycle/context/config behavior has functional gaps.
+
+- start/stop are local static status: ok in cli/internal/commands/lifecycle/start_handler.go:20, cli/
+    internal/commands/lifecycle/stop_handler.go:20.
+- watch/logs only sample one frame with short timeout in cli/internal/commands/lifecycle/
+    watch_handler.go:37, cli/internal/commands/lifecycle/logs_handler.go:24.
+- ctx use does not switch context in cli/internal/commands/ctx/use_handler.go:22.
+- config set does not set anything in cli/internal/commands/config/set_handler.go:23.
+
+  1. Pagination support is incomplete in CLI runtime.
+
+- --all exists but unused in cli/internal/flags/page.go:14.
+- HTTP client only maps data, ignores envelope page metadata in cli/internal/runtime/http.go:144.
+
+  1. Minor correctness/maintainability issues.
+
+- CreatePolicy publishes policy.updated on create in server/app/control/control.go:304.
+- unimplementedRoute is dead code in server/internal/httpbridge/routes.go:877.
+
+  Verification status
+
+- go test passed in core, cli, proto/gen, server.
+- go vet passed for these modules.
+- This is an implementation-completeness/behavior audit, not a failing-build report.
+
+  Recommended pre-Plan-13 order
+
+  1. Finish audit service/store wiring.
+  2. Align HTTP bridge surface with proto/control/runtime.
+  3. Finish CLI fillout (remove 57 placeholders + fix lifecycle/ctx/config/pagination).
+There are only a few non-blocking extras:
+
+  1. CLI UX drift: root help advertises top-level commands that are actually nested (lifecycle), and odd
+     trees like kave version version / kave apply apply.
+  2. A few panic-style helpers (rand.Read paths) that should return errors instead of panicking.
+  3. Some dead/leftover helper code (NotImplemented, unused route helper) worth cleanup.

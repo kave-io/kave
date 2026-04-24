@@ -10,9 +10,9 @@ type TestInput struct {
 }
 
 type TestOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunTest(ctx context.Context, in TestInput) (*TestOutput, error) {
-	return nil, output.NotImplemented("connector test")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector test is not exposed by the HTTP bridge yet", Exit: 1}
 }

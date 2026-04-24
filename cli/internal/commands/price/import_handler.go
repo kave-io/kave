@@ -10,9 +10,9 @@ type ImportInput struct {
 }
 
 type ImportOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunImport(ctx context.Context, in ImportInput) (*ImportOutput, error) {
-	return nil, output.NotImplemented("price import")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "price import is not exposed by the HTTP bridge yet", Exit: 1}
 }

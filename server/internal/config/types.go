@@ -3,11 +3,11 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 type Config struct {
 	Daemon         *DaemonConfig      `mapstructure:"daemon"`
-	Stores         *StoresConfig      `mapstructure:"stores"`
 	Contexts       []ContextConfig    `mapstructure:"contexts"`
 	CurrentContext string             `mapstructure:"currentContext"`
 	Project        *ProjectConfig     `mapstructure:"project"`
@@ -40,17 +40,6 @@ type DaemonConfig struct {
 	DataDir      string `mapstructure:"data_dir"`
 	LogLevel     string `mapstructure:"log_level"`
 	LogFormat    string `mapstructure:"log_format"`
-}
-
-type StoreConfig struct {
-	Backend string `mapstructure:"backend"`
-	DSN     string `mapstructure:"dsn"`
-}
-
-type StoresConfig struct {
-	App   *StoreConfig `mapstructure:"app"`
-	Spans *StoreConfig `mapstructure:"spans"`
-	Audit *StoreConfig `mapstructure:"audit"`
 }
 
 type ContextConfig struct {
@@ -137,7 +126,18 @@ type SecurityConfig struct {
 	// EncryptionKey is a 64-char hex string (32 bytes) used for AES-256-GCM
 	// encryption of stored credentials. Set via KAVE_SECURITY_ENCRYPTION_KEY
 	// env var. If empty, credentials are stored/retrieved as plaintext (dev only).
-	EncryptionKey string `mapstructure:"encryption_key"`
+	EncryptionKey     string        `mapstructure:"encryption_key"`
+	AllowAnonymous    bool          `mapstructure:"allow_anonymous"`
+	AllowLegacyTokens bool          `mapstructure:"allow_legacy_tokens"`
+	SessionTTL        time.Duration `mapstructure:"session_ttl"`
+	TokenTTL          time.Duration `mapstructure:"token_ttl"`
+	Vault             *VaultConfig  `mapstructure:"vault"`
+}
+
+type VaultConfig struct {
+	Addr  string `mapstructure:"addr"`
+	Token string `mapstructure:"token"`
+	Mount string `mapstructure:"mount"`
 }
 
 // ── Server ────────────────────────────────────────────────────────────────────
@@ -241,11 +241,6 @@ type AgentStorageBinding struct {
 }
 
 type StorageConfig struct {
-	Backend     string `mapstructure:"backend"`      // legacy: "sqlite" | "postgres"
-	SQLitePath  string `mapstructure:"sqlite_path"`  // legacy
-	SpanBackend string `mapstructure:"span_backend"` // legacy: "duckdb" | "postgres" | "clickhouse"
-	DuckDBPath  string `mapstructure:"duckdb_path"`  // legacy
-
 	Defaults StorageDefaults                `mapstructure:"defaults"`
 	Agents   map[string]AgentStorageBinding `mapstructure:"agents"`
 }
@@ -492,6 +487,17 @@ func (c *Config) Validate() error {
 	if c.FX.RefreshIntervalSeconds == 0 {
 		c.FX.RefreshIntervalSeconds = 3600
 	}
+	if c.Security.SessionTTL == 0 {
+		c.Security.SessionTTL = 24 * time.Hour
+	}
+	if c.Security.TokenTTL == 0 {
+		c.Security.TokenTTL = 30 * 24 * time.Hour
+	}
+	if c.Security.Vault != nil {
+		if c.Security.Vault.Mount == "" {
+			c.Security.Vault.Mount = "secret/data/kave"
+		}
+	}
 
 	// Postgres
 	if c.Postgres.SSLMode == "" {
@@ -508,29 +514,17 @@ func (c *Config) Validate() error {
 	}
 
 	// Storage
-	if c.Storage.Backend == "" {
-		c.Storage.Backend = "sqlite"
-	}
-	if c.Storage.SQLitePath == "" {
-		c.Storage.SQLitePath = "kave.db"
-	}
-	if c.Storage.SpanBackend == "" {
-		c.Storage.SpanBackend = "duckdb"
-	}
-	if c.Storage.DuckDBPath == "" {
-		c.Storage.DuckDBPath = "kave-spans.duckdb"
-	}
 	if c.Storage.Defaults.App.Kind == "" {
-		c.Storage.Defaults.App.Kind = c.Storage.Backend
+		c.Storage.Defaults.App.Kind = "sqlite"
 	}
 	if c.Storage.Defaults.App.Path == "" && c.Storage.Defaults.App.Kind == "sqlite" {
-		c.Storage.Defaults.App.Path = c.Storage.SQLitePath
+		c.Storage.Defaults.App.Path = "kave.db"
 	}
 	if c.Storage.Defaults.Span.Kind == "" {
-		c.Storage.Defaults.Span.Kind = c.Storage.SpanBackend
+		c.Storage.Defaults.Span.Kind = "duckdb"
 	}
 	if c.Storage.Defaults.Span.Path == "" && c.Storage.Defaults.Span.Kind == "duckdb" {
-		c.Storage.Defaults.Span.Path = c.Storage.DuckDBPath
+		c.Storage.Defaults.Span.Path = "kave-spans.duckdb"
 	}
 	if c.Storage.Agents == nil {
 		c.Storage.Agents = map[string]AgentStorageBinding{}

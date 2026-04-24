@@ -10,9 +10,9 @@ type DisableInput struct {
 }
 
 type DisableOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunDisable(ctx context.Context, in DisableInput) (*DisableOutput, error) {
-	return nil, output.NotImplemented("connector disable")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector disable is not exposed by the HTTP bridge yet", Exit: 1}
 }

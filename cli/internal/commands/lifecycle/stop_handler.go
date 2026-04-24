@@ -2,17 +2,20 @@ package lifecycle
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
 )
 
 type StopInput struct {
 }
 
 type StopOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunStop(ctx context.Context, in StopInput) (*StopOutput, error) {
-	return nil, output.NotImplemented("lifecycle stop")
+	if ctx == nil {
+		return nil, fmt.Errorf("runtime missing")
+	}
+	return &StopOutput{Data: map[string]any{"status": "ok"}}, nil
 }

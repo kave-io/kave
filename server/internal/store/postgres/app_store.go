@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 )
@@ -45,7 +45,7 @@ func (p *PostgresAppStore) Stats(ctx context.Context) (map[string]any, error) {
 	tables := []string{
 		"workspaces", "users", "memberships", "agents", "policies",
 		"runs", "actions", "price_book", "fx_rates", "fx_currencies",
-		"agent_tokens", "connector_credentials", "budgets",
+		"agent_tokens", "credentials", "budgets",
 	}
 	counts := make(map[string]int64, len(tables))
 	for _, table := range tables {
@@ -76,9 +76,9 @@ func redactDSN(dsn string) string {
 
 func (p *PostgresAppStore) CreateOrg(ctx context.Context, o *control.Organization) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO workspaces (id, name, slug, description, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, o.ID, o.Name, o.Slug, "", toTime(o.CreatedAt), toTime(o.UpdatedAt))
+		INSERT INTO workspaces (id, org_id, name, slug, description, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, o.ID, "", o.Name, o.Slug, "", toTime(o.CreatedAt), toTime(o.UpdatedAt))
 	return err
 }
 func (p *PostgresAppStore) GetOrg(ctx context.Context, id string) (*control.Organization, error) {
@@ -134,58 +134,270 @@ func (p *PostgresAppStore) ListOrgs(ctx context.Context, page store.Page) (store
 	return store.Paginate(items, page), rows.Err()
 }
 
-// ── UserStore stubs ───────────────────────────────────────────────────────────
+// ── UserStore ─────────────────────────────────────────────────────────────────
 
-func (p *PostgresAppStore) CreateUser(_ context.Context, _ *control.User) error { return nil }
-func (p *PostgresAppStore) GetUser(_ context.Context, _ string) (*control.User, error) {
-	return nil, nil
-}
-func (p *PostgresAppStore) GetUserByEmail(_ context.Context, _, _ string) (*control.User, error) {
-	return nil, nil
-}
-func (p *PostgresAppStore) UpdateUser(_ context.Context, _ string, update *control.UserUpdate) error {
-	_ = update
-	return nil
+func (p *PostgresAppStore) CreateUser(ctx context.Context, u *control.User) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO users (id, org_id, email, name, password_hash, status, last_login_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, u.ID, u.OrgID, u.Email, u.Name, u.PasswordHash, u.Status, ptrToTime(u.LastLoginAt), toTime(u.CreatedAt), toTime(u.UpdatedAt))
+	return err
 }
 
-// ── RBAC stubs ───────────────────────────────────────────────────────────────
+func (p *PostgresAppStore) GetUser(ctx context.Context, id string) (*control.User, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, email, name, password_hash, status, last_login_at, created_at, updated_at
+		FROM users WHERE id = $1
+	`, id)
+	return scanPostgresUser(row)
+}
 
-func (p *PostgresAppStore) InsertRole(_ context.Context, _ *control.Role) error { return nil }
-func (p *PostgresAppStore) GetRole(_ context.Context, _ string) (*control.Role, error) {
-	return nil, nil
+func (p *PostgresAppStore) GetUserByEmail(ctx context.Context, orgID, email string) (*control.User, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, email, name, password_hash, status, last_login_at, created_at, updated_at
+		FROM users WHERE org_id = $1 AND email = $2
+	`, orgID, email)
+	return scanPostgresUser(row)
 }
-func (p *PostgresAppStore) ListRoles(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Role], error) {
-	return store.PageResult[*control.Role]{}, nil
-}
-func (p *PostgresAppStore) UpdateRole(_ context.Context, _ string, _ *control.Role) error { return nil }
-func (p *PostgresAppStore) DeleteRole(_ context.Context, _ string) error                  { return nil }
-func (p *PostgresAppStore) InsertBinding(_ context.Context, _ *control.Binding) error     { return nil }
-func (p *PostgresAppStore) GetBinding(_ context.Context, _ string) (*control.Binding, error) {
-	return nil, nil
-}
-func (p *PostgresAppStore) ListBindings(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Binding], error) {
-	return store.PageResult[*control.Binding]{}, nil
-}
-func (p *PostgresAppStore) DeleteBinding(_ context.Context, _ string) error { return nil }
 
-// ── MembershipStore stubs ─────────────────────────────────────────────────────
+func (p *PostgresAppStore) UpdateUser(ctx context.Context, id string, update *control.UserUpdate) error {
+	if update == nil {
+		return nil
+	}
+	var name any
+	if update.Name != nil {
+		name = *update.Name
+	}
+	var status any
+	if update.Status != nil {
+		status = *update.Status
+	}
+	var passwordHash any
+	if update.PasswordHash != nil {
+		passwordHash = *update.PasswordHash
+	}
+	_, err := p.pool.Exec(ctx, `
+		UPDATE users SET
+			name = COALESCE($1, name),
+			status = COALESCE($2, status),
+			password_hash = COALESCE($3, password_hash),
+			last_login_at = COALESCE($4, last_login_at),
+			updated_at = $5
+		WHERE id = $6
+	`, name, status, passwordHash, ptrToTime(update.LastLoginAt), time.Now(), id)
+	return err
+}
 
-func (p *PostgresAppStore) AddMember(_ context.Context, _ *control.Membership) error { return nil }
-func (p *PostgresAppStore) GetMembership(_ context.Context, _, _ string) (*control.Membership, error) {
-	return nil, nil
+func scanPostgresUser(scanner postgresScanner) (*control.User, error) {
+	var u control.User
+	var lastLoginAt *time.Time
+	var createdAt, updatedAt time.Time
+	err := scanner.Scan(&u.ID, &u.OrgID, &u.Email, &u.Name, &u.PasswordHash, &u.Status, &lastLoginAt, &createdAt, &updatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	u.LastLoginAt = timeToMillisPtr(lastLoginAt)
+	u.CreatedAt = createdAt.UnixMilli()
+	u.UpdatedAt = updatedAt.UnixMilli()
+	return &u, nil
 }
-func (p *PostgresAppStore) ListMembers(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Membership], error) {
-	return store.PageResult[*control.Membership]{}, nil
+
+// ── RBAC ──────────────────────────────────────────────────────────────────────
+
+func (p *PostgresAppStore) InsertRole(ctx context.Context, role *control.Role) error {
+	permissions, _ := json.Marshal(role.Permissions)
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO roles (id, org_id, name, permissions, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, role.ID, role.OrgID, role.Name, string(permissions), toTime(role.CreatedAt), toTime(role.UpdatedAt))
+	return err
 }
-func (p *PostgresAppStore) RemoveMember(_ context.Context, _, _ string) error { return nil }
+
+func (p *PostgresAppStore) GetRole(ctx context.Context, id string) (*control.Role, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, name, permissions, created_at, updated_at
+		FROM roles WHERE id = $1
+	`, id)
+	return scanPostgresRole(row)
+}
+
+func (p *PostgresAppStore) ListRoles(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Role], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, org_id, name, permissions, created_at, updated_at
+		FROM roles WHERE org_id = $1 ORDER BY name ASC
+	`, orgID)
+	if err != nil {
+		return store.PageResult[*control.Role]{}, err
+	}
+	defer rows.Close()
+
+	var roles []*control.Role
+	for rows.Next() {
+		role, err := scanPostgresRole(rows)
+		if err != nil {
+			return store.PageResult[*control.Role]{}, err
+		}
+		roles = append(roles, role)
+	}
+	return store.Paginate(roles, page), rows.Err()
+}
+
+func (p *PostgresAppStore) UpdateRole(ctx context.Context, id string, role *control.Role) error {
+	permissions, _ := json.Marshal(role.Permissions)
+	_, err := p.pool.Exec(ctx, `
+		UPDATE roles SET name = $1, permissions = $2, updated_at = $3 WHERE id = $4
+	`, role.Name, string(permissions), toTime(role.UpdatedAt), id)
+	return err
+}
+
+func (p *PostgresAppStore) DeleteRole(ctx context.Context, id string) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM roles WHERE id = $1`, id)
+	return err
+}
+
+func (p *PostgresAppStore) InsertBinding(ctx context.Context, binding *control.Binding) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO bindings (id, org_id, role_id, subject, scope, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, binding.ID, binding.OrgID, binding.RoleID, binding.Subject, binding.Scope, toTime(binding.CreatedAt))
+	return err
+}
+
+func (p *PostgresAppStore) GetBinding(ctx context.Context, id string) (*control.Binding, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, role_id, subject, scope, created_at
+		FROM bindings WHERE id = $1
+	`, id)
+	return scanPostgresBinding(row)
+}
+
+func (p *PostgresAppStore) ListBindings(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Binding], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, org_id, role_id, subject, scope, created_at
+		FROM bindings WHERE org_id = $1 ORDER BY created_at ASC
+	`, orgID)
+	if err != nil {
+		return store.PageResult[*control.Binding]{}, err
+	}
+	defer rows.Close()
+
+	var bindings []*control.Binding
+	for rows.Next() {
+		binding, err := scanPostgresBinding(rows)
+		if err != nil {
+			return store.PageResult[*control.Binding]{}, err
+		}
+		bindings = append(bindings, binding)
+	}
+	return store.Paginate(bindings, page), rows.Err()
+}
+
+func (p *PostgresAppStore) DeleteBinding(ctx context.Context, id string) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM bindings WHERE id = $1`, id)
+	return err
+}
+
+func scanPostgresRole(scanner postgresScanner) (*control.Role, error) {
+	var role control.Role
+	var permissions string
+	var createdAt, updatedAt time.Time
+	err := scanner.Scan(&role.ID, &role.OrgID, &role.Name, &permissions, &createdAt, &updatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal([]byte(permissions), &role.Permissions); err != nil {
+		role.Permissions = nil
+	}
+	role.CreatedAt = createdAt.UnixMilli()
+	role.UpdatedAt = updatedAt.UnixMilli()
+	return &role, nil
+}
+
+func scanPostgresBinding(scanner postgresScanner) (*control.Binding, error) {
+	var binding control.Binding
+	var createdAt time.Time
+	err := scanner.Scan(&binding.ID, &binding.OrgID, &binding.RoleID, &binding.Subject, &binding.Scope, &createdAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	binding.CreatedAt = createdAt.UnixMilli()
+	return &binding, nil
+}
+
+// ── MembershipStore ───────────────────────────────────────────────────────────
+
+func (p *PostgresAppStore) AddMember(ctx context.Context, m *control.Membership) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO memberships (id, org_id, user_id, role, invited_by, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, m.ID, m.OrgID, m.UserID, m.Role, m.InvitedBy, toTime(m.CreatedAt))
+	return err
+}
+
+func (p *PostgresAppStore) GetMembership(ctx context.Context, orgID, userID string) (*control.Membership, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, user_id, role, invited_by, created_at
+		FROM memberships WHERE org_id = $1 AND user_id = $2
+	`, orgID, userID)
+	return scanPostgresMembership(row)
+}
+
+func (p *PostgresAppStore) ListMembers(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Membership], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, org_id, user_id, role, invited_by, created_at
+		FROM memberships WHERE org_id = $1 ORDER BY created_at ASC
+	`, orgID)
+	if err != nil {
+		return store.PageResult[*control.Membership]{}, err
+	}
+	defer rows.Close()
+
+	var memberships []*control.Membership
+	for rows.Next() {
+		m, err := scanPostgresMembership(rows)
+		if err != nil {
+			return store.PageResult[*control.Membership]{}, err
+		}
+		memberships = append(memberships, m)
+	}
+	return store.Paginate(memberships, page), rows.Err()
+}
+
+func (p *PostgresAppStore) RemoveMember(ctx context.Context, orgID, userID string) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM memberships WHERE org_id = $1 AND user_id = $2`, orgID, userID)
+	return err
+}
+
+func scanPostgresMembership(scanner postgresScanner) (*control.Membership, error) {
+	var m control.Membership
+	var createdAt time.Time
+	err := scanner.Scan(&m.ID, &m.OrgID, &m.UserID, &m.Role, &m.InvitedBy, &createdAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	m.CreatedAt = createdAt.UnixMilli()
+	return &m, nil
+}
 
 // ── ProjectStore — maps to workspaces table ───────────────────────────────────
 
 func (p *PostgresAppStore) CreateProject(ctx context.Context, proj *control.Project) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO workspaces (id, name, slug, description, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, proj.ID, proj.Name, proj.Slug, proj.Description, toTime(proj.CreatedAt), toTime(proj.UpdatedAt))
+		INSERT INTO workspaces (id, org_id, name, slug, description, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, proj.ID, proj.OrgID, proj.Name, proj.Slug, proj.Description, toTime(proj.CreatedAt), toTime(proj.UpdatedAt))
 	return err
 }
 
@@ -193,8 +405,8 @@ func (p *PostgresAppStore) GetProject(ctx context.Context, id string) (*control.
 	var proj control.Project
 	var createdAt, updatedAt time.Time
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, name, slug, description, created_at, updated_at FROM workspaces WHERE id = $1
-	`, id).Scan(&proj.ID, &proj.Name, &proj.Slug, &proj.Description, &createdAt, &updatedAt)
+		SELECT id, org_id, name, slug, description, created_at, updated_at FROM workspaces WHERE id = $1
+	`, id).Scan(&proj.ID, &proj.OrgID, &proj.Name, &proj.Slug, &proj.Description, &createdAt, &updatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -206,29 +418,90 @@ func (p *PostgresAppStore) GetProject(ctx context.Context, id string) (*control.
 	return &proj, nil
 }
 
-func (p *PostgresAppStore) ListProjects(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Project], error) {
-	return store.PageResult[*control.Project]{}, nil
+func (p *PostgresAppStore) ListProjects(ctx context.Context, orgID string, page store.Page) (store.PageResult[*control.Project], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, org_id, name, slug, description, created_at, updated_at
+		FROM workspaces WHERE org_id = $1 ORDER BY name ASC
+	`, orgID)
+	if err != nil {
+		return store.PageResult[*control.Project]{}, err
+	}
+	defer rows.Close()
+
+	var projects []*control.Project
+	for rows.Next() {
+		var proj control.Project
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&proj.ID, &proj.OrgID, &proj.Name, &proj.Slug, &proj.Description, &createdAt, &updatedAt); err != nil {
+			return store.PageResult[*control.Project]{}, err
+		}
+		proj.CreatedAt = createdAt.UnixMilli()
+		proj.UpdatedAt = updatedAt.UnixMilli()
+		projects = append(projects, &proj)
+	}
+	return store.Paginate(projects, page), rows.Err()
 }
 
-// ── EnvironmentStore stubs ────────────────────────────────────────────────────
+// ── EnvironmentStore ──────────────────────────────────────────────────────────
 
-func (p *PostgresAppStore) CreateEnvironment(_ context.Context, _ *control.Environment) error {
-	return nil
+func (p *PostgresAppStore) CreateEnvironment(ctx context.Context, e *control.Environment) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO environments (id, project_id, name, slug, type, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`, e.ID, e.ProjectID, e.Name, e.Slug, e.Type, toTime(e.CreatedAt), toTime(e.UpdatedAt))
+	return err
 }
-func (p *PostgresAppStore) GetEnvironment(_ context.Context, id string) (*control.Environment, error) {
-	if id == "default" {
-		return &control.Environment{ID: "default", ProjectID: "default", Name: "Default", Slug: "default"}, nil
+
+func (p *PostgresAppStore) GetEnvironment(ctx context.Context, id string) (*control.Environment, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, project_id, name, slug, type, created_at, updated_at
+		FROM environments WHERE id = $1
+	`, id)
+	return scanPostgresEnvironment(row)
+}
+
+func (p *PostgresAppStore) GetEnvironmentBySlug(ctx context.Context, projectID, slug string) (*control.Environment, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, project_id, name, slug, type, created_at, updated_at
+		FROM environments WHERE project_id = $1 AND slug = $2
+	`, projectID, slug)
+	return scanPostgresEnvironment(row)
+}
+
+func (p *PostgresAppStore) ListEnvironments(ctx context.Context, projectID string, page store.Page) (store.PageResult[*control.Environment], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, project_id, name, slug, type, created_at, updated_at
+		FROM environments WHERE project_id = $1 ORDER BY created_at ASC
+	`, projectID)
+	if err != nil {
+		return store.PageResult[*control.Environment]{}, err
 	}
-	return nil, nil
-}
-func (p *PostgresAppStore) GetEnvironmentBySlug(_ context.Context, projectID, slug string) (*control.Environment, error) {
-	if slug == "default" {
-		return &control.Environment{ID: "default", ProjectID: projectID, Name: "Default", Slug: "default"}, nil
+	defer rows.Close()
+
+	var environments []*control.Environment
+	for rows.Next() {
+		e, err := scanPostgresEnvironment(rows)
+		if err != nil {
+			return store.PageResult[*control.Environment]{}, err
+		}
+		environments = append(environments, e)
 	}
-	return nil, nil
+	return store.Paginate(environments, page), rows.Err()
 }
-func (p *PostgresAppStore) ListEnvironments(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Environment], error) {
-	return store.PageResult[*control.Environment]{Items: []*control.Environment{{ID: "default", ProjectID: "default", Name: "Default", Slug: "default"}}}, nil
+
+func scanPostgresEnvironment(scanner postgresScanner) (*control.Environment, error) {
+	var e control.Environment
+	var createdAt, updatedAt time.Time
+	err := scanner.Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &createdAt, &updatedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	e.CreatedAt = createdAt.UnixMilli()
+	e.UpdatedAt = updatedAt.UnixMilli()
+	return &e, nil
 }
 
 // ── AgentStore ────────────────────────────────────────────────────────────────
@@ -339,10 +612,14 @@ func (p *PostgresAppStore) ListAgents(ctx context.Context, envID string, page st
 // ── PolicyStore ───────────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) CreatePolicy(ctx context.Context, pol *control.PolicyRecord) error {
+	var casbinDoc any
+	if pol.CasbinDocument != "" {
+		casbinDoc = pol.CasbinDocument
+	}
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO policies (id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_amount_nanos, config, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, pol.ID, pol.ProjectID, pol.Name, pol.Description, pol.AllowedConnectors, pol.AllowedMethods, amountToDB(pol.BudgetCap), pol.Config, toTime(pol.CreatedAt), toTime(pol.UpdatedAt))
+		INSERT INTO policies (id, workspace_id, name, description, allowed_connectors, allowed_methods, casbin_document, budget_cap_amount_nanos, config, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, pol.ID, pol.ProjectID, pol.Name, pol.Description, pol.AllowedConnectors, pol.AllowedMethods, casbinDoc, amountToDB(pol.BudgetCap), pol.Config, toTime(pol.CreatedAt), toTime(pol.UpdatedAt))
 	return err
 }
 
@@ -351,9 +628,9 @@ func (p *PostgresAppStore) GetPolicy(ctx context.Context, id string) (*control.P
 	var createdAt, updatedAt time.Time
 	var budgetAmount int64
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_amount_nanos, config, created_at, updated_at
+		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, COALESCE(casbin_document, ''), budget_cap_amount_nanos, config, created_at, updated_at
 		FROM policies WHERE id = $1
-	`, id).Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &budgetAmount, &pol.Config, &createdAt, &updatedAt)
+	`, id).Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &pol.CasbinDocument, &budgetAmount, &pol.Config, &createdAt, &updatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -380,7 +657,7 @@ func (p *PostgresAppStore) GetAgentPolicy(ctx context.Context, agentID string) (
 
 func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.PolicyRecord], error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, budget_cap_amount_nanos, config, created_at, updated_at
+		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, COALESCE(casbin_document, ''), budget_cap_amount_nanos, config, created_at, updated_at
 		FROM policies WHERE workspace_id = $1 ORDER BY name
 	`, envID)
 	if err != nil {
@@ -393,7 +670,7 @@ func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string, page 
 		var pol control.PolicyRecord
 		var createdAt, updatedAt time.Time
 		var budgetAmount int64
-		if err := rows.Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &budgetAmount, &pol.Config, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &pol.CasbinDocument, &budgetAmount, &pol.Config, &createdAt, &updatedAt); err != nil {
 			return store.PageResult[*control.PolicyRecord]{}, err
 		}
 		pol.BudgetCap = amountFromDB(budgetAmount)
@@ -417,51 +694,50 @@ func (p *PostgresAppStore) CreateRun(ctx context.Context, r *runtimemodel.RunRec
 		budgetAmount = &v
 	}
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO runs (id, workspace_id, agent_id, policy_id, name, status, budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message, started_at, ended_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-	`, r.ID, r.ProjectID, r.AgentID, r.PolicyID, r.Name, r.Status, budgetAmount, amountToDB(r.Spent),
-		metaJSON, r.ErrorMessage, toTime(r.StartedAt), ptrToTime(r.EndedAt), toTime(r.CreatedAt), toTime(r.UpdatedAt))
+		INSERT INTO runs (
+			id, project_id, env_id, agent_id, policy_id, name, status,
+			budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message,
+			trigger_type, trigger_id, correlation_id, session_id, idempotency_key,
+			started_at, ended_at, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+	`, r.ID, r.ProjectID, r.EnvID, r.AgentID, r.PolicyID, r.Name, r.Status, budgetAmount, amountToDB(r.Spent),
+		metaJSON, r.ErrorMessage, r.TriggerType, r.TriggerID, r.CorrelationID, r.SessionID, r.IdempotencyKey,
+		toTime(r.StartedAt), ptrToTime(r.EndedAt), toTime(r.CreatedAt), toTime(r.UpdatedAt))
 	return err
 }
 
 func (p *PostgresAppStore) GetRunByID(ctx context.Context, id string) (*runtimemodel.RunRecord, error) {
-	var r runtimemodel.RunRecord
-	var metaJSON []byte
-	var startedAt, createdAt, updatedAt time.Time
-	var endedAt *time.Time
-	var budgetAmount *int64
-	var spentAmount int64
-	err := p.pool.QueryRow(ctx, `
-		SELECT id, workspace_id, agent_id, policy_id, name, status, budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message, started_at, ended_at, created_at, updated_at
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, project_id, env_id, agent_id, policy_id, name, status,
+		       budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message,
+		       trigger_type, trigger_id, correlation_id, session_id, idempotency_key,
+		       started_at, ended_at, created_at, updated_at
 		FROM runs WHERE id = $1
-	`, id).Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.PolicyID, &r.Name, &r.Status, &budgetAmount, &spentAmount,
-		&metaJSON, &r.ErrorMessage, &startedAt, &endedAt, &createdAt, &updatedAt)
+	`, id)
+	r, err := scanPostgresRun(row)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if budgetAmount != nil {
-		r.BudgetCap = amountFromDB(*budgetAmount)
-	}
-	r.Spent = amountFromDB(spentAmount)
-	if err := json.Unmarshal(metaJSON, &r.Metadata); err != nil {
-		r.Metadata = make(map[string]any)
-	}
-	r.StartedAt = startedAt.UnixMilli()
-	if endedAt != nil {
-		ms := endedAt.UnixMilli()
-		r.EndedAt = &ms
-	}
-	r.CreatedAt = createdAt.UnixMilli()
-	r.UpdatedAt = updatedAt.UnixMilli()
-	r.EnvID = "default"
-	return &r, nil
+	return r, nil
 }
 
-func (p *PostgresAppStore) GetRunByIdempotencyKey(_ context.Context, _, _ string) (*runtimemodel.RunRecord, error) {
-	return nil, nil
+func (p *PostgresAppStore) GetRunByIdempotencyKey(ctx context.Context, envID, key string) (*runtimemodel.RunRecord, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, project_id, env_id, agent_id, policy_id, name, status,
+		       budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message,
+		       trigger_type, trigger_id, correlation_id, session_id, idempotency_key,
+		       started_at, ended_at, created_at, updated_at
+		FROM runs WHERE env_id = $1 AND idempotency_key = $2
+	`, envID, key)
+	r, err := scanPostgresRun(row)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	return r, err
 }
 
 func (p *PostgresAppStore) UpdateRun(ctx context.Context, id string, update *runtimemodel.RunUpdate) error {
@@ -482,13 +758,23 @@ func (p *PostgresAppStore) UpdateRun(ctx context.Context, id string, update *run
 }
 
 func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.RunFilter, page store.Page) (store.PageResult[*runtimemodel.RunRecord], error) {
-	query := `SELECT id, workspace_id, agent_id, policy_id, name, status, budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message, started_at, ended_at, created_at, updated_at FROM runs WHERE 1=1`
+	query := `
+		SELECT id, project_id, env_id, agent_id, policy_id, name, status,
+		       budget_cap_amount_nanos, spent_amount_nanos, metadata, error_message,
+		       trigger_type, trigger_id, correlation_id, session_id, idempotency_key,
+		       started_at, ended_at, created_at, updated_at
+		FROM runs WHERE 1=1`
 	var args []any
 	n := 1
 
 	if filter.ProjectID != "" {
-		query += fmt.Sprintf(` AND workspace_id = $%d`, n)
+		query += fmt.Sprintf(` AND project_id = $%d`, n)
 		args = append(args, filter.ProjectID)
+		n++
+	}
+	if filter.EnvID != "" {
+		query += fmt.Sprintf(` AND env_id = $%d`, n)
+		args = append(args, filter.EnvID)
 		n++
 	}
 	if filter.AgentID != "" {
@@ -526,34 +812,50 @@ func (p *PostgresAppStore) ListRuns(ctx context.Context, filter *runtimemodel.Ru
 
 	var runs []*runtimemodel.RunRecord
 	for rows.Next() {
-		var r runtimemodel.RunRecord
-		var metaJSON []byte
-		var startedAt, createdAt, updatedAt time.Time
-		var endedAt *time.Time
-		var budgetAmount *int64
-		var spentAmount int64
-		if err := rows.Scan(&r.ID, &r.ProjectID, &r.AgentID, &r.PolicyID, &r.Name, &r.Status, &budgetAmount, &spentAmount,
-			&metaJSON, &r.ErrorMessage, &startedAt, &endedAt, &createdAt, &updatedAt); err != nil {
+		r, err := scanPostgresRun(rows)
+		if err != nil {
 			return store.PageResult[*runtimemodel.RunRecord]{}, err
 		}
-		if budgetAmount != nil {
-			r.BudgetCap = amountFromDB(*budgetAmount)
-		}
-		r.Spent = amountFromDB(spentAmount)
-		if err := json.Unmarshal(metaJSON, &r.Metadata); err != nil {
-			r.Metadata = make(map[string]any)
-		}
-		r.StartedAt = startedAt.UnixMilli()
-		if endedAt != nil {
-			ms := endedAt.UnixMilli()
-			r.EndedAt = &ms
-		}
-		r.CreatedAt = createdAt.UnixMilli()
-		r.UpdatedAt = updatedAt.UnixMilli()
-		r.EnvID = "default"
-		runs = append(runs, &r)
+		runs = append(runs, r)
 	}
 	return store.Paginate(runs, page), rows.Err()
+}
+
+type postgresScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanPostgresRun(scanner postgresScanner) (*runtimemodel.RunRecord, error) {
+	var r runtimemodel.RunRecord
+	var metaJSON []byte
+	var startedAt, createdAt, updatedAt time.Time
+	var endedAt *time.Time
+	var budgetAmount *int64
+	var spentAmount int64
+	err := scanner.Scan(
+		&r.ID, &r.ProjectID, &r.EnvID, &r.AgentID, &r.PolicyID, &r.Name, &r.Status,
+		&budgetAmount, &spentAmount, &metaJSON, &r.ErrorMessage,
+		&r.TriggerType, &r.TriggerID, &r.CorrelationID, &r.SessionID, &r.IdempotencyKey,
+		&startedAt, &endedAt, &createdAt, &updatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if budgetAmount != nil {
+		r.BudgetCap = amountFromDB(*budgetAmount)
+	}
+	r.Spent = amountFromDB(spentAmount)
+	if err := json.Unmarshal(metaJSON, &r.Metadata); err != nil {
+		r.Metadata = make(map[string]any)
+	}
+	r.StartedAt = startedAt.UnixMilli()
+	if endedAt != nil {
+		ms := endedAt.UnixMilli()
+		r.EndedAt = &ms
+	}
+	r.CreatedAt = createdAt.UnixMilli()
+	r.UpdatedAt = updatedAt.UnixMilli()
+	return &r, nil
 }
 
 // ── ActionStore ───────────────────────────────────────────────────────────────
@@ -706,7 +1008,7 @@ func (p *PostgresAppStore) SavePriceBook(ctx context.Context, book *runtimemodel
 				effective_from, effective_to, revision_note, sort_order
 			)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-		`, uuid.NewString(), book.Version, entry.Provider, entry.Match, entry.Source, entry.Currency,
+		`, ids.New("psn"), book.Version, entry.Provider, entry.Match, entry.Source, entry.Currency,
 			amountToDB(entry.InputPerMillion), amountToDB(entry.OutputPerMillion),
 			amountToDB(entry.CacheReadPerMillion), amountToDB(entry.CacheWritePerMillion),
 			amountToDB(entry.ReasoningPerMillion), amountToDB(entry.AudioInputPerMillion),
@@ -896,46 +1198,233 @@ func (p *PostgresAppStore) pgAggregateDim(ctx context.Context, dest map[string]m
 
 // ── TokenStore ────────────────────────────────────────────────────────────────
 
-func (p *PostgresAppStore) InsertSession(_ context.Context, _ *control.Session) error { return nil }
-func (p *PostgresAppStore) GetSessionByHash(_ context.Context, _ string) (*control.Session, error) {
-	return nil, nil
+func (p *PostgresAppStore) InsertSession(ctx context.Context, session *control.Session) error {
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO sessions (id, org_id, user_id, token_hash, expires_at, created_at, last_used_at, user_agent, ip, revoked_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, session.ID, session.OrgID, session.UserID, session.TokenHash, toTime(session.ExpiresAt),
+		toTime(session.CreatedAt), ptrToTime(session.LastUsedAt), session.UserAgent, session.IP, ptrToTime(session.RevokedAt))
+	return err
 }
-func (p *PostgresAppStore) GetSession(_ context.Context, _ string) (*control.Session, error) {
-	return nil, nil
-}
-func (p *PostgresAppStore) ListSessions(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.Session], error) {
-	return store.PageResult[*control.Session]{}, nil
-}
-func (p *PostgresAppStore) RevokeSession(_ context.Context, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchSession(_ context.Context, _ string) error     { return nil }
 
-func (p *PostgresAppStore) InsertAPIToken(_ context.Context, _ *control.APIToken) error { return nil }
-func (p *PostgresAppStore) GetAPITokenByHash(_ context.Context, _ string) (*control.APIToken, error) {
-	return nil, nil
+func (p *PostgresAppStore) GetSessionByHash(ctx context.Context, hash string) (*control.Session, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, user_id, token_hash, expires_at, created_at, last_used_at, user_agent, ip, revoked_at
+		FROM sessions WHERE token_hash = $1
+	`, []byte(hash))
+	return scanPostgresSession(row)
 }
-func (p *PostgresAppStore) GetAPIToken(_ context.Context, _ string) (*control.APIToken, error) {
-	return nil, nil
-}
-func (p *PostgresAppStore) ListAPITokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.APIToken], error) {
-	return store.PageResult[*control.APIToken]{}, nil
-}
-func (p *PostgresAppStore) RevokeAPIToken(_ context.Context, _, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchAPIToken(_ context.Context, _ string) error        { return nil }
 
-func (p *PostgresAppStore) InsertAgentToken(_ context.Context, _ *control.AgentToken) error {
-	return nil
+func (p *PostgresAppStore) GetSession(ctx context.Context, id string) (*control.Session, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, user_id, token_hash, expires_at, created_at, last_used_at, user_agent, ip, revoked_at
+		FROM sessions WHERE id = $1
+	`, id)
+	return scanPostgresSession(row)
 }
-func (p *PostgresAppStore) GetAgentTokenByHash(_ context.Context, _ string) (*control.AgentToken, error) {
-	return nil, nil
+
+func (p *PostgresAppStore) ListSessions(ctx context.Context, userID string, page store.Page) (store.PageResult[*control.Session], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, org_id, user_id, token_hash, expires_at, created_at, last_used_at, user_agent, ip, revoked_at
+		FROM sessions WHERE user_id = $1 ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return store.PageResult[*control.Session]{}, err
+	}
+	defer rows.Close()
+
+	var items []*control.Session
+	for rows.Next() {
+		item, err := scanPostgresSession(rows)
+		if err != nil {
+			return store.PageResult[*control.Session]{}, err
+		}
+		items = append(items, item)
+	}
+	return store.Paginate(items, page), rows.Err()
 }
-func (p *PostgresAppStore) GetAgentToken(_ context.Context, _ string) (*control.AgentToken, error) {
-	return nil, nil
+
+func (p *PostgresAppStore) RevokeSession(ctx context.Context, sessionID, revokedBy string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE sessions SET revoked_at = $1 WHERE id = $2`, time.Now(), sessionID)
+	return err
 }
-func (p *PostgresAppStore) ListAgentTokens(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.AgentToken], error) {
-	return store.PageResult[*control.AgentToken]{}, nil
+
+func (p *PostgresAppStore) TouchSession(ctx context.Context, sessionID string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE sessions SET last_used_at = $1 WHERE id = $2`, time.Now(), sessionID)
+	return err
 }
-func (p *PostgresAppStore) RevokeAgentToken(_ context.Context, _, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchAgentToken(_ context.Context, _ string) error        { return nil }
+
+func (p *PostgresAppStore) InsertAPIToken(ctx context.Context, token *control.APIToken) error {
+	scopes, _ := json.Marshal(token.Scopes)
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO api_tokens (id, org_id, user_id, name, token_hash, scopes, expires_at, last_used_at, revoked_at, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, token.ID, token.OrgID, token.UserID, token.Name, token.TokenHash, string(scopes),
+		ptrToTime(token.ExpiresAt), ptrToTime(token.LastUsedAt), ptrToTime(token.RevokedAt), toTime(token.CreatedAt))
+	return err
+}
+
+func (p *PostgresAppStore) GetAPITokenByHash(ctx context.Context, hash string) (*control.APIToken, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, user_id, name, token_hash, scopes, expires_at, last_used_at, revoked_at, created_at
+		FROM api_tokens WHERE token_hash = $1
+	`, []byte(hash))
+	return scanPostgresAPIToken(row)
+}
+
+func (p *PostgresAppStore) GetAPIToken(ctx context.Context, id string) (*control.APIToken, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, user_id, name, token_hash, scopes, expires_at, last_used_at, revoked_at, created_at
+		FROM api_tokens WHERE id = $1
+	`, id)
+	return scanPostgresAPIToken(row)
+}
+
+func (p *PostgresAppStore) ListAPITokens(ctx context.Context, userID string, page store.Page) (store.PageResult[*control.APIToken], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, org_id, user_id, name, token_hash, scopes, expires_at, last_used_at, revoked_at, created_at
+		FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return store.PageResult[*control.APIToken]{}, err
+	}
+	defer rows.Close()
+
+	var items []*control.APIToken
+	for rows.Next() {
+		item, err := scanPostgresAPIToken(rows)
+		if err != nil {
+			return store.PageResult[*control.APIToken]{}, err
+		}
+		items = append(items, item)
+	}
+	return store.Paginate(items, page), rows.Err()
+}
+
+func (p *PostgresAppStore) RevokeAPIToken(ctx context.Context, tokenID, revokedBy, reason string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE api_tokens SET revoked_at = $1 WHERE id = $2`, time.Now(), tokenID)
+	return err
+}
+
+func (p *PostgresAppStore) TouchAPIToken(ctx context.Context, tokenID string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE api_tokens SET last_used_at = $1 WHERE id = $2`, time.Now(), tokenID)
+	return err
+}
+
+func (p *PostgresAppStore) InsertAgentToken(ctx context.Context, token *control.AgentToken) error {
+	scopes, _ := json.Marshal(token.Scopes)
+	_, err := p.pool.Exec(ctx, `
+		INSERT INTO agent_tokens_new (id, org_id, agent_id, name, token_hash, scopes, expires_at, last_used_at, created_at, revoked_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, token.ID, token.OrgID, token.AgentID, token.Name, token.TokenHash, string(scopes),
+		toTime(token.ExpiresAt), ptrToTime(token.LastUsedAt), toTime(token.CreatedAt), ptrToTime(token.RevokedAt))
+	return err
+}
+
+func (p *PostgresAppStore) GetAgentTokenByHash(ctx context.Context, hash string) (*control.AgentToken, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, agent_id, name, token_hash, scopes, expires_at, last_used_at, created_at, revoked_at
+		FROM agent_tokens_new WHERE token_hash = $1
+	`, []byte(hash))
+	return scanPostgresAgentToken(row)
+}
+
+func (p *PostgresAppStore) GetAgentToken(ctx context.Context, id string) (*control.AgentToken, error) {
+	row := p.pool.QueryRow(ctx, `
+		SELECT id, org_id, agent_id, name, token_hash, scopes, expires_at, last_used_at, created_at, revoked_at
+		FROM agent_tokens_new WHERE id = $1
+	`, id)
+	return scanPostgresAgentToken(row)
+}
+
+func (p *PostgresAppStore) ListAgentTokens(ctx context.Context, agentID string, page store.Page) (store.PageResult[*control.AgentToken], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, org_id, agent_id, name, token_hash, scopes, expires_at, last_used_at, created_at, revoked_at
+		FROM agent_tokens_new WHERE agent_id = $1 ORDER BY created_at DESC
+	`, agentID)
+	if err != nil {
+		return store.PageResult[*control.AgentToken]{}, err
+	}
+	defer rows.Close()
+
+	var items []*control.AgentToken
+	for rows.Next() {
+		item, err := scanPostgresAgentToken(rows)
+		if err != nil {
+			return store.PageResult[*control.AgentToken]{}, err
+		}
+		items = append(items, item)
+	}
+	return store.Paginate(items, page), rows.Err()
+}
+
+func (p *PostgresAppStore) RevokeAgentToken(ctx context.Context, tokenID, revokedBy, reason string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE agent_tokens_new SET revoked_at = $1 WHERE id = $2`, time.Now(), tokenID)
+	return err
+}
+
+func (p *PostgresAppStore) TouchAgentToken(ctx context.Context, tokenID string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE agent_tokens_new SET last_used_at = $1 WHERE id = $2`, time.Now(), tokenID)
+	return err
+}
+
+func scanPostgresSession(scanner postgresScanner) (*control.Session, error) {
+	var s control.Session
+	var expiresAt, createdAt time.Time
+	var lastUsedAt, revokedAt *time.Time
+	err := scanner.Scan(&s.ID, &s.OrgID, &s.UserID, &s.TokenHash, &expiresAt, &createdAt, &lastUsedAt, &s.UserAgent, &s.IP, &revokedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	s.ExpiresAt = expiresAt.UnixMilli()
+	s.CreatedAt = createdAt.UnixMilli()
+	s.LastUsedAt = timeToMillisPtr(lastUsedAt)
+	s.RevokedAt = timeToMillisPtr(revokedAt)
+	return &s, nil
+}
+
+func scanPostgresAPIToken(scanner postgresScanner) (*control.APIToken, error) {
+	var t control.APIToken
+	var scopes string
+	var expiresAt, lastUsedAt, revokedAt *time.Time
+	var createdAt time.Time
+	err := scanner.Scan(&t.ID, &t.OrgID, &t.UserID, &t.Name, &t.TokenHash, &scopes, &expiresAt, &lastUsedAt, &revokedAt, &createdAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(scopes), &t.Scopes)
+	t.ExpiresAt = timeToMillisPtr(expiresAt)
+	t.LastUsedAt = timeToMillisPtr(lastUsedAt)
+	t.RevokedAt = timeToMillisPtr(revokedAt)
+	t.CreatedAt = createdAt.UnixMilli()
+	return &t, nil
+}
+
+func scanPostgresAgentToken(scanner postgresScanner) (*control.AgentToken, error) {
+	var t control.AgentToken
+	var scopes string
+	var expiresAt, createdAt time.Time
+	var lastUsedAt, revokedAt *time.Time
+	err := scanner.Scan(&t.ID, &t.OrgID, &t.AgentID, &t.Name, &t.TokenHash, &scopes, &expiresAt, &lastUsedAt, &createdAt, &revokedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal([]byte(scopes), &t.Scopes)
+	t.ExpiresAt = expiresAt.UnixMilli()
+	t.LastUsedAt = timeToMillisPtr(lastUsedAt)
+	t.CreatedAt = createdAt.UnixMilli()
+	t.RevokedAt = timeToMillisPtr(revokedAt)
+	return &t, nil
+}
 
 func (p *PostgresAppStore) GetTokenByHash(ctx context.Context, hash string) (*control.AgentToken, error) {
 	return p.GetAgentTokenByHash(ctx, hash)
@@ -952,8 +1441,46 @@ func (p *PostgresAppStore) RevokeToken(ctx context.Context, tokenID, revokedBy, 
 func (p *PostgresAppStore) TouchToken(ctx context.Context, tokenID string) error {
 	return p.TouchAgentToken(ctx, tokenID)
 }
-func (p *PostgresAppStore) UpdatePolicy(_ context.Context, _ string, _ *control.PolicyUpdate) error {
-	return nil
+func (p *PostgresAppStore) UpdatePolicy(ctx context.Context, id string, u *control.PolicyUpdate) error {
+	if u == nil {
+		return nil
+	}
+	query := `UPDATE policies SET updated_at = NOW()`
+	args := []any{}
+	if u.Description != nil {
+		query += `, description = $1`
+		args = append(args, *u.Description)
+	}
+	if len(u.AllowedConnectors) > 0 {
+		query += fmt.Sprintf(`, allowed_connectors = $%d`, len(args)+1)
+		args = append(args, u.AllowedConnectors)
+	}
+	if len(u.AllowedMethods) > 0 {
+		query += fmt.Sprintf(`, allowed_methods = $%d`, len(args)+1)
+		args = append(args, u.AllowedMethods)
+	}
+	if u.CasbinDocument != nil {
+		if *u.CasbinDocument == "" {
+			query += `, casbin_document = NULL`
+		} else {
+			query += fmt.Sprintf(`, casbin_document = $%d`, len(args)+1)
+			args = append(args, *u.CasbinDocument)
+		}
+	}
+	if u.ClearBudgetCap {
+		query += `, budget_cap_amount_nanos = 0`
+	} else if u.BudgetCap != nil {
+		query += fmt.Sprintf(`, budget_cap_amount_nanos = $%d`, len(args)+1)
+		args = append(args, amountToDB(*u.BudgetCap))
+	}
+	if u.Config != nil {
+		query += fmt.Sprintf(`, config = $%d`, len(args)+1)
+		args = append(args, u.Config)
+	}
+	query += fmt.Sprintf(` WHERE id = $%d`, len(args)+1)
+	args = append(args, id)
+	_, err := p.pool.Exec(ctx, query, args...)
+	return err
 }
 func (p *PostgresAppStore) DeletePolicy(ctx context.Context, id string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM policies WHERE id = $1`, id)
@@ -973,34 +1500,38 @@ func (p *PostgresAppStore) InsertRevokedToken(ctx context.Context, tokenID strin
 // ── CredentialStore ───────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) GetCredential(ctx context.Context, id string) (*control.ConnectorCredential, error) {
-	var c control.ConnectorCredential
-	var encrypted []byte
-	var createdAt time.Time
-	err := p.pool.QueryRow(ctx, `
-		SELECT id, workspace_id, connector, label, key_hash, encrypted, last_used_at, created_at
+	return scanPostgresCredential(p.pool.QueryRow(ctx, `
+		SELECT id, project_id, env_id, connector_type, account_id, label, description,
+		       source_type, encrypted_blob, key_hash, wrapping_key_id,
+		       secret_ref, secret_version, status, version,
+		       expires_at, rotated_at, rotated_by, last_used_at, last_validated_at,
+		       created_by, created_at, updated_at, revoked_at, revoked_by, revoke_reason
 		FROM credentials WHERE id = $1
-	`, id).Scan(&c.ID, &c.ProjectID, &c.ConnectorType, &c.Label, &c.KeyHash, &encrypted, &c.LastUsedAt, &createdAt)
-	if err == pgx.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	c.EncryptedBlob = encrypted
-	c.CreatedAt = createdAt.UnixMilli()
-	c.SourceType = control.CredSourceEncrypted
-	c.Status = control.CredStatusActive
-	return &c, nil
+	`, id))
 }
 
 func (p *PostgresAppStore) StoreCredential(ctx context.Context, c *control.ConnectorCredential) error {
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO credentials (id, workspace_id, connector, label, key_hash, encrypted, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (workspace_id, connector, key_hash) DO UPDATE SET
+		INSERT INTO credentials (
+			id, project_id, env_id, connector_type, account_id, label, description,
+			source_type, encrypted_blob, key_hash, wrapping_key_id,
+			secret_ref, secret_version, status, version,
+			expires_at, rotated_at, rotated_by, created_by, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		ON CONFLICT (id) DO UPDATE SET
 			label = excluded.label,
-			encrypted = excluded.encrypted
-	`, c.ID, c.ProjectID, c.ConnectorType, c.Label, c.KeyHash, c.EncryptedBlob, time.Now())
+			description = excluded.description,
+			encrypted_blob = excluded.encrypted_blob,
+			key_hash = excluded.key_hash,
+			wrapping_key_id = excluded.wrapping_key_id,
+			secret_ref = excluded.secret_ref,
+			secret_version = excluded.secret_version,
+			status = excluded.status,
+			updated_at = excluded.updated_at
+	`, c.ID, c.ProjectID, c.EnvID, c.ConnectorType, c.AccountID, c.Label, c.Description,
+		c.SourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID, c.SecretRef, c.SecretVersion,
+		c.Status, c.Version, ptrToTime(c.ExpiresAt), ptrToTime(c.RotatedAt), c.RotatedBy,
+		c.CreatedBy, toTime(c.CreatedAt), toTime(c.UpdatedAt))
 	return err
 }
 
@@ -1009,8 +1540,29 @@ func (p *PostgresAppStore) DeleteCredential(ctx context.Context, id string) erro
 	return err
 }
 
-func (p *PostgresAppStore) ListCredentials(_ context.Context, _ string, _ store.Page) (store.PageResult[*control.ConnectorCredential], error) {
-	return store.PageResult[*control.ConnectorCredential]{}, nil
+func (p *PostgresAppStore) ListCredentials(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.ConnectorCredential], error) {
+	rows, err := p.pool.Query(ctx, `
+		SELECT id, project_id, env_id, connector_type, account_id, label, description,
+		       source_type, encrypted_blob, key_hash, wrapping_key_id,
+		       secret_ref, secret_version, status, version,
+		       expires_at, rotated_at, rotated_by, last_used_at, last_validated_at,
+		       created_by, created_at, updated_at, revoked_at, revoked_by, revoke_reason
+		FROM credentials WHERE env_id = $1 AND status = 'active' ORDER BY created_at DESC
+	`, envID)
+	if err != nil {
+		return store.PageResult[*control.ConnectorCredential]{}, err
+	}
+	defer rows.Close()
+
+	var items []*control.ConnectorCredential
+	for rows.Next() {
+		c, err := scanPostgresCredential(rows)
+		if err != nil {
+			return store.PageResult[*control.ConnectorCredential]{}, err
+		}
+		items = append(items, c)
+	}
+	return store.Paginate(items, page), rows.Err()
 }
 
 // ── BudgetStore ──────────────────────────────────────────────────────────────
@@ -1055,31 +1607,83 @@ func (p *PostgresAppStore) DeleteBudget(ctx context.Context, agentID string) err
 }
 
 func (p *PostgresAppStore) ResolveCredential(ctx context.Context, filter *control.CredentialFilter) (*control.ConnectorCredential, error) {
+	label := filter.Label
+	if label == "" {
+		label = "primary"
+	}
+	return scanPostgresCredential(p.pool.QueryRow(ctx, `
+		SELECT id, project_id, env_id, connector_type, account_id, label, description,
+		       source_type, encrypted_blob, key_hash, wrapping_key_id,
+		       secret_ref, secret_version, status, version,
+		       expires_at, rotated_at, rotated_by, last_used_at, last_validated_at,
+		       created_by, created_at, updated_at, revoked_at, revoked_by, revoke_reason
+		FROM credentials
+		WHERE env_id = $1 AND connector_type = $2 AND status = 'active'
+		ORDER BY CASE WHEN label = $3 THEN 0 ELSE 1 END, created_at DESC
+		LIMIT 1
+	`, filter.EnvID, filter.ConnectorType, label))
+}
+
+func (p *PostgresAppStore) RotateCredential(ctx context.Context, id string, newBlob []byte, wrappingKeyID, rotatedBy string) error {
+	now := time.Now()
+	_, err := p.pool.Exec(ctx, `
+		UPDATE credentials SET
+			encrypted_blob = $1,
+			wrapping_key_id = $2,
+			rotated_at = $3,
+			rotated_by = $4,
+			version = version + 1,
+			updated_at = $3
+		WHERE id = $5
+	`, newBlob, wrappingKeyID, now, rotatedBy, id)
+	return err
+}
+
+func (p *PostgresAppStore) RevokeCredential(ctx context.Context, id, revokedBy, reason string) error {
+	now := time.Now()
+	_, err := p.pool.Exec(ctx, `
+		UPDATE credentials SET
+			status = 'revoked',
+			revoked_at = $1,
+			revoked_by = $2,
+			revoke_reason = $3,
+			updated_at = $1
+		WHERE id = $4
+	`, now, revokedBy, reason, id)
+	return err
+}
+
+func (p *PostgresAppStore) TouchCredential(ctx context.Context, id string) error {
+	_, err := p.pool.Exec(ctx, `UPDATE credentials SET last_used_at = $1 WHERE id = $2`, time.Now(), id)
+	return err
+}
+
+func scanPostgresCredential(scanner postgresScanner) (*control.ConnectorCredential, error) {
 	var c control.ConnectorCredential
-	var encrypted []byte
-	var createdAt time.Time
-	err := p.pool.QueryRow(ctx, `
-		SELECT id, workspace_id, connector, label, key_hash, encrypted, last_used_at, created_at
-		FROM credentials WHERE workspace_id = $1 AND connector = $2 ORDER BY created_at DESC LIMIT 1
-	`, filter.EnvID, filter.ConnectorType).Scan(&c.ID, &c.ProjectID, &c.ConnectorType, &c.Label, &c.KeyHash, &encrypted, &c.LastUsedAt, &createdAt)
+	var expiresAt, rotatedAt, lastUsedAt, lastValidatedAt, revokedAt *time.Time
+	var createdAt, updatedAt time.Time
+	err := scanner.Scan(
+		&c.ID, &c.ProjectID, &c.EnvID, &c.ConnectorType, &c.AccountID, &c.Label, &c.Description,
+		&c.SourceType, &c.EncryptedBlob, &c.KeyHash, &c.WrappingKeyID,
+		&c.SecretRef, &c.SecretVersion, &c.Status, &c.Version,
+		&expiresAt, &rotatedAt, &c.RotatedBy, &lastUsedAt, &lastValidatedAt,
+		&c.CreatedBy, &createdAt, &updatedAt, &revokedAt, &c.RevokedBy, &c.RevokeReason,
+	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	c.EncryptedBlob = encrypted
+	c.ExpiresAt = timeToMillisPtr(expiresAt)
+	c.RotatedAt = timeToMillisPtr(rotatedAt)
+	c.LastUsedAt = timeToMillisPtr(lastUsedAt)
+	c.LastValidatedAt = timeToMillisPtr(lastValidatedAt)
 	c.CreatedAt = createdAt.UnixMilli()
-	c.SourceType = control.CredSourceEncrypted
-	c.Status = control.CredStatusActive
+	c.UpdatedAt = updatedAt.UnixMilli()
+	c.RevokedAt = timeToMillisPtr(revokedAt)
 	return &c, nil
 }
-
-func (p *PostgresAppStore) RotateCredential(_ context.Context, _ string, _ []byte, _, _ string) error {
-	return nil
-}
-func (p *PostgresAppStore) RevokeCredential(_ context.Context, _, _, _ string) error { return nil }
-func (p *PostgresAppStore) TouchCredential(_ context.Context, _ string) error        { return nil }
 
 // ── Transaction ───────────────────────────────────────────────────────────────
 
@@ -1133,6 +1737,13 @@ func ptrToTime(ms *int64) *time.Time {
 	}
 	t := time.UnixMilli(*ms)
 	return &t
+}
+func timeToMillisPtr(t *time.Time) *int64 {
+	if t == nil {
+		return nil
+	}
+	ms := t.UnixMilli()
+	return &ms
 }
 func nullIfEmpty(value string) any {
 	if value == "" {

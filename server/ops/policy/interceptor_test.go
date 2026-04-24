@@ -27,7 +27,7 @@ func TestInterceptorBlocksDisallowedConnector(t *testing.T) {
 		UpdatedAt:         time.Now().UnixMilli(),
 	})
 
-	ic := New(app)
+	ic := New(app, nil)
 	action := &runtime.Action{
 		Invocation: runtime.Invocation{
 			InvocationRef: runtime.InvocationRef{
@@ -68,7 +68,7 @@ func TestInterceptorAllowsMatchingAction(t *testing.T) {
 		UpdatedAt:         time.Now().UnixMilli(),
 	})
 
-	ic := New(app)
+	ic := New(app, nil)
 	action := &runtime.Action{
 		Invocation: runtime.Invocation{
 			InvocationRef: runtime.InvocationRef{

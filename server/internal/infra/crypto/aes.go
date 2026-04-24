@@ -1,3 +1,7 @@
+// Package crypto stays under server/internal/infra because it is a server-side
+// secret-handling wrapper, not a generic cryptography API. Its callers live in
+// the server credential path and the implementation is intentionally local to
+// that trust boundary.
 package crypto
 
 import (

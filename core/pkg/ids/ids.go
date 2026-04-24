@@ -1,5 +1,8 @@
 // Package ids generates prefixed ULIDs used as stable public identifiers
 // across the Kave API, gRPC, and storage layers.
+//
+// Prefix registry:
+// act, agt, bge, bnd, pat, psn, role, run, ses, usr.
 package ids
 
 import (

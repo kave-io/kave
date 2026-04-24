@@ -10,9 +10,9 @@ type GrantInput struct {
 }
 
 type GrantOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunGrant(ctx context.Context, in GrantInput) (*GrantOutput, error) {
-	return nil, output.NotImplemented("rbac grant")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "rbac grant is not exposed by the HTTP bridge yet", Exit: 1}
 }

@@ -18,7 +18,7 @@ type SpanStoreResolver interface {
 	SpanStore(ctx context.Context, agentID string) (coreStore.SpanStore, error)
 }
 
-// Tracer implements pipeline.Interceptor and routes spans to the configured store.
+// Tracer implements pipeline.Stage and routes spans to the configured store.
 type Tracer struct {
 	spans  SpanStoreResolver
 	prices *cost.Service
@@ -142,7 +142,7 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 
 func (t *Tracer) Name() string { return "tracer" }
 
-var _ pipeline.Interceptor = (*Tracer)(nil)
+var _ pipeline.Stage = (*Tracer)(nil)
 
 func stringPtr(v string) *string {
 	if v == "" {

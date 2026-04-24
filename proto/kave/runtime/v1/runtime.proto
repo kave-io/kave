@@ -44,6 +44,11 @@ message CreateRunRequest {
   string agent_id = 3;
   optional string policy_id = 4;
   string name = 5;
+  TriggerType trigger_type = 6;
+  optional string trigger_id = 7;
+  optional string correlation_id = 8;
+  optional string session_id = 9;
+  optional string idempotency_key = 10;
 }
 
 message GetRunRequest {

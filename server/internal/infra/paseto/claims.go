@@ -1,3 +1,6 @@
+// Package paseto stays under server/internal/infra because its TTLs, claim
+// shape, and issuance rules are server authentication policy, not a reusable
+// generic token primitive.
 package paseto
 
 import (

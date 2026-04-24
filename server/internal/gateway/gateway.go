@@ -21,18 +21,21 @@ type FrameworkGateway struct {
 	transport      *HTTPTransport
 	registry       *Registry
 	allowAnonymous bool
+	vault          credresolve.VaultClient
 }
 
-func New(app store.AppStore, encKey []byte, p *pipeline.Pipeline, registry *Registry) *FrameworkGateway {
+func New(app store.AppStore, encKey []byte, p *pipeline.Pipeline, registry *Registry, allowAnonymous bool, vault credresolve.VaultClient) *FrameworkGateway {
 	if registry == nil {
 		registry = NewRegistry()
 	}
 	return &FrameworkGateway{
-		app:       app,
-		encKey:    encKey,
-		pipeline:  p,
-		transport: NewHTTPTransport(),
-		registry:  registry,
+		app:            app,
+		encKey:         encKey,
+		pipeline:       p,
+		transport:      NewHTTPTransport(),
+		registry:       registry,
+		allowAnonymous: allowAnonymous,
+		vault:          vault,
 	}
 }
 
@@ -44,7 +47,7 @@ func (g *FrameworkGateway) resolveCredential(ctx context.Context, envID, connect
 	if err != nil || cred == nil {
 		return "", fmt.Errorf("no credential for %s/%s", envID, connector)
 	}
-	return credresolve.Resolve(ctx, cred, nil)
+	return credresolve.Resolve(ctx, cred, g.vault)
 }
 
 func copyHeaders(dst, src http.Header) {

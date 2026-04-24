@@ -16,5 +16,5 @@ type RevokeOutput struct {
 }
 
 func RunRevoke(ctx context.Context, in RevokeInput) (*RevokeOutput, error) {
-	return nil, output.NotImplemented("agent token revoke")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "agent token revoke is not exposed by the HTTP bridge yet", Exit: 1}
 }

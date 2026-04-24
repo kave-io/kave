@@ -10,9 +10,9 @@ type TailInput struct {
 }
 
 type TailOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunTail(ctx context.Context, in TailInput) (*TailOutput, error) {
-	return nil, output.NotImplemented("span tail")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "span tail is not exposed by the HTTP bridge yet", Exit: 1}
 }

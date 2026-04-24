@@ -22,14 +22,13 @@ return matchesAllowLists(pol, action)
 
 Add `PolicyRecord.CasbinDocument string` + migration. Default rows leave it NULL → fast path. Plan 09 also touches this — coordinate so we don't re-do the same field.
 
-### 2. Migration numbering drift (postgres has two 006s)
-Postgres migrations contain `006_budgets.{up,down}.sql` AND `006_fx.{up,down}.sql`. Both are idempotent and were applied in filename-sort order, but the collision is a CI-run-order footgun. SQLite migrations skip 005/006 (jump 004 → 007).
+### 2. Migration numbering drift
+This app is still in first development and has no live migration history to preserve, so the numbering can be corrected directly.
 
 **Decision:**
-- Leave applied postgres migrations alone (never renumber applied).
-- Add `MIGRATIONS.md` in each engine's `migrations/` dir documenting numbering and the 006 collision.
-- Add startup check: if `schema_migrations` has two 006 rows with mismatched checksums, log a loud warning and refuse to start.
-- Going forward, allocate numbers monotonically (010, 011, …) — no per-topic namespacing.
+- Renumber the colliding and skipped migrations so each backend has a monotonic sequence.
+- Keep the semantic ordering intact, but remove the filename collision and the 005/006 gap.
+- Going forward, allocate numbers monotonically without per-topic namespacing.
 
 ### 3. Span store WHERE builders diverged
 `duckdb/span_store.go` and `postgres/span_store.go` both hand-build the same WHERE clause for `SpanFilter` (expanded in plan 08). Extract `server/internal/store/spansql/where.go`:

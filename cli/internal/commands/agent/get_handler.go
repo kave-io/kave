@@ -2,8 +2,9 @@ package agent
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
+	"github.com/kave-io/kave/cli/internal/runtime"
 )
 
 type GetInput struct {
@@ -16,5 +17,13 @@ type GetOutput struct {
 }
 
 func RunGet(ctx context.Context, in GetInput) (*GetOutput, error) {
-	return nil, output.NotImplemented("agent get")
+	rt, ok := runtime.FromContext(ctx)
+	if !ok || rt == nil {
+		return nil, fmt.Errorf("runtime missing")
+	}
+	var out GetOutput
+	if err := rt.Client().Get(ctx, "/api/v1/agents/"+in.Identifier, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

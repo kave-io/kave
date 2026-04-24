@@ -10,9 +10,9 @@ type ReportInput struct {
 }
 
 type ReportOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunReport(ctx context.Context, in ReportInput) (*ReportOutput, error) {
-	return nil, output.NotImplemented("budget report")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "budget report is not exposed by the HTTP bridge yet", Exit: 1}
 }

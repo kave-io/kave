@@ -8,6 +8,7 @@ import (
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/runtime"
 	"github.com/kave-io/kave/core/store"
+	appcasbin "github.com/kave-io/kave/server/internal/infra/casbin"
 )
 
 var ErrPolicyBlocked = errors.New("gateway policy blocked")
@@ -33,11 +34,12 @@ func (e *BlockedError) Unwrap() error { return ErrPolicyBlocked }
 
 // Interceptor enforces the stored policy before execution begins.
 type Interceptor struct {
-	store store.AppStore
+	store  store.AppStore
+	casbin appcasbin.Casbin
 }
 
-func New(app store.AppStore) *Interceptor {
-	return &Interceptor{store: app}
+func New(app store.AppStore, casbin appcasbin.Casbin) *Interceptor {
+	return &Interceptor{store: app, casbin: casbin}
 }
 
 func (i *Interceptor) Before(ctx context.Context, action *runtime.Action) (*runtime.Action, error) {
@@ -47,6 +49,17 @@ func (i *Interceptor) Before(ctx context.Context, action *runtime.Action) (*runt
 
 	pol, err := i.store.GetAgentPolicy(ctx, action.AgentID)
 	if err != nil || pol == nil || pol.Status != string(controlmodel.PolicyStatusActive) {
+		return action, nil
+	}
+
+	if pol.CasbinDocument != "" && i.casbin != nil {
+		allowed, err := i.casbin.Raw().Enforce(action.AgentID, action.EnvID, action.Connector+"."+action.Method, string(action.Type))
+		if err != nil {
+			return i.block(action, "casbin enforcement failed", action.Connector+"."+action.Method)
+		}
+		if !allowed {
+			return i.block(action, "casbin denied action", action.Connector+"."+action.Method)
+		}
 		return action, nil
 	}
 
@@ -92,4 +105,4 @@ func matchesAny(list []string, target string) bool {
 	return false
 }
 
-var _ pipeline.Interceptor = (*Interceptor)(nil)
+var _ pipeline.Stage = (*Interceptor)(nil)

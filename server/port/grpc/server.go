@@ -15,8 +15,15 @@ type Server struct {
 }
 
 // New constructs a gRPC server and registers all service handlers.
-func New(control *appcontrol.Server, runtime *appruntime.Server) *Server {
-	g := grpc.NewServer()
+func New(control *appcontrol.Server, runtime *appruntime.Server, unary grpc.UnaryServerInterceptor, stream grpc.StreamServerInterceptor) *Server {
+	opts := make([]grpc.ServerOption, 0, 2)
+	if unary != nil {
+		opts = append(opts, grpc.ChainUnaryInterceptor(unary))
+	}
+	if stream != nil {
+		opts = append(opts, grpc.ChainStreamInterceptor(stream))
+	}
+	g := grpc.NewServer(opts...)
 	control.Register(g)
 	runtime.Register(g)
 	srv := &Server{grpc: g}

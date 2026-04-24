@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	appcontrol "github.com/kave-io/kave/server/app/control"
-	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/core/mappers"
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
@@ -17,7 +15,10 @@ import (
 	"github.com/kave-io/kave/core/store"
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
 	runtimev1 "github.com/kave-io/kave/proto/gen/kave/runtime/v1"
+	appcontrol "github.com/kave-io/kave/server/app/control"
+	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/server/internal/contract"
+	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -25,11 +26,11 @@ import (
 )
 
 // BuildRoutes returns the HTTP routes served by the bridge.
-func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app store.AppStore, spans store.SpanStore) []Route {
+func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app store.AppStore, spans store.SpanStore, tokens *serverauth.TokenManager) []Route {
 	return []Route{
 		// Auth / RBAC
-		{Path: "POST /api/v1/auth/register", Invoke: registerAuth(app)},
-		{Path: "POST /api/v1/auth/login", Invoke: loginAuth(app)},
+		{Path: "POST /api/v1/auth/register", Invoke: registerAuth(app, tokens)},
+		{Path: "POST /api/v1/auth/login", Invoke: loginAuth(app, tokens)},
 		{Path: "POST /api/v1/auth/logout", Invoke: logoutAuth(app)},
 		{Path: "GET /api/v1/auth/whoami", Invoke: whoamiAuth(app)},
 		{Path: "POST /api/v1/auth/change-password", Invoke: changePasswordAuth(app)},
@@ -38,7 +39,7 @@ func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app sto
 		{Path: "POST /api/v1/auth/tokens", Invoke: createAPITokenAuth(app)},
 		{Path: "GET /api/v1/auth/tokens", Invoke: listAPITokensAuth(app)},
 		{Path: "DELETE /api/v1/auth/tokens/{id}", PathParams: []string{"id"}, Invoke: revokeAPITokenAuth(app)},
-		{Path: "POST /api/v1/auth/agent-tokens", Invoke: createAgentTokenAuth(app)},
+		{Path: "POST /api/v1/auth/agent-tokens", Invoke: createAgentTokenAuth(app, tokens)},
 		{Path: "GET /api/v1/auth/agent-tokens", Invoke: listAgentTokensAuth(app)},
 		{Path: "DELETE /api/v1/auth/agent-tokens/{id}", PathParams: []string{"id"}, Invoke: revokeAgentTokenAuth(app)},
 		{Path: "POST /api/v1/rbac/roles", Invoke: createRoleAuth(app)},
@@ -113,7 +114,6 @@ func BuildRoutes(control *appcontrol.Server, runtime *appruntime.Server, app sto
 		{Path: "GET /api/v1/cost/summary", Invoke: getCostSummary(app)},
 		{Path: "GET /api/v1/settings/pricing", Invoke: getPriceBook(app)},
 		{Path: "PUT /api/v1/settings/pricing", Invoke: updatePriceBook(app)},
-
 	}
 }
 

@@ -7,10 +7,12 @@ import (
 	"sync"
 
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/internal/config"
-	postgresdb "github.com/kave-io/kave/server/internal/store/postgres"
+	clickhouseimpl "github.com/kave-io/kave/server/internal/store/clickhouse"
 	duckdbimpl "github.com/kave-io/kave/server/internal/store/duckdb"
+	postgresdb "github.com/kave-io/kave/server/internal/store/postgres"
 	postgresimpl "github.com/kave-io/kave/server/internal/store/postgres"
 	sqliteimpl "github.com/kave-io/kave/server/internal/store/sqlite"
 )
@@ -22,6 +24,8 @@ type Manager struct {
 	spanMu    sync.Mutex
 	spanCache map[string]store.SpanStore
 }
+
+var _ store.SpanStore = (*Manager)(nil)
 
 func NewManager(ctx context.Context, storageCfg config.StorageConfig, postgresCfg config.PostgresConfig) (*Manager, error) {
 	app, err := newAppStoreFromSpec(ctx, storageCfg.AppDefault(), postgresCfg)
@@ -39,12 +43,6 @@ func NewManager(ctx context.Context, storageCfg config.StorageConfig, postgresCf
 
 func (m *Manager) AppStore() store.AppStore {
 	return m.app
-}
-
-// DefaultSpanStore returns the span store for the default (unkeyed) agent.
-// Used by gRPC handlers that operate across all agents.
-func (m *Manager) DefaultSpanStore(ctx context.Context) (store.SpanStore, error) {
-	return m.SpanStore(ctx, "")
 }
 
 func (m *Manager) SpanStore(ctx context.Context, agentID string) (store.SpanStore, error) {
@@ -82,6 +80,51 @@ func (m *Manager) Close() error {
 		return m.app.Close()
 	}
 	return nil
+}
+
+func (m *Manager) OpenSpan(ctx context.Context, span *runtimemodel.SpanRow) error {
+	agentID := ""
+	if span != nil {
+		agentID = span.AgentID
+	}
+	spanStore, err := m.SpanStore(ctx, agentID)
+	if err != nil {
+		return err
+	}
+	return spanStore.OpenSpan(ctx, span)
+}
+
+func (m *Manager) CloseSpan(ctx context.Context, spanID string, end *runtimemodel.SpanEnd) error {
+	row, err := m.GetSpan(ctx, spanID)
+	if err != nil {
+		return err
+	}
+	agentID := ""
+	if row != nil {
+		agentID = row.AgentID
+	}
+	spanStore, err := m.SpanStore(ctx, agentID)
+	if err != nil {
+		return err
+	}
+	return spanStore.CloseSpan(ctx, spanID, end)
+}
+
+func (m *Manager) GetSpan(ctx context.Context, spanID string) (*runtimemodel.SpanRow, error) {
+	stores, err := m.allSpanStores(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, spanStore := range stores {
+		row, err := spanStore.GetSpan(ctx, spanID)
+		if err != nil {
+			return nil, err
+		}
+		if row != nil {
+			return row, nil
+		}
+	}
+	return nil, nil
 }
 
 func (m *Manager) allSpanStores(ctx context.Context) ([]store.SpanStore, error) {
@@ -136,9 +179,77 @@ func (m *Manager) QuerySpans(ctx context.Context, filter *runtimemodel.SpanFilte
 	return store.PageResult[*runtimemodel.SpanRow]{Items: spans}, nil
 }
 
+func (m *Manager) SpendByDimension(ctx context.Context, groupBy string, filter *runtimemodel.SpanFilter) (map[string]money.Amount, error) {
+	stores, err := m.allSpanStores(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := map[string]money.Amount{}
+	for _, spanStore := range stores {
+		partial, err := spanStore.SpendByDimension(ctx, groupBy, filter)
+		if err != nil {
+			return nil, err
+		}
+		for dimension, amount := range partial {
+			next, err := result[dimension].Add(amount)
+			if err != nil {
+				return nil, err
+			}
+			result[dimension] = next
+		}
+	}
+	return result, nil
+}
+
 func (m *Manager) Migrate(ctx context.Context) error {
 	_, err := m.allSpanStores(ctx)
 	return err
+}
+
+func (m *Manager) Ping(ctx context.Context) error {
+	stores, err := m.allSpanStores(ctx)
+	if err != nil {
+		return err
+	}
+	for _, spanStore := range stores {
+		pinger, ok := spanStore.(interface{ Ping(context.Context) error })
+		if !ok {
+			continue
+		}
+		if err := pinger.Ping(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *Manager) Stats(ctx context.Context) (map[string]any, error) {
+	stores, err := m.allSpanStores(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stats := map[string]any{
+		"backend": "manager",
+		"stores":  len(stores),
+	}
+	children := make([]map[string]any, 0, len(stores))
+	for _, spanStore := range stores {
+		statter, ok := spanStore.(interface {
+			Stats(context.Context) (map[string]any, error)
+		})
+		if !ok {
+			continue
+		}
+		child, err := statter.Stats(ctx)
+		if err != nil {
+			return nil, err
+		}
+		children = append(children, child)
+	}
+	if len(children) > 0 {
+		stats["children"] = children
+	}
+	return stats, nil
 }
 
 func newAppStoreFromSpec(ctx context.Context, spec config.StoreSpec, postgresCfg config.PostgresConfig) (store.AppStore, error) {
@@ -181,7 +292,7 @@ func newSpanStoreFromSpec(ctx context.Context, spec config.StoreSpec, postgresCf
 		return duckdbimpl.New(path)
 
 	case "clickhouse":
-		return nil, fmt.Errorf("clickhouse span store is not implemented yet")
+		return clickhouseimpl.New(spec.DSN)
 
 	default:
 		return nil, fmt.Errorf("unknown span store backend %q", spec.Kind)

@@ -53,6 +53,43 @@ func GetOrCreateMasterKey(_ context.Context) ([]byte, error) {
 	return key, nil
 }
 
+// Set stores a secret in the OS keyring. It returns ErrKeyringUnavailable if
+// the system keyring cannot be used and plaintext fallback is not permitted.
+func Set(service, account, value string) error {
+	if os.Getenv("KAVE_KEYRING_DISABLED") != "1" {
+		if err := osring.Set(service, account, value); err == nil {
+			return nil
+		}
+	}
+	return plaintextSecretFallback(service, account, value)
+}
+
+// Get retrieves a secret from the OS keyring.
+func Get(service, account string) (string, error) {
+	if os.Getenv("KAVE_KEYRING_DISABLED") != "1" {
+		if value, err := osring.Get(service, account); err == nil {
+			return value, nil
+		} else if !errors.Is(err, osring.ErrNotFound) {
+			if fallback, fallbackErr := plaintextSecretRead(service, account); fallbackErr == nil {
+				return fallback, nil
+			}
+			return "", fmt.Errorf("%w: %v", ErrKeyringUnavailable, err)
+		}
+	}
+	return plaintextSecretRead(service, account)
+}
+
+// Delete removes a secret from the OS keyring.
+func Delete(service, account string) error {
+	if os.Getenv("KAVE_KEYRING_DISABLED") != "1" {
+		if err := osring.Delete(service, account); err == nil || errors.Is(err, osring.ErrNotFound) {
+			_ = plaintextSecretDelete(service, account)
+			return nil
+		}
+	}
+	return plaintextSecretDelete(service, account)
+}
+
 func plaintextFallback() ([]byte, error) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
@@ -76,4 +113,48 @@ func plaintextFallback() ([]byte, error) {
 		return nil, fmt.Errorf("%w: write: %v", ErrKeyringUnavailable, err)
 	}
 	return key, nil
+}
+
+func plaintextSecretPath(service, account string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", ErrKeyringUnavailable
+	}
+	dir := filepath.Join(home, ".kave", "keyring")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("%w: mkdir: %v", ErrKeyringUnavailable, err)
+	}
+	name := base64.RawURLEncoding.EncodeToString([]byte(service + "\x00" + account))
+	return filepath.Join(dir, name), nil
+}
+
+func plaintextSecretFallback(service, account, value string) error {
+	path, err := plaintextSecretPath(service, account)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(value), 0o600)
+}
+
+func plaintextSecretRead(service, account string) (string, error) {
+	path, err := plaintextSecretPath(service, account)
+	if err != nil {
+		return "", err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func plaintextSecretDelete(service, account string) error {
+	path, err := plaintextSecretPath(service, account)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }

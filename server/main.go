@@ -12,14 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	appcontrol "github.com/kave-io/kave/server/app/control"
-	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/core/bus"
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
+	appcontrol "github.com/kave-io/kave/server/app/control"
+	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/server/internal/config"
 	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/internal/daemon"
@@ -27,6 +27,8 @@ import (
 	"github.com/kave-io/kave/server/internal/httpbridge"
 	"github.com/kave-io/kave/server/internal/logsink"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
+	serverauth "github.com/kave-io/kave/server/ops/auth"
+	"github.com/kave-io/kave/server/ops/auth/credresolve"
 	"github.com/kave-io/kave/server/ops/budget"
 	"github.com/kave-io/kave/server/ops/cost"
 	"github.com/kave-io/kave/server/ops/fx"
@@ -70,9 +72,21 @@ func main() {
 		log.Fatalf("refresh fx rates: %v", err)
 	}
 	fxService.Start(context.Background())
-	defaultSpanStore, err := storeManager.DefaultSpanStore(context.Background())
+	if err := storeManager.Migrate(ctx); err != nil {
+		log.Fatalf("span store migrations: %v", err)
+	}
+
+	authTokens, err := serverauth.NewTokenManager(cfg.Security.EncryptionKey, cfg.Security.SessionTTL, cfg.Security.TokenTTL)
 	if err != nil {
-		log.Fatalf("create default span store: %v", err)
+		log.Fatalf("create auth tokens: %v", err)
+	}
+	var vaultResolver *credresolve.VaultResolver
+	if cfg.Security.Vault != nil && cfg.Security.Vault.Addr != "" && cfg.Security.Vault.Mount != "" {
+		vaultResolver = &credresolve.VaultResolver{
+			Addr:  cfg.Security.Vault.Addr,
+			Token: cfg.Security.Vault.Token,
+			Mount: cfg.Security.Vault.Mount,
+		}
 	}
 
 	eventBus := bus.New()
@@ -80,15 +94,21 @@ func main() {
 	log.SetOutput(logsink.New(os.Stderr, eventBus))
 
 	controlServer := appcontrol.New(appStore, eventBus)
-	runtimeServer := appruntime.New(appStore, defaultSpanStore, eventBus)
-	grpcServer := portgrpc.New(controlServer, runtimeServer)
+	runtimeServer := appruntime.New(appStore, storeManager, eventBus)
+	grpcServer := portgrpc.New(
+		controlServer,
+		runtimeServer,
+		portgrpc.NewAuthUnaryInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
+		portgrpc.NewAuthStreamInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
+	)
 
-	// Create pipeline interceptors in order: policy → budget → trace.
-	policyInterceptor := policy.New(appStore)
+	// Create pipeline interceptors in order: auth → policy → budget → trace.
+	authInterceptor := serverauth.NewInterceptor(nil, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens)
+	policyInterceptor := policy.New(appStore, nil)
 	budgetInterceptor := budget.New(appStore, costService)
 	traceInterceptor := trace.New(storeManager, costService, eventBus)
 
-	p := pipeline.New(policyInterceptor, budgetInterceptor, traceInterceptor)
+	p := pipeline.New(authInterceptor, policyInterceptor, budgetInterceptor, traceInterceptor)
 
 	// Resolve optional encryption key for credential storage
 	var encKey []byte
@@ -109,17 +129,17 @@ func main() {
 	}()
 
 	// Create and register framework gateway
-	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistry())
+	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistry(), cfg.Security.AllowAnonymous, vaultResolver)
 	mux := http.NewServeMux()
 	gatewayServer.RegisterRoutes(mux)
 	fx.RegisterRoutes(mux, fxService)
 
 	bridgeMux := http.NewServeMux()
-	httpbridge.Register(bridgeMux, httpbridge.BuildRoutes(controlServer, runtimeServer, appStore, defaultSpanStore))
-	daemonState := daemon.New(config.LoadOpts{StartDir: "."}, loadRes, appStore, defaultSpanStore, fxService, costService, eventBus, buildVersion)
+	httpbridge.Register(bridgeMux, httpbridge.BuildRoutes(controlServer, runtimeServer, appStore, storeManager, authTokens))
+	daemonState := daemon.New(config.LoadOpts{StartDir: "."}, loadRes, appStore, storeManager, fxService, costService, eventBus, buildVersion)
 	httpbridge.Register(bridgeMux, httpbridge.BuildDaemonRoutes(daemonState))
-	httpbridge.RegisterStreams(bridgeMux, appStore, defaultSpanStore, eventBus)
-	httpbridge.RegisterTraceRoutes(bridgeMux, defaultSpanStore)
+	httpbridge.RegisterStreams(bridgeMux, appStore, storeManager, eventBus)
+	httpbridge.RegisterTraceRoutes(bridgeMux, storeManager)
 	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
 		log.Fatalf("build apply plan: %v", err)
 	} else if _, err := daemonState.Apply(context.Background(), plan, false); err != nil {
@@ -155,13 +175,14 @@ func main() {
 	})
 
 	// Bridge first, then the dashboard SPA.
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	root := httpbridge.NewAuthMiddleware(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens).Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, pattern := bridgeMux.Handler(r); pattern != "" {
 			bridgeMux.ServeHTTP(w, r)
 			return
 		}
 		ui.Handler().ServeHTTP(w, r)
 	}))
+	mux.Handle("/", root)
 
 	// Start HTTP server
 	addr := cfg.Server.Addr()

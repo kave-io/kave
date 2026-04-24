@@ -71,8 +71,14 @@ type Action struct {
 	Status  ActionStatus
 	Outcome *Outcome
 
-	TraceID  string
-	SpanID   string
+	// TraceID is written by the pipeline when a new trace is created and read
+	// by span persistence / trace export.
+	TraceID string
+	// SpanID is written by the pipeline for the current action span and read by
+	// the tracer as the span identifier for this action's root node.
+	SpanID string
+	// ParentID is written by the pipeline from the active trace context and
+	// read by the tracer to link child spans.
 	ParentID string
 }
 

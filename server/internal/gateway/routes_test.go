@@ -129,7 +129,7 @@ func TestGatewayRoutes(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			app := *baseApp
-			g := New(&app, nil, tt.pipeline, NewRegistry())
+			g := New(&app, nil, tt.pipeline, NewRegistry(), true, nil)
 
 			var upstreamHits int32
 			if tt.expectUpstream {

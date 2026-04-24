@@ -10,9 +10,9 @@ type ValidateInput struct {
 }
 
 type ValidateOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunValidate(ctx context.Context, in ValidateInput) (*ValidateOutput, error) {
-	return nil, output.NotImplemented("policy validate")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "policy validate is not exposed by the HTTP bridge yet", Exit: 1}
 }

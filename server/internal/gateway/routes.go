@@ -12,10 +12,10 @@ import (
 	"github.com/kave-io/kave/core/connectors/runtime"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
-	"github.com/kave-io/kave/core/pkg/authhash"
 	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/timex"
 	coreruntime "github.com/kave-io/kave/core/runtime"
+	"github.com/kave-io/kave/server/internal/authctx"
 	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
 )
@@ -51,20 +51,36 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 	ctx := r.Context()
 	tw := &trackingResponseWriter{ResponseWriter: w}
 
+	identity, ok := authctx.From(ctx)
+	if !ok {
+		identity = authctx.Identity{Kind: authctx.KindAnonymous}
+	}
+	if identity.IsInvalid() {
+		contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "invalid authorization", nil)
+		return
+	}
 	agentID := "default"
-	if auth := r.Header.Get("Authorization"); auth == "" {
+	switch {
+	case identity.IsAgentToken():
+		if identity.AgentID != "" {
+			agentID = identity.AgentID
+		}
+	case identity.IsUser():
+		if identity.AgentID != "" {
+			agentID = identity.AgentID
+		} else if !g.allowAnonymous {
+			contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "user identity is not bound to an agent", nil)
+			return
+		}
+	case identity.IsAnonymous():
 		if !g.allowAnonymous {
 			contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "missing agent token", nil)
 			return
 		}
-	} else {
-		if token := strings.TrimPrefix(auth, "Bearer "); token != auth {
-			tok, err := g.app.GetAgentTokenByHash(ctx, string(authhash.HashToken(token)))
-			if err != nil || tok == nil {
-				contract.WriteError(tw, http.StatusUnauthorized, "gateway.agent_not_found", "agent not found", nil)
-				return
-			}
-			agentID = tok.AgentID
+	default:
+		if !g.allowAnonymous {
+			contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "missing agent token", nil)
+			return
 		}
 	}
 
@@ -147,7 +163,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 
 	credential, credErr := g.resolveCredential(ctx, agent.EnvID, call.Provider)
 	if errors.Is(credErr, credresolve.ErrPassthrough) {
-		credential = r.Header.Get("Authorization")
+		credential = identity.RawAuthorization
 	}
 
 	handler := func(ctx context.Context, action *coreruntime.Action) (*pipeline.Result, error) {

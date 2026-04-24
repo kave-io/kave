@@ -186,4 +186,4 @@ func (i *Interceptor) recordBlock(ctx context.Context, action *runtime.Action, r
 	return i.store.InsertBudgetEntry(ctx, entry)
 }
 
-var _ pipeline.Interceptor = (*Interceptor)(nil)
+var _ pipeline.Stage = (*Interceptor)(nil)

@@ -35,18 +35,37 @@ func (s *Server) Register(srv *grpc.Server) {
 // ── Run Operations ─────────────────────────────────────────────────────────
 
 func (s *Server) CreateRun(ctx context.Context, req *runtimev1.CreateRunRequest) (*runtimev1.RunRecord, error) {
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		existing, err := s.appStore.GetRunByIdempotencyKey(ctx, req.EnvId, *req.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return runToProto(existing), nil
+		}
+	}
 	now := nowMS()
+	triggerType := triggerTypeFromProto(req.TriggerType)
+	if triggerType == "" {
+		triggerType = "api"
+	}
 	run := &runtimemodel.RunRecord{
-		ID:        newID("run"),
-		ProjectID: req.ProjectId,
-		EnvID:     req.EnvId,
-		AgentID:   req.AgentId,
-		PolicyID:  req.PolicyId,
-		Status:    "active",
-		Metadata:  map[string]any{},
-		StartedAt: now,
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:             newID("run"),
+		ProjectID:      req.ProjectId,
+		EnvID:          req.EnvId,
+		AgentID:        req.AgentId,
+		PolicyID:       req.PolicyId,
+		Name:           req.Name,
+		Status:         "active",
+		Metadata:       map[string]any{},
+		TriggerType:    triggerType,
+		TriggerID:      req.TriggerId,
+		CorrelationID:  req.CorrelationId,
+		SessionID:      req.SessionId,
+		IdempotencyKey: req.IdempotencyKey,
+		StartedAt:      now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	if err := s.appStore.CreateRun(ctx, run); err != nil {
 		return nil, err
@@ -223,19 +242,24 @@ func runToModel(r *runtimev1.RunRecord) *runtimemodel.RunRecord {
 		return nil
 	}
 	model := &runtimemodel.RunRecord{
-		ID:           r.Id,
-		ProjectID:    r.ProjectId,
-		EnvID:        r.EnvId,
-		AgentID:      r.AgentId,
-		PolicyID:     r.PolicyId,
-		Name:         r.Name,
-		Status:       runStatusFromProto(r.Status),
-		Metadata:     structToMap(r.Metadata),
-		ErrorMessage: r.ErrorMessage,
-		StartedAt:    r.StartedAtMs,
-		EndedAt:      r.EndedAtMs,
-		CreatedAt:    r.CreatedAtMs,
-		UpdatedAt:    r.UpdatedAtMs,
+		ID:             r.Id,
+		ProjectID:      r.ProjectId,
+		EnvID:          r.EnvId,
+		AgentID:        r.AgentId,
+		PolicyID:       r.PolicyId,
+		Name:           r.Name,
+		Status:         runStatusFromProto(r.Status),
+		Metadata:       structToMap(r.Metadata),
+		ErrorMessage:   r.ErrorMessage,
+		TriggerType:    triggerTypeFromProto(r.TriggerType),
+		TriggerID:      r.TriggerId,
+		CorrelationID:  r.CorrelationId,
+		SessionID:      r.SessionId,
+		IdempotencyKey: r.IdempotencyKey,
+		StartedAt:      r.StartedAtMs,
+		EndedAt:        r.EndedAtMs,
+		CreatedAt:      r.CreatedAtMs,
+		UpdatedAt:      r.UpdatedAtMs,
 	}
 	if r.BudgetCap != nil {
 		amount := amountFromProto(r.BudgetCap)

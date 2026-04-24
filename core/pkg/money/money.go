@@ -11,8 +11,9 @@ import (
 	"strings"
 )
 
-// Amount stores a monetary value in nano-units of the major currency.
-// The zero value is valid and exact.
+// Amount stores a monetary value in nano-dollars (USD baseline) in int64.
+// The zero value is valid and exact. Arithmetic helpers guard overflow, but
+// direct casts and unchecked int64 math still have normal wraparound semantics.
 type Amount int64
 
 const (

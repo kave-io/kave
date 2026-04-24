@@ -62,25 +62,30 @@ type Policy struct {
 
 // Run is the API representation of a runtime.RunRecord.
 type Run struct {
-	ID           string          `json:"id"`
-	ProjectID    string          `json:"project_id"`
-	EnvID        string          `json:"env_id"`
-	AgentID      string          `json:"agent_id"`
-	PolicyID     *string         `json:"policy_id"`
-	Name         string          `json:"name"`
-	Status       string          `json:"status"`
-	BudgetCap    *contract.Money `json:"budget_cap"`
-	Spent        *contract.Money `json:"spent"`
-	Metadata     map[string]any  `json:"metadata"`
-	ErrorMessage *string         `json:"error_message"`
-	StartedAt    string          `json:"started_at"`
-	StartedAtMS  int64           `json:"started_at_ms"`
-	EndedAt      *string         `json:"ended_at"`
-	EndedAtMS    *int64          `json:"ended_at_ms"`
-	CreatedAt    string          `json:"created_at"`
-	CreatedAtMS  int64           `json:"created_at_ms"`
-	UpdatedAt    string          `json:"updated_at"`
-	UpdatedAtMS  int64           `json:"updated_at_ms"`
+	ID             string          `json:"id"`
+	ProjectID      string          `json:"project_id"`
+	EnvID          string          `json:"env_id"`
+	AgentID        string          `json:"agent_id"`
+	PolicyID       *string         `json:"policy_id"`
+	Name           string          `json:"name"`
+	Status         string          `json:"status"`
+	BudgetCap      *contract.Money `json:"budget_cap"`
+	Spent          *contract.Money `json:"spent"`
+	Metadata       map[string]any  `json:"metadata"`
+	ErrorMessage   *string         `json:"error_message"`
+	TriggerType    string          `json:"trigger_type"`
+	TriggerID      *string         `json:"trigger_id"`
+	CorrelationID  *string         `json:"correlation_id"`
+	SessionID      *string         `json:"session_id"`
+	IdempotencyKey *string         `json:"idempotency_key"`
+	StartedAt      string          `json:"started_at"`
+	StartedAtMS    int64           `json:"started_at_ms"`
+	EndedAt        *string         `json:"ended_at"`
+	EndedAtMS      *int64          `json:"ended_at_ms"`
+	CreatedAt      string          `json:"created_at"`
+	CreatedAtMS    int64           `json:"created_at_ms"`
+	UpdatedAt      string          `json:"updated_at"`
+	UpdatedAtMS    int64           `json:"updated_at_ms"`
 }
 
 // Span is the API representation of a runtime.SpanRow.
@@ -240,23 +245,28 @@ func MapPolicyToAPI(p *control.PolicyRecord) *Policy {
 // MapRunToAPI converts a runtime.RunRecord to API Run.
 func MapRunToAPI(r *runtimemodel.RunRecord) *Run {
 	api := &Run{
-		ID:           r.ID,
-		ProjectID:    r.ProjectID,
-		EnvID:        r.EnvID,
-		AgentID:      r.AgentID,
-		PolicyID:     r.PolicyID,
-		Name:         r.Name,
-		Status:       r.Status,
-		Metadata:     r.Metadata,
-		ErrorMessage: r.ErrorMessage,
-		StartedAt:    isoFromMS(r.StartedAt),
-		StartedAtMS:  r.StartedAt,
-		EndedAt:      isoFromMSPtr(r.EndedAt),
-		EndedAtMS:    r.EndedAt,
-		CreatedAt:    isoFromMS(r.CreatedAt),
-		CreatedAtMS:  r.CreatedAt,
-		UpdatedAt:    isoFromMS(r.UpdatedAt),
-		UpdatedAtMS:  r.UpdatedAt,
+		ID:             r.ID,
+		ProjectID:      r.ProjectID,
+		EnvID:          r.EnvID,
+		AgentID:        r.AgentID,
+		PolicyID:       r.PolicyID,
+		Name:           r.Name,
+		Status:         r.Status,
+		Metadata:       r.Metadata,
+		ErrorMessage:   r.ErrorMessage,
+		TriggerType:    r.TriggerType,
+		TriggerID:      r.TriggerID,
+		CorrelationID:  r.CorrelationID,
+		SessionID:      r.SessionID,
+		IdempotencyKey: r.IdempotencyKey,
+		StartedAt:      isoFromMS(r.StartedAt),
+		StartedAtMS:    r.StartedAt,
+		EndedAt:        isoFromMSPtr(r.EndedAt),
+		EndedAtMS:      r.EndedAt,
+		CreatedAt:      isoFromMS(r.CreatedAt),
+		CreatedAtMS:    r.CreatedAt,
+		UpdatedAt:      isoFromMS(r.UpdatedAt),
+		UpdatedAtMS:    r.UpdatedAt,
 	}
 	if r.BudgetCap > 0 {
 		api.BudgetCap = &contract.Money{Amount: r.BudgetCap.String(), Currency: defaultCurrency}

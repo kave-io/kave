@@ -14,6 +14,7 @@ import (
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
+	"github.com/kave-io/kave/server/internal/store/spansql"
 	_ "github.com/marcboeker/go-duckdb"
 )
 
@@ -257,8 +258,9 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 		       model, cost_amount_nanos, attrs, created_at
 		FROM spans WHERE 1=1
 	`
-	var args []any
-	query, args = appendSpanFilterDuck(query, args, filter)
+	whereSQL, whereArgs := spansql.BuildWhere(filter, spansql.DuckDB)
+	query += whereSQL
+	args := append([]any{}, whereArgs...)
 
 	limit := page.Limit
 	if limit <= 0 {
@@ -335,8 +337,9 @@ func (s *DuckDBSpanStore) SpendByDimension(ctx context.Context, groupBy string, 
 		SELECT %s, COALESCE(SUM(cost_amount_nanos), 0)
 		FROM spans WHERE 1=1
 	`, col)
-	var args []any
-	query, args = appendSpanFilterDuck(query, args, filter)
+	whereSQL, whereArgs := spansql.BuildWhere(filter, spansql.DuckDB)
+	query += whereSQL
+	args := append([]any{}, whereArgs...)
 	query += fmt.Sprintf(` GROUP BY %s ORDER BY SUM(cost_amount_nanos) DESC`, col)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -499,53 +502,6 @@ func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
 		spanID,
 	)
 	return err
-}
-
-func appendSpanFilterDuck(query string, args []any, filter *runtimemodel.SpanFilter) (string, []any) {
-	if filter == nil {
-		return query, args
-	}
-	appendEq := func(column, value string) {
-		if value == "" {
-			return
-		}
-		query += ` AND ` + column + ` = $` + fmt.Sprint(len(args)+1)
-		args = append(args, value)
-	}
-	appendEq("id", filter.ID)
-	appendEq("run_id", filter.RunID)
-	appendEq("action_id", filter.ActionID)
-	appendEq("trace_id", filter.TraceID)
-	appendEq("project_id", filter.ProjectID)
-	appendEq("env_id", filter.EnvID)
-	appendEq("agent_id", filter.AgentID)
-	appendEq("connector", filter.Connector)
-	appendEq("model", filter.Model)
-	appendEq("kind", filter.Kind)
-	if filter.NamePrefix != "" {
-		query += ` AND name LIKE $` + fmt.Sprint(len(args)+1)
-		args = append(args, filter.NamePrefix+"%")
-	}
-	if filter.FromMs != nil {
-		query += ` AND started_at >= $` + fmt.Sprint(len(args)+1)
-		args = append(args, *filter.FromMs)
-	}
-	if filter.ToMs != nil {
-		query += ` AND started_at <= $` + fmt.Sprint(len(args)+1)
-		args = append(args, *filter.ToMs)
-	}
-	if filter.HasError != nil {
-		if *filter.HasError {
-			query += ` AND error IS NOT NULL`
-		} else {
-			query += ` AND error IS NULL`
-		}
-	}
-	if filter.MinCostMicro != nil {
-		query += ` AND COALESCE(cost_amount_nanos, 0) >= $` + fmt.Sprint(len(args)+1)
-		args = append(args, *filter.MinCostMicro*int64(money.MicroDollar))
-	}
-	return query, args
 }
 
 // Allowlist for groupBy values in SpendByDimension.

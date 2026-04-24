@@ -10,9 +10,9 @@ type ExportInput struct {
 }
 
 type ExportOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunExport(ctx context.Context, in ExportInput) (*ExportOutput, error) {
-	return nil, output.NotImplemented("price export")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "price export is not exposed by the HTTP bridge yet", Exit: 1}
 }

@@ -23,6 +23,9 @@ type PolicyRecord struct {
 	AllowedTypes      []string
 	AllowedConnectors []string
 	AllowedMethods    []string
+	// CasbinDocument stores an optional bespoke authorization document.
+	// Empty means the allow-list fast path is used.
+	CasbinDocument string
 
 	// Budget and cost control
 	BudgetCap      money.Amount // 0 = no cap
@@ -52,6 +55,7 @@ type PolicyUpdate struct {
 	AllowedTypes      []string
 	AllowedConnectors []string
 	AllowedMethods    []string
+	CasbinDocument    *string
 	BudgetCap         *money.Amount // nil = no change; use ClearBudgetCap to remove
 	ClearBudgetCap    bool
 	BudgetPeriod      *string

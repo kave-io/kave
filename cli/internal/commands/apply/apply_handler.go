@@ -10,9 +10,9 @@ type ApplyInput struct {
 }
 
 type ApplyOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunApply(ctx context.Context, in ApplyInput) (*ApplyOutput, error) {
-	return nil, output.NotImplemented("apply apply")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "apply apply is not exposed by the HTTP bridge yet", Exit: 1}
 }

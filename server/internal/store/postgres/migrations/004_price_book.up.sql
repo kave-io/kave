@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS price_book_entries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
     version TEXT NOT NULL,
     provider TEXT NOT NULL,
     match TEXT NOT NULL,

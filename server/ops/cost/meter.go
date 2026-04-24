@@ -5,17 +5,17 @@ import (
 	"time"
 
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
-	"github.com/kave-io/kave/core/pkg/ids"
-	coreCost "github.com/kave-io/kave/core/runtime/cost"
 	"github.com/kave-io/kave/core/pipeline"
+	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/pkg/timex"
 	"github.com/kave-io/kave/core/runtime"
+	coreCost "github.com/kave-io/kave/core/runtime/cost"
 	"github.com/kave-io/kave/core/runtime/policy"
 	"github.com/kave-io/kave/core/store"
 )
 
-// CostMeter implements pipeline.Interceptor and coreCost.Meter.
+// CostMeter implements pipeline.Stage and coreCost.Meter.
 type CostMeter struct {
 	app    store.AppStore
 	prices *Service
@@ -134,5 +134,5 @@ func (m *CostMeter) After(ctx context.Context, action *runtime.Action, result *p
 
 func (m *CostMeter) Name() string { return "cost" }
 
-var _ pipeline.Interceptor = (*CostMeter)(nil)
+var _ pipeline.Stage = (*CostMeter)(nil)
 var _ coreCost.Meter = (*CostMeter)(nil)

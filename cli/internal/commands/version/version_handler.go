@@ -2,17 +2,24 @@ package version
 
 import (
 	"context"
-
-	"github.com/kave-io/kave/cli/internal/output"
+	"runtime/debug"
 )
 
 type VersionInput struct {
 }
 
 type VersionOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunVersion(ctx context.Context, in VersionInput) (*VersionOutput, error) {
-	return nil, output.NotImplemented("version version")
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return &VersionOutput{Data: map[string]any{"version": "unknown"}}, nil
+	}
+	out := map[string]any{
+		"path":    info.Path,
+		"version": info.Main.Version,
+	}
+	return &VersionOutput{Data: out}, nil
 }

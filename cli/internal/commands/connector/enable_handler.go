@@ -10,9 +10,9 @@ type EnableInput struct {
 }
 
 type EnableOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunEnable(ctx context.Context, in EnableInput) (*EnableOutput, error) {
-	return nil, output.NotImplemented("connector enable")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector enable is not exposed by the HTTP bridge yet", Exit: 1}
 }

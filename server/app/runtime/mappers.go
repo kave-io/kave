@@ -46,23 +46,26 @@ func runToProto(r *runtimemodel.RunRecord) *runtimev1.RunRecord {
 		return nil
 	}
 	p := &runtimev1.RunRecord{
-		Id:           r.ID,
-		ProjectId:    r.ProjectID,
-		EnvId:        r.EnvID,
-		AgentId:      r.AgentID,
-		PolicyId:     r.PolicyID,
-		Name:         r.Name,
-		Status:       runStatusToProto(r.Status),
-		BudgetCap:    ptrAmountToProto(r.BudgetCap),
-		Spent:        ptrAmountToProto(r.Spent),
-		Metadata:     mapToStruct(r.Metadata),
-		ErrorMessage: r.ErrorMessage,
-		TriggerType:  triggerTypeToProto(r.TriggerType),
-		TriggerId:    r.TriggerID,
-		StartedAtMs:  r.StartedAt,
-		EndedAtMs:    r.EndedAt,
-		CreatedAtMs:  r.CreatedAt,
-		UpdatedAtMs:  r.UpdatedAt,
+		Id:             r.ID,
+		ProjectId:      r.ProjectID,
+		EnvId:          r.EnvID,
+		AgentId:        r.AgentID,
+		PolicyId:       r.PolicyID,
+		Name:           r.Name,
+		Status:         runStatusToProto(r.Status),
+		BudgetCap:      ptrAmountToProto(r.BudgetCap),
+		Spent:          ptrAmountToProto(r.Spent),
+		Metadata:       mapToStruct(r.Metadata),
+		ErrorMessage:   r.ErrorMessage,
+		TriggerType:    triggerTypeToProto(r.TriggerType),
+		TriggerId:      r.TriggerID,
+		CorrelationId:  r.CorrelationID,
+		SessionId:      r.SessionID,
+		IdempotencyKey: r.IdempotencyKey,
+		StartedAtMs:    r.StartedAt,
+		EndedAtMs:      r.EndedAt,
+		CreatedAtMs:    r.CreatedAt,
+		UpdatedAtMs:    r.UpdatedAt,
 	}
 	return p
 }
@@ -117,6 +120,21 @@ func triggerTypeToProto(t string) runtimev1.TriggerType {
 		return runtimev1.TriggerType_TRIGGER_TYPE_MANUAL
 	default:
 		return runtimev1.TriggerType_TRIGGER_TYPE_UNSPECIFIED
+	}
+}
+
+func triggerTypeFromProto(t runtimev1.TriggerType) string {
+	switch t {
+	case runtimev1.TriggerType_TRIGGER_TYPE_API:
+		return "api"
+	case runtimev1.TriggerType_TRIGGER_TYPE_SCHEDULE:
+		return "schedule"
+	case runtimev1.TriggerType_TRIGGER_TYPE_WEBHOOK:
+		return "webhook"
+	case runtimev1.TriggerType_TRIGGER_TYPE_MANUAL:
+		return "manual"
+	default:
+		return ""
 	}
 }
 

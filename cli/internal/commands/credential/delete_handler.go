@@ -10,9 +10,9 @@ type DeleteInput struct {
 }
 
 type DeleteOutput struct {
-	Data map[string]any `json:"data"`
+	Data any `json:"data"`
 }
 
 func RunDelete(ctx context.Context, in DeleteInput) (*DeleteOutput, error) {
-	return nil, output.NotImplemented("credential delete")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "credential delete is not exposed by the HTTP bridge yet", Exit: 1}
 }

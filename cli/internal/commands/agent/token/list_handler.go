@@ -15,5 +15,5 @@ type ListOutput struct {
 }
 
 func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
-	return nil, output.NotImplemented("agent token list")
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "agent token list is not exposed by the HTTP bridge yet", Exit: 1}
 }

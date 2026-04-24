@@ -1,5 +1,4 @@
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgvector";
 
 -- Helper function to set updated_at timestamp
@@ -13,7 +12,8 @@ $$ LANGUAGE plpgsql;
 
 -- workspaces — multi-tenancy root
 CREATE TABLE workspaces (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL DEFAULT '',
     name TEXT NOT NULL,
     slug TEXT NOT NULL UNIQUE,
     description TEXT,
@@ -21,6 +21,7 @@ CREATE TABLE workspaces (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX idx_workspaces_org_id ON workspaces(org_id);
 CREATE INDEX idx_workspaces_slug ON workspaces(slug);
 
 CREATE TRIGGER workspaces_set_updated_at
@@ -28,13 +29,32 @@ CREATE TRIGGER workspaces_set_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
 
+-- environments — project-scoped runtime/config scopes
+CREATE TABLE environments (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'dev',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (project_id, slug)
+);
+
+CREATE INDEX idx_environments_project_id ON environments(project_id);
+
+CREATE TRIGGER environments_set_updated_at
+    BEFORE UPDATE ON environments
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+
 -- agents — agent identities
 CREATE TABLE agents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
-    policy_id UUID,
+    policy_id TEXT,
     monthly_budget_amount_nanos BIGINT DEFAULT 100000000000,
     metadata JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -51,8 +71,8 @@ CREATE TRIGGER agents_set_updated_at
 
 -- policies — what agents are allowed to do
 CREATE TABLE policies (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT,
     allowed_connectors TEXT[] DEFAULT ARRAY['*'],
@@ -72,10 +92,11 @@ CREATE TRIGGER policies_set_updated_at
 
 -- runs — agent task executions
 CREATE TABLE runs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    policy_id UUID REFERENCES policies(id) ON DELETE SET NULL,
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    env_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    policy_id TEXT REFERENCES policies(id) ON DELETE SET NULL,
     name TEXT,
     status TEXT NOT NULL DEFAULT 'active', -- active | completed | failed
     budget_cap_amount_nanos BIGINT,
@@ -88,7 +109,8 @@ CREATE TABLE runs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_runs_workspace_id ON runs(workspace_id);
+CREATE INDEX idx_runs_project_id ON runs(project_id);
+CREATE INDEX idx_runs_env_id ON runs(env_id);
 CREATE INDEX idx_runs_agent_id ON runs(agent_id);
 CREATE INDEX idx_runs_status ON runs(status);
 CREATE INDEX idx_runs_started_at ON runs(started_at DESC);
@@ -100,8 +122,8 @@ CREATE TRIGGER runs_set_updated_at
 
 -- actions — individual agent actions within a run
 CREATE TABLE actions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
     action_type TEXT NOT NULL, -- llm_call | tool_use | memory_read | memory_write
     connector TEXT NOT NULL,
     method TEXT NOT NULL,
@@ -117,10 +139,10 @@ CREATE INDEX idx_actions_created_at ON actions(created_at DESC);
 
 -- spans — trace records (OTel compatible)
 CREATE TABLE spans (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-    action_id UUID NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
-    parent_id UUID REFERENCES spans(id) ON DELETE SET NULL,
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    action_id TEXT NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+    parent_id TEXT REFERENCES spans(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ended_at TIMESTAMPTZ,
@@ -147,11 +169,11 @@ CREATE INDEX idx_spans_has_error ON spans((error IS NOT NULL));
 -- budget_ledger — immutable append-only cost records
 CREATE TABLE budget_ledger (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    run_id UUID REFERENCES runs(id) ON DELETE SET NULL,
-    action_id UUID REFERENCES actions(id) ON DELETE SET NULL,
-    span_id UUID REFERENCES spans(id) ON DELETE SET NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+    action_id TEXT REFERENCES actions(id) ON DELETE SET NULL,
+    span_id TEXT REFERENCES spans(id) ON DELETE SET NULL,
     connector TEXT NOT NULL,
     model TEXT,
     input_tokens INTEGER,
