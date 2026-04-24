@@ -2,7 +2,7 @@
 // across the Kave API, gRPC, and storage layers.
 //
 // Prefix registry:
-// act, agt, bge, bnd, pat, psn, role, run, ses, usr.
+// act, agt, aud, bge, bnd, cred, env, mbr, org, pat, pol, prj, psn, role, run, ses, spn, tok, trc, usr.
 package ids
 
 import (
