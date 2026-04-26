@@ -9,6 +9,8 @@ import (
 	"github.com/kave-io/kave/core/model/control"
 	"github.com/kave-io/kave/core/store"
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
+	"github.com/kave-io/kave/server/internal/daemon"
+	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"go.yaml.in/yaml/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -16,17 +18,45 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// Server implements controlv1.ControlPlaneServiceServer.
+// Server implements controlv1.ControlPlaneServiceServer and coordinates all control-plane services.
 type Server struct {
 	controlv1.UnimplementedControlPlaneServiceServer
 
 	appStore store.AppStore
 	bus      *bus.Bus
+
+	// Child services
+	authService   *AuthServiceImpl
+	rbacService   *RBACServiceImpl
+	daemonService *DaemonServiceImpl
 }
 
 // New creates a new ControlPlaneAPI server.
 func New(appStore store.AppStore, b *bus.Bus) *Server {
 	return &Server{appStore: appStore, bus: b}
+}
+
+// RegisterWithChildren registers all control-plane services with gRPC.
+// Call this instead of Register if you want all services including auth/rbac/daemon.
+func (s *Server) RegisterWithChildren(srv *grpc.Server, daemonState *daemon.State, tokens *serverauth.TokenManager) {
+	// Main ControlPlaneService
+	controlv1.RegisterControlPlaneServiceServer(srv, s)
+
+	// Auth service
+	if tokens != nil {
+		s.authService = NewAuthService(s.appStore, tokens)
+		controlv1.RegisterAuthServiceServer(srv, s.authService)
+	}
+
+	// RBAC service
+	s.rbacService = NewRBACService(s.appStore)
+	controlv1.RegisterRBACServiceServer(srv, s.rbacService)
+
+	// Daemon service
+	if daemonState != nil {
+		s.daemonService = NewDaemonService(daemonState)
+		controlv1.RegisterDaemonServiceServer(srv, s.daemonService)
+	}
 }
 
 // Register registers the ControlPlaneService server with gRPC.
