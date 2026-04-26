@@ -958,6 +958,670 @@ func (x *QuerySpansResponse) GetNextCursor() string {
 	return ""
 }
 
+type WatchEventsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EnvId         string                 `protobuf:"bytes,1,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
+	ProjectId     string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"` // optional: filter by event kind
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchEventsRequest) Reset() {
+	*x = WatchEventsRequest{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchEventsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchEventsRequest) ProtoMessage() {}
+
+func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchEventsRequest.ProtoReflect.Descriptor instead.
+func (*WatchEventsRequest) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *WatchEventsRequest) GetEnvId() string {
+	if x != nil {
+		return x.EnvId
+	}
+	return ""
+}
+
+func (x *WatchEventsRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *WatchEventsRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+type RuntimeEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	At            int64                  `protobuf:"varint,2,opt,name=at,proto3" json:"at,omitempty"`
+	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"` // JSON-encoded event data
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RuntimeEvent) Reset() {
+	*x = RuntimeEvent{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeEvent) ProtoMessage() {}
+
+func (x *RuntimeEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeEvent.ProtoReflect.Descriptor instead.
+func (*RuntimeEvent) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RuntimeEvent) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RuntimeEvent) GetAt() int64 {
+	if x != nil {
+		return x.At
+	}
+	return 0
+}
+
+func (x *RuntimeEvent) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type WatchLogsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Level         string                 `protobuf:"bytes,1,opt,name=level,proto3" json:"level,omitempty"` // optional: "debug", "info", "warn", "error"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchLogsRequest) Reset() {
+	*x = WatchLogsRequest{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchLogsRequest) ProtoMessage() {}
+
+func (x *WatchLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchLogsRequest.ProtoReflect.Descriptor instead.
+func (*WatchLogsRequest) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *WatchLogsRequest) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+type LogLine struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	At            int64                  `protobuf:"varint,1,opt,name=at,proto3" json:"at,omitempty"`
+	Level         string                 `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`
+	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	Context       map[string]string      `protobuf:"bytes,4,rep,name=context,proto3" json:"context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogLine) Reset() {
+	*x = LogLine{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogLine) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogLine) ProtoMessage() {}
+
+func (x *LogLine) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogLine.ProtoReflect.Descriptor instead.
+func (*LogLine) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *LogLine) GetAt() int64 {
+	if x != nil {
+		return x.At
+	}
+	return 0
+}
+
+func (x *LogLine) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *LogLine) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogLine) GetContext() map[string]string {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+type TailTracesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	EnvId         string                 `protobuf:"bytes,2,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
+	RunId         string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TailTracesRequest) Reset() {
+	*x = TailTracesRequest{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TailTracesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TailTracesRequest) ProtoMessage() {}
+
+func (x *TailTracesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TailTracesRequest.ProtoReflect.Descriptor instead.
+func (*TailTracesRequest) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *TailTracesRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *TailTracesRequest) GetEnvId() string {
+	if x != nil {
+		return x.EnvId
+	}
+	return ""
+}
+
+func (x *TailTracesRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+type TraceEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // "Run", "Span"
+	At            int64                  `protobuf:"varint,2,opt,name=at,proto3" json:"at,omitempty"`
+	Data          []byte                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"` // JSON-encoded run or span
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TraceEvent) Reset() {
+	*x = TraceEvent{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TraceEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TraceEvent) ProtoMessage() {}
+
+func (x *TraceEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TraceEvent.ProtoReflect.Descriptor instead.
+func (*TraceEvent) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *TraceEvent) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *TraceEvent) GetAt() int64 {
+	if x != nil {
+		return x.At
+	}
+	return 0
+}
+
+func (x *TraceEvent) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+type StreamSpansRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	EnvId         string                 `protobuf:"bytes,2,opt,name=env_id,json=envId,proto3" json:"env_id,omitempty"`
+	RunId         string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamSpansRequest) Reset() {
+	*x = StreamSpansRequest{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamSpansRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamSpansRequest) ProtoMessage() {}
+
+func (x *StreamSpansRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamSpansRequest.ProtoReflect.Descriptor instead.
+func (*StreamSpansRequest) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *StreamSpansRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *StreamSpansRequest) GetEnvId() string {
+	if x != nil {
+		return x.EnvId
+	}
+	return ""
+}
+
+func (x *StreamSpansRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+type SpanEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	At            int64                  `protobuf:"varint,1,opt,name=at,proto3" json:"at,omitempty"`
+	Span          *SpanRow               `protobuf:"bytes,2,opt,name=span,proto3" json:"span,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SpanEvent) Reset() {
+	*x = SpanEvent{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SpanEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SpanEvent) ProtoMessage() {}
+
+func (x *SpanEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SpanEvent.ProtoReflect.Descriptor instead.
+func (*SpanEvent) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SpanEvent) GetAt() int64 {
+	if x != nil {
+		return x.At
+	}
+	return 0
+}
+
+func (x *SpanEvent) GetSpan() *SpanRow {
+	if x != nil {
+		return x.Span
+	}
+	return nil
+}
+
+type ExportTraceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TraceId       string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	Format        string                 `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"` // "jsonl", "mermaid", "dot", "otlp", "parquet"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportTraceRequest) Reset() {
+	*x = ExportTraceRequest{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportTraceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportTraceRequest) ProtoMessage() {}
+
+func (x *ExportTraceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportTraceRequest.ProtoReflect.Descriptor instead.
+func (*ExportTraceRequest) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ExportTraceRequest) GetTraceId() string {
+	if x != nil {
+		return x.TraceId
+	}
+	return ""
+}
+
+func (x *ExportTraceRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+type ExportTraceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	ContentType   string                 `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportTraceResponse) Reset() {
+	*x = ExportTraceResponse{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportTraceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportTraceResponse) ProtoMessage() {}
+
+func (x *ExportTraceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportTraceResponse.ProtoReflect.Descriptor instead.
+func (*ExportTraceResponse) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *ExportTraceResponse) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *ExportTraceResponse) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+type IngestTracesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`     // OTLP ExportTraceServiceRequest (protobuf or JSON)
+	Format        string                 `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"` // "protobuf" or "json"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IngestTracesRequest) Reset() {
+	*x = IngestTracesRequest{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IngestTracesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IngestTracesRequest) ProtoMessage() {}
+
+func (x *IngestTracesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IngestTracesRequest.ProtoReflect.Descriptor instead.
+func (*IngestTracesRequest) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *IngestTracesRequest) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *IngestTracesRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+type IngestTracesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accepted      int32                  `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IngestTracesResponse) Reset() {
+	*x = IngestTracesResponse{}
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IngestTracesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IngestTracesResponse) ProtoMessage() {}
+
+func (x *IngestTracesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IngestTracesResponse.ProtoReflect.Descriptor instead.
+func (*IngestTracesResponse) Descriptor() ([]byte, []int) {
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *IngestTracesResponse) GetAccepted() int32 {
+	if x != nil {
+		return x.Accepted
+	}
+	return 0
+}
+
 type GetPriceBookRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -966,7 +1630,7 @@ type GetPriceBookRequest struct {
 
 func (x *GetPriceBookRequest) Reset() {
 	*x = GetPriceBookRequest{}
-	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[16]
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -978,7 +1642,7 @@ func (x *GetPriceBookRequest) String() string {
 func (*GetPriceBookRequest) ProtoMessage() {}
 
 func (x *GetPriceBookRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[16]
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -991,7 +1655,7 @@ func (x *GetPriceBookRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPriceBookRequest.ProtoReflect.Descriptor instead.
 func (*GetPriceBookRequest) Descriptor() ([]byte, []int) {
-	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{16}
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{28}
 }
 
 type GetSpendReportRequest struct {
@@ -1003,7 +1667,7 @@ type GetSpendReportRequest struct {
 
 func (x *GetSpendReportRequest) Reset() {
 	*x = GetSpendReportRequest{}
-	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[17]
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1015,7 +1679,7 @@ func (x *GetSpendReportRequest) String() string {
 func (*GetSpendReportRequest) ProtoMessage() {}
 
 func (x *GetSpendReportRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[17]
+	mi := &file_kave_runtime_v1_runtime_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1028,7 +1692,7 @@ func (x *GetSpendReportRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSpendReportRequest.ProtoReflect.Descriptor instead.
 func (*GetSpendReportRequest) Descriptor() ([]byte, []int) {
-	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{17}
+	return file_kave_runtime_v1_runtime_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetSpendReportRequest) GetFilter() *SpendFilter {
@@ -1120,10 +1784,58 @@ const file_kave_runtime_v1_runtime_proto_rawDesc = "" +
 	"\x12QuerySpansResponse\x12.\n" +
 	"\x05spans\x18\x01 \x03(\v2\x18.kave.runtime.v1.SpanRowR\x05spans\x12\x1f\n" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\x15\n" +
+	"nextCursor\"^\n" +
+	"\x12WatchEventsRequest\x12\x15\n" +
+	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x02 \x01(\tR\tprojectId\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\"F\n" +
+	"\fRuntimeEvent\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
+	"\x02at\x18\x02 \x01(\x03R\x02at\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"(\n" +
+	"\x10WatchLogsRequest\x12\x14\n" +
+	"\x05level\x18\x01 \x01(\tR\x05level\"\xc6\x01\n" +
+	"\aLogLine\x12\x0e\n" +
+	"\x02at\x18\x01 \x01(\x03R\x02at\x12\x14\n" +
+	"\x05level\x18\x02 \x01(\tR\x05level\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x12?\n" +
+	"\acontext\x18\x04 \x03(\v2%.kave.runtime.v1.LogLine.ContextEntryR\acontext\x1a:\n" +
+	"\fContextEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"`\n" +
+	"\x11TailTracesRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x15\n" +
+	"\x06env_id\x18\x02 \x01(\tR\x05envId\x12\x15\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"D\n" +
+	"\n" +
+	"TraceEvent\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
+	"\x02at\x18\x02 \x01(\x03R\x02at\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"a\n" +
+	"\x12StreamSpansRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x15\n" +
+	"\x06env_id\x18\x02 \x01(\tR\x05envId\x12\x15\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"I\n" +
+	"\tSpanEvent\x12\x0e\n" +
+	"\x02at\x18\x01 \x01(\x03R\x02at\x12,\n" +
+	"\x04span\x18\x02 \x01(\v2\x18.kave.runtime.v1.SpanRowR\x04span\"G\n" +
+	"\x12ExportTraceRequest\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\tR\atraceId\x12\x16\n" +
+	"\x06format\x18\x02 \x01(\tR\x06format\"L\n" +
+	"\x13ExportTraceResponse\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12!\n" +
+	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\"A\n" +
+	"\x13IngestTracesRequest\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x16\n" +
+	"\x06format\x18\x02 \x01(\tR\x06format\"2\n" +
+	"\x14IngestTracesResponse\x12\x1a\n" +
+	"\baccepted\x18\x01 \x01(\x05R\baccepted\"\x15\n" +
 	"\x13GetPriceBookRequest\"M\n" +
 	"\x15GetSpendReportRequest\x124\n" +
-	"\x06filter\x18\x01 \x01(\v2\x1c.kave.runtime.v1.SpendFilterR\x06filter2\xb0\t\n" +
+	"\x06filter\x18\x01 \x01(\v2\x1c.kave.runtime.v1.SpendFilterR\x06filter2\xab\r\n" +
 	"\x0eRuntimeService\x12J\n" +
 	"\tCreateRun\x12!.kave.runtime.v1.CreateRunRequest\x1a\x1a.kave.runtime.v1.RunRecord\x12D\n" +
 	"\x06GetRun\x12\x1e.kave.runtime.v1.GetRunRequest\x1a\x1a.kave.runtime.v1.RunRecord\x12O\n" +
@@ -1138,7 +1850,14 @@ const file_kave_runtime_v1_runtime_proto_rawDesc = "" +
 	"\tCloseSpan\x12!.kave.runtime.v1.CloseSpanRequest\x1a\x18.kave.runtime.v1.SpanRow\x12D\n" +
 	"\aGetSpan\x12\x1f.kave.runtime.v1.GetSpanRequest\x1a\x18.kave.runtime.v1.SpanRow\x12U\n" +
 	"\n" +
-	"QuerySpans\x12\".kave.runtime.v1.QuerySpansRequest\x1a#.kave.runtime.v1.QuerySpansResponse\x12P\n" +
+	"QuerySpans\x12\".kave.runtime.v1.QuerySpansRequest\x1a#.kave.runtime.v1.QuerySpansResponse\x12S\n" +
+	"\vWatchEvents\x12#.kave.runtime.v1.WatchEventsRequest\x1a\x1d.kave.runtime.v1.RuntimeEvent0\x01\x12J\n" +
+	"\tWatchLogs\x12!.kave.runtime.v1.WatchLogsRequest\x1a\x18.kave.runtime.v1.LogLine0\x01\x12O\n" +
+	"\n" +
+	"TailTraces\x12\".kave.runtime.v1.TailTracesRequest\x1a\x1b.kave.runtime.v1.TraceEvent0\x01\x12P\n" +
+	"\vStreamSpans\x12#.kave.runtime.v1.StreamSpansRequest\x1a\x1a.kave.runtime.v1.SpanEvent0\x01\x12X\n" +
+	"\vExportTrace\x12#.kave.runtime.v1.ExportTraceRequest\x1a$.kave.runtime.v1.ExportTraceResponse\x12[\n" +
+	"\fIngestTraces\x12$.kave.runtime.v1.IngestTracesRequest\x1a%.kave.runtime.v1.IngestTracesResponse\x12P\n" +
 	"\fGetPriceBook\x12$.kave.runtime.v1.GetPriceBookRequest\x1a\x1a.kave.runtime.v1.PriceBook\x12V\n" +
 	"\x0eGetSpendReport\x12&.kave.runtime.v1.GetSpendReportRequest\x1a\x1c.kave.runtime.v1.SpendReportB\xbe\x01\n" +
 	"\x13com.kave.runtime.v1B\fRuntimeProtoP\x01Z;github.com/kave-io/kave/proto/gen/kave/runtime/v1;runtimev1\xa2\x02\x03KRX\xaa\x02\x0fKave.Runtime.V1\xca\x02\x0fKave\\Runtime\\V1\xe2\x02\x1bKave\\Runtime\\V1\\GPBMetadata\xea\x02\x11Kave::Runtime::V1b\x06proto3"
@@ -1155,7 +1874,7 @@ func file_kave_runtime_v1_runtime_proto_rawDescGZIP() []byte {
 	return file_kave_runtime_v1_runtime_proto_rawDescData
 }
 
-var file_kave_runtime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_kave_runtime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_kave_runtime_v1_runtime_proto_goTypes = []any{
 	(*CreateRunRequest)(nil),      // 0: kave.runtime.v1.CreateRunRequest
 	(*GetRunRequest)(nil),         // 1: kave.runtime.v1.GetRunRequest
@@ -1173,73 +1892,100 @@ var file_kave_runtime_v1_runtime_proto_goTypes = []any{
 	(*GetSpanRequest)(nil),        // 13: kave.runtime.v1.GetSpanRequest
 	(*QuerySpansRequest)(nil),     // 14: kave.runtime.v1.QuerySpansRequest
 	(*QuerySpansResponse)(nil),    // 15: kave.runtime.v1.QuerySpansResponse
-	(*GetPriceBookRequest)(nil),   // 16: kave.runtime.v1.GetPriceBookRequest
-	(*GetSpendReportRequest)(nil), // 17: kave.runtime.v1.GetSpendReportRequest
-	(TriggerType)(0),              // 18: kave.runtime.v1.TriggerType
-	(*RunFilter)(nil),             // 19: kave.runtime.v1.RunFilter
-	(*RunRecord)(nil),             // 20: kave.runtime.v1.RunRecord
-	(*RunUpdate)(nil),             // 21: kave.runtime.v1.RunUpdate
-	(RunStatus)(0),                // 22: kave.runtime.v1.RunStatus
-	(ActionType)(0),               // 23: kave.runtime.v1.ActionType
-	(*ActionFilter)(nil),          // 24: kave.runtime.v1.ActionFilter
-	(*ActionRecord)(nil),          // 25: kave.runtime.v1.ActionRecord
-	(*SpanInput)(nil),             // 26: kave.runtime.v1.SpanInput
-	(*SpanEnd)(nil),               // 27: kave.runtime.v1.SpanEnd
-	(*SpanFilter)(nil),            // 28: kave.runtime.v1.SpanFilter
-	(*SpanRow)(nil),               // 29: kave.runtime.v1.SpanRow
-	(*SpendFilter)(nil),           // 30: kave.runtime.v1.SpendFilter
-	(*PriceBook)(nil),             // 31: kave.runtime.v1.PriceBook
-	(*SpendReport)(nil),           // 32: kave.runtime.v1.SpendReport
+	(*WatchEventsRequest)(nil),    // 16: kave.runtime.v1.WatchEventsRequest
+	(*RuntimeEvent)(nil),          // 17: kave.runtime.v1.RuntimeEvent
+	(*WatchLogsRequest)(nil),      // 18: kave.runtime.v1.WatchLogsRequest
+	(*LogLine)(nil),               // 19: kave.runtime.v1.LogLine
+	(*TailTracesRequest)(nil),     // 20: kave.runtime.v1.TailTracesRequest
+	(*TraceEvent)(nil),            // 21: kave.runtime.v1.TraceEvent
+	(*StreamSpansRequest)(nil),    // 22: kave.runtime.v1.StreamSpansRequest
+	(*SpanEvent)(nil),             // 23: kave.runtime.v1.SpanEvent
+	(*ExportTraceRequest)(nil),    // 24: kave.runtime.v1.ExportTraceRequest
+	(*ExportTraceResponse)(nil),   // 25: kave.runtime.v1.ExportTraceResponse
+	(*IngestTracesRequest)(nil),   // 26: kave.runtime.v1.IngestTracesRequest
+	(*IngestTracesResponse)(nil),  // 27: kave.runtime.v1.IngestTracesResponse
+	(*GetPriceBookRequest)(nil),   // 28: kave.runtime.v1.GetPriceBookRequest
+	(*GetSpendReportRequest)(nil), // 29: kave.runtime.v1.GetSpendReportRequest
+	nil,                           // 30: kave.runtime.v1.LogLine.ContextEntry
+	(TriggerType)(0),              // 31: kave.runtime.v1.TriggerType
+	(*RunFilter)(nil),             // 32: kave.runtime.v1.RunFilter
+	(*RunRecord)(nil),             // 33: kave.runtime.v1.RunRecord
+	(*RunUpdate)(nil),             // 34: kave.runtime.v1.RunUpdate
+	(RunStatus)(0),                // 35: kave.runtime.v1.RunStatus
+	(ActionType)(0),               // 36: kave.runtime.v1.ActionType
+	(*ActionFilter)(nil),          // 37: kave.runtime.v1.ActionFilter
+	(*ActionRecord)(nil),          // 38: kave.runtime.v1.ActionRecord
+	(*SpanInput)(nil),             // 39: kave.runtime.v1.SpanInput
+	(*SpanEnd)(nil),               // 40: kave.runtime.v1.SpanEnd
+	(*SpanFilter)(nil),            // 41: kave.runtime.v1.SpanFilter
+	(*SpanRow)(nil),               // 42: kave.runtime.v1.SpanRow
+	(*SpendFilter)(nil),           // 43: kave.runtime.v1.SpendFilter
+	(*PriceBook)(nil),             // 44: kave.runtime.v1.PriceBook
+	(*SpendReport)(nil),           // 45: kave.runtime.v1.SpendReport
 }
 var file_kave_runtime_v1_runtime_proto_depIdxs = []int32{
-	18, // 0: kave.runtime.v1.CreateRunRequest.trigger_type:type_name -> kave.runtime.v1.TriggerType
-	19, // 1: kave.runtime.v1.ListRunsRequest.filter:type_name -> kave.runtime.v1.RunFilter
-	20, // 2: kave.runtime.v1.ListRunsResponse.runs:type_name -> kave.runtime.v1.RunRecord
-	21, // 3: kave.runtime.v1.UpdateRunRequest.update:type_name -> kave.runtime.v1.RunUpdate
-	22, // 4: kave.runtime.v1.WatchRunsRequest.statuses:type_name -> kave.runtime.v1.RunStatus
-	23, // 5: kave.runtime.v1.CreateActionRequest.action_type:type_name -> kave.runtime.v1.ActionType
-	24, // 6: kave.runtime.v1.ListActionsRequest.filter:type_name -> kave.runtime.v1.ActionFilter
-	25, // 7: kave.runtime.v1.ListActionsResponse.actions:type_name -> kave.runtime.v1.ActionRecord
-	26, // 8: kave.runtime.v1.OpenSpanRequest.span:type_name -> kave.runtime.v1.SpanInput
-	27, // 9: kave.runtime.v1.CloseSpanRequest.end:type_name -> kave.runtime.v1.SpanEnd
-	28, // 10: kave.runtime.v1.QuerySpansRequest.filter:type_name -> kave.runtime.v1.SpanFilter
-	29, // 11: kave.runtime.v1.QuerySpansResponse.spans:type_name -> kave.runtime.v1.SpanRow
-	30, // 12: kave.runtime.v1.GetSpendReportRequest.filter:type_name -> kave.runtime.v1.SpendFilter
-	0,  // 13: kave.runtime.v1.RuntimeService.CreateRun:input_type -> kave.runtime.v1.CreateRunRequest
-	1,  // 14: kave.runtime.v1.RuntimeService.GetRun:input_type -> kave.runtime.v1.GetRunRequest
-	2,  // 15: kave.runtime.v1.RuntimeService.ListRuns:input_type -> kave.runtime.v1.ListRunsRequest
-	4,  // 16: kave.runtime.v1.RuntimeService.UpdateRun:input_type -> kave.runtime.v1.UpdateRunRequest
-	5,  // 17: kave.runtime.v1.RuntimeService.CancelRun:input_type -> kave.runtime.v1.CancelRunRequest
-	6,  // 18: kave.runtime.v1.RuntimeService.WatchRuns:input_type -> kave.runtime.v1.WatchRunsRequest
-	7,  // 19: kave.runtime.v1.RuntimeService.CreateAction:input_type -> kave.runtime.v1.CreateActionRequest
-	8,  // 20: kave.runtime.v1.RuntimeService.GetAction:input_type -> kave.runtime.v1.GetActionRequest
-	9,  // 21: kave.runtime.v1.RuntimeService.ListActions:input_type -> kave.runtime.v1.ListActionsRequest
-	11, // 22: kave.runtime.v1.RuntimeService.OpenSpan:input_type -> kave.runtime.v1.OpenSpanRequest
-	12, // 23: kave.runtime.v1.RuntimeService.CloseSpan:input_type -> kave.runtime.v1.CloseSpanRequest
-	13, // 24: kave.runtime.v1.RuntimeService.GetSpan:input_type -> kave.runtime.v1.GetSpanRequest
-	14, // 25: kave.runtime.v1.RuntimeService.QuerySpans:input_type -> kave.runtime.v1.QuerySpansRequest
-	16, // 26: kave.runtime.v1.RuntimeService.GetPriceBook:input_type -> kave.runtime.v1.GetPriceBookRequest
-	17, // 27: kave.runtime.v1.RuntimeService.GetSpendReport:input_type -> kave.runtime.v1.GetSpendReportRequest
-	20, // 28: kave.runtime.v1.RuntimeService.CreateRun:output_type -> kave.runtime.v1.RunRecord
-	20, // 29: kave.runtime.v1.RuntimeService.GetRun:output_type -> kave.runtime.v1.RunRecord
-	3,  // 30: kave.runtime.v1.RuntimeService.ListRuns:output_type -> kave.runtime.v1.ListRunsResponse
-	20, // 31: kave.runtime.v1.RuntimeService.UpdateRun:output_type -> kave.runtime.v1.RunRecord
-	20, // 32: kave.runtime.v1.RuntimeService.CancelRun:output_type -> kave.runtime.v1.RunRecord
-	20, // 33: kave.runtime.v1.RuntimeService.WatchRuns:output_type -> kave.runtime.v1.RunRecord
-	25, // 34: kave.runtime.v1.RuntimeService.CreateAction:output_type -> kave.runtime.v1.ActionRecord
-	25, // 35: kave.runtime.v1.RuntimeService.GetAction:output_type -> kave.runtime.v1.ActionRecord
-	10, // 36: kave.runtime.v1.RuntimeService.ListActions:output_type -> kave.runtime.v1.ListActionsResponse
-	29, // 37: kave.runtime.v1.RuntimeService.OpenSpan:output_type -> kave.runtime.v1.SpanRow
-	29, // 38: kave.runtime.v1.RuntimeService.CloseSpan:output_type -> kave.runtime.v1.SpanRow
-	29, // 39: kave.runtime.v1.RuntimeService.GetSpan:output_type -> kave.runtime.v1.SpanRow
-	15, // 40: kave.runtime.v1.RuntimeService.QuerySpans:output_type -> kave.runtime.v1.QuerySpansResponse
-	31, // 41: kave.runtime.v1.RuntimeService.GetPriceBook:output_type -> kave.runtime.v1.PriceBook
-	32, // 42: kave.runtime.v1.RuntimeService.GetSpendReport:output_type -> kave.runtime.v1.SpendReport
-	28, // [28:43] is the sub-list for method output_type
-	13, // [13:28] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	31, // 0: kave.runtime.v1.CreateRunRequest.trigger_type:type_name -> kave.runtime.v1.TriggerType
+	32, // 1: kave.runtime.v1.ListRunsRequest.filter:type_name -> kave.runtime.v1.RunFilter
+	33, // 2: kave.runtime.v1.ListRunsResponse.runs:type_name -> kave.runtime.v1.RunRecord
+	34, // 3: kave.runtime.v1.UpdateRunRequest.update:type_name -> kave.runtime.v1.RunUpdate
+	35, // 4: kave.runtime.v1.WatchRunsRequest.statuses:type_name -> kave.runtime.v1.RunStatus
+	36, // 5: kave.runtime.v1.CreateActionRequest.action_type:type_name -> kave.runtime.v1.ActionType
+	37, // 6: kave.runtime.v1.ListActionsRequest.filter:type_name -> kave.runtime.v1.ActionFilter
+	38, // 7: kave.runtime.v1.ListActionsResponse.actions:type_name -> kave.runtime.v1.ActionRecord
+	39, // 8: kave.runtime.v1.OpenSpanRequest.span:type_name -> kave.runtime.v1.SpanInput
+	40, // 9: kave.runtime.v1.CloseSpanRequest.end:type_name -> kave.runtime.v1.SpanEnd
+	41, // 10: kave.runtime.v1.QuerySpansRequest.filter:type_name -> kave.runtime.v1.SpanFilter
+	42, // 11: kave.runtime.v1.QuerySpansResponse.spans:type_name -> kave.runtime.v1.SpanRow
+	30, // 12: kave.runtime.v1.LogLine.context:type_name -> kave.runtime.v1.LogLine.ContextEntry
+	42, // 13: kave.runtime.v1.SpanEvent.span:type_name -> kave.runtime.v1.SpanRow
+	43, // 14: kave.runtime.v1.GetSpendReportRequest.filter:type_name -> kave.runtime.v1.SpendFilter
+	0,  // 15: kave.runtime.v1.RuntimeService.CreateRun:input_type -> kave.runtime.v1.CreateRunRequest
+	1,  // 16: kave.runtime.v1.RuntimeService.GetRun:input_type -> kave.runtime.v1.GetRunRequest
+	2,  // 17: kave.runtime.v1.RuntimeService.ListRuns:input_type -> kave.runtime.v1.ListRunsRequest
+	4,  // 18: kave.runtime.v1.RuntimeService.UpdateRun:input_type -> kave.runtime.v1.UpdateRunRequest
+	5,  // 19: kave.runtime.v1.RuntimeService.CancelRun:input_type -> kave.runtime.v1.CancelRunRequest
+	6,  // 20: kave.runtime.v1.RuntimeService.WatchRuns:input_type -> kave.runtime.v1.WatchRunsRequest
+	7,  // 21: kave.runtime.v1.RuntimeService.CreateAction:input_type -> kave.runtime.v1.CreateActionRequest
+	8,  // 22: kave.runtime.v1.RuntimeService.GetAction:input_type -> kave.runtime.v1.GetActionRequest
+	9,  // 23: kave.runtime.v1.RuntimeService.ListActions:input_type -> kave.runtime.v1.ListActionsRequest
+	11, // 24: kave.runtime.v1.RuntimeService.OpenSpan:input_type -> kave.runtime.v1.OpenSpanRequest
+	12, // 25: kave.runtime.v1.RuntimeService.CloseSpan:input_type -> kave.runtime.v1.CloseSpanRequest
+	13, // 26: kave.runtime.v1.RuntimeService.GetSpan:input_type -> kave.runtime.v1.GetSpanRequest
+	14, // 27: kave.runtime.v1.RuntimeService.QuerySpans:input_type -> kave.runtime.v1.QuerySpansRequest
+	16, // 28: kave.runtime.v1.RuntimeService.WatchEvents:input_type -> kave.runtime.v1.WatchEventsRequest
+	18, // 29: kave.runtime.v1.RuntimeService.WatchLogs:input_type -> kave.runtime.v1.WatchLogsRequest
+	20, // 30: kave.runtime.v1.RuntimeService.TailTraces:input_type -> kave.runtime.v1.TailTracesRequest
+	22, // 31: kave.runtime.v1.RuntimeService.StreamSpans:input_type -> kave.runtime.v1.StreamSpansRequest
+	24, // 32: kave.runtime.v1.RuntimeService.ExportTrace:input_type -> kave.runtime.v1.ExportTraceRequest
+	26, // 33: kave.runtime.v1.RuntimeService.IngestTraces:input_type -> kave.runtime.v1.IngestTracesRequest
+	28, // 34: kave.runtime.v1.RuntimeService.GetPriceBook:input_type -> kave.runtime.v1.GetPriceBookRequest
+	29, // 35: kave.runtime.v1.RuntimeService.GetSpendReport:input_type -> kave.runtime.v1.GetSpendReportRequest
+	33, // 36: kave.runtime.v1.RuntimeService.CreateRun:output_type -> kave.runtime.v1.RunRecord
+	33, // 37: kave.runtime.v1.RuntimeService.GetRun:output_type -> kave.runtime.v1.RunRecord
+	3,  // 38: kave.runtime.v1.RuntimeService.ListRuns:output_type -> kave.runtime.v1.ListRunsResponse
+	33, // 39: kave.runtime.v1.RuntimeService.UpdateRun:output_type -> kave.runtime.v1.RunRecord
+	33, // 40: kave.runtime.v1.RuntimeService.CancelRun:output_type -> kave.runtime.v1.RunRecord
+	33, // 41: kave.runtime.v1.RuntimeService.WatchRuns:output_type -> kave.runtime.v1.RunRecord
+	38, // 42: kave.runtime.v1.RuntimeService.CreateAction:output_type -> kave.runtime.v1.ActionRecord
+	38, // 43: kave.runtime.v1.RuntimeService.GetAction:output_type -> kave.runtime.v1.ActionRecord
+	10, // 44: kave.runtime.v1.RuntimeService.ListActions:output_type -> kave.runtime.v1.ListActionsResponse
+	42, // 45: kave.runtime.v1.RuntimeService.OpenSpan:output_type -> kave.runtime.v1.SpanRow
+	42, // 46: kave.runtime.v1.RuntimeService.CloseSpan:output_type -> kave.runtime.v1.SpanRow
+	42, // 47: kave.runtime.v1.RuntimeService.GetSpan:output_type -> kave.runtime.v1.SpanRow
+	15, // 48: kave.runtime.v1.RuntimeService.QuerySpans:output_type -> kave.runtime.v1.QuerySpansResponse
+	17, // 49: kave.runtime.v1.RuntimeService.WatchEvents:output_type -> kave.runtime.v1.RuntimeEvent
+	19, // 50: kave.runtime.v1.RuntimeService.WatchLogs:output_type -> kave.runtime.v1.LogLine
+	21, // 51: kave.runtime.v1.RuntimeService.TailTraces:output_type -> kave.runtime.v1.TraceEvent
+	23, // 52: kave.runtime.v1.RuntimeService.StreamSpans:output_type -> kave.runtime.v1.SpanEvent
+	25, // 53: kave.runtime.v1.RuntimeService.ExportTrace:output_type -> kave.runtime.v1.ExportTraceResponse
+	27, // 54: kave.runtime.v1.RuntimeService.IngestTraces:output_type -> kave.runtime.v1.IngestTracesResponse
+	44, // 55: kave.runtime.v1.RuntimeService.GetPriceBook:output_type -> kave.runtime.v1.PriceBook
+	45, // 56: kave.runtime.v1.RuntimeService.GetSpendReport:output_type -> kave.runtime.v1.SpendReport
+	36, // [36:57] is the sub-list for method output_type
+	15, // [15:36] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_kave_runtime_v1_runtime_proto_init() }
@@ -1260,7 +2006,7 @@ func file_kave_runtime_v1_runtime_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_kave_runtime_v1_runtime_proto_rawDesc), len(file_kave_runtime_v1_runtime_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

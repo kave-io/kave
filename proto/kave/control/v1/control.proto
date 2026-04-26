@@ -4,12 +4,15 @@ package kave.control.v1;
 
 import "google/protobuf/empty.proto";
 import "kave/control/v1/agent.proto";
+import "kave/control/v1/auth.proto";
 import "kave/control/v1/budget.proto";
 import "kave/control/v1/credential.proto";
+import "kave/control/v1/daemon.proto";
 import "kave/control/v1/environment.proto";
 import "kave/control/v1/org.proto";
 import "kave/control/v1/policy.proto";
 import "kave/control/v1/project.proto";
+import "kave/control/v1/rbac.proto";
 import "kave/control/v1/token.proto";
 
 option go_package = "github.com/kave-io/kave/proto/gen/kave/control/v1;control";

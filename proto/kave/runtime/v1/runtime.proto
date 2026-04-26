@@ -31,6 +31,16 @@ service RuntimeService {
   rpc GetSpan(GetSpanRequest) returns (SpanRow);
   rpc QuerySpans(QuerySpansRequest) returns (QuerySpansResponse);
 
+  // Streaming operations
+  rpc WatchEvents(WatchEventsRequest) returns (stream RuntimeEvent);
+  rpc WatchLogs(WatchLogsRequest) returns (stream LogLine);
+  rpc TailTraces(TailTracesRequest) returns (stream TraceEvent);
+  rpc StreamSpans(StreamSpansRequest) returns (stream SpanEvent);
+
+  // Trace operations
+  rpc ExportTrace(ExportTraceRequest) returns (ExportTraceResponse);
+  rpc IngestTraces(IngestTracesRequest) returns (IngestTracesResponse);
+
   // Cost operations
   rpc GetPriceBook(GetPriceBookRequest) returns (PriceBook);
   rpc GetSpendReport(GetSpendReportRequest) returns (SpendReport);
@@ -134,6 +144,75 @@ message QuerySpansRequest {
 message QuerySpansResponse {
   repeated SpanRow spans = 1;
   string next_cursor = 2;
+}
+
+// --- Streaming ---
+
+message WatchEventsRequest {
+  string env_id = 1;
+  string project_id = 2;
+  string kind = 3;  // optional: filter by event kind
+}
+
+message RuntimeEvent {
+  string kind = 1;
+  int64 at = 2;
+  bytes data = 3;  // JSON-encoded event data
+}
+
+message WatchLogsRequest {
+  string level = 1;  // optional: "debug", "info", "warn", "error"
+}
+
+message LogLine {
+  int64 at = 1;
+  string level = 2;
+  string message = 3;
+  map<string, string> context = 4;
+}
+
+message TailTracesRequest {
+  string project_id = 1;
+  string env_id = 2;
+  string run_id = 3;
+}
+
+message TraceEvent {
+  string kind = 1;  // "Run", "Span"
+  int64 at = 2;
+  bytes data = 3;  // JSON-encoded run or span
+}
+
+message StreamSpansRequest {
+  string project_id = 1;
+  string env_id = 2;
+  string run_id = 3;
+}
+
+message SpanEvent {
+  int64 at = 1;
+  SpanRow span = 2;
+}
+
+// --- Trace Export/Ingest ---
+
+message ExportTraceRequest {
+  string trace_id = 1;
+  string format = 2;  // "jsonl", "mermaid", "dot", "otlp", "parquet"
+}
+
+message ExportTraceResponse {
+  bytes data = 1;
+  string content_type = 2;
+}
+
+message IngestTracesRequest {
+  bytes data = 1;  // OTLP ExportTraceServiceRequest (protobuf or JSON)
+  string format = 2;  // "protobuf" or "json"
+}
+
+message IngestTracesResponse {
+  int32 accepted = 1;
 }
 
 // --- Cost ---

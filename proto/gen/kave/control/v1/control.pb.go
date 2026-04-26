@@ -2042,7 +2042,7 @@ var File_kave_control_v1_control_proto protoreflect.FileDescriptor
 
 const file_kave_control_v1_control_proto_rawDesc = "" +
 	"\n" +
-	"\x1dkave/control/v1/control.proto\x12\x0fkave.control.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1bkave/control/v1/agent.proto\x1a\x1ckave/control/v1/budget.proto\x1a kave/control/v1/credential.proto\x1a!kave/control/v1/environment.proto\x1a\x19kave/control/v1/org.proto\x1a\x1ckave/control/v1/policy.proto\x1a\x1dkave/control/v1/project.proto\x1a\x1bkave/control/v1/token.proto\"C\n" +
+	"\x1dkave/control/v1/control.proto\x12\x0fkave.control.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1bkave/control/v1/agent.proto\x1a\x1akave/control/v1/auth.proto\x1a\x1ckave/control/v1/budget.proto\x1a kave/control/v1/credential.proto\x1a\x1ckave/control/v1/daemon.proto\x1a!kave/control/v1/environment.proto\x1a\x19kave/control/v1/org.proto\x1a\x1ckave/control/v1/policy.proto\x1a\x1dkave/control/v1/project.proto\x1a\x1akave/control/v1/rbac.proto\x1a\x1bkave/control/v1/token.proto\"C\n" +
 	"\x19CreateOrganizationRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\"(\n" +
@@ -2391,12 +2391,15 @@ func file_kave_control_v1_control_proto_init() {
 		return
 	}
 	file_kave_control_v1_agent_proto_init()
+	file_kave_control_v1_auth_proto_init()
 	file_kave_control_v1_budget_proto_init()
 	file_kave_control_v1_credential_proto_init()
+	file_kave_control_v1_daemon_proto_init()
 	file_kave_control_v1_environment_proto_init()
 	file_kave_control_v1_org_proto_init()
 	file_kave_control_v1_policy_proto_init()
 	file_kave_control_v1_project_proto_init()
+	file_kave_control_v1_rbac_proto_init()
 	file_kave_control_v1_token_proto_init()
 	file_kave_control_v1_control_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}

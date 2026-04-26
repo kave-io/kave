@@ -32,6 +32,12 @@ const (
 	RuntimeService_CloseSpan_FullMethodName      = "/kave.runtime.v1.RuntimeService/CloseSpan"
 	RuntimeService_GetSpan_FullMethodName        = "/kave.runtime.v1.RuntimeService/GetSpan"
 	RuntimeService_QuerySpans_FullMethodName     = "/kave.runtime.v1.RuntimeService/QuerySpans"
+	RuntimeService_WatchEvents_FullMethodName    = "/kave.runtime.v1.RuntimeService/WatchEvents"
+	RuntimeService_WatchLogs_FullMethodName      = "/kave.runtime.v1.RuntimeService/WatchLogs"
+	RuntimeService_TailTraces_FullMethodName     = "/kave.runtime.v1.RuntimeService/TailTraces"
+	RuntimeService_StreamSpans_FullMethodName    = "/kave.runtime.v1.RuntimeService/StreamSpans"
+	RuntimeService_ExportTrace_FullMethodName    = "/kave.runtime.v1.RuntimeService/ExportTrace"
+	RuntimeService_IngestTraces_FullMethodName   = "/kave.runtime.v1.RuntimeService/IngestTraces"
 	RuntimeService_GetPriceBook_FullMethodName   = "/kave.runtime.v1.RuntimeService/GetPriceBook"
 	RuntimeService_GetSpendReport_FullMethodName = "/kave.runtime.v1.RuntimeService/GetSpendReport"
 )
@@ -59,6 +65,14 @@ type RuntimeServiceClient interface {
 	CloseSpan(ctx context.Context, in *CloseSpanRequest, opts ...grpc.CallOption) (*SpanRow, error)
 	GetSpan(ctx context.Context, in *GetSpanRequest, opts ...grpc.CallOption) (*SpanRow, error)
 	QuerySpans(ctx context.Context, in *QuerySpansRequest, opts ...grpc.CallOption) (*QuerySpansResponse, error)
+	// Streaming operations
+	WatchEvents(ctx context.Context, in *WatchEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RuntimeEvent], error)
+	WatchLogs(ctx context.Context, in *WatchLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLine], error)
+	TailTraces(ctx context.Context, in *TailTracesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TraceEvent], error)
+	StreamSpans(ctx context.Context, in *StreamSpansRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SpanEvent], error)
+	// Trace operations
+	ExportTrace(ctx context.Context, in *ExportTraceRequest, opts ...grpc.CallOption) (*ExportTraceResponse, error)
+	IngestTraces(ctx context.Context, in *IngestTracesRequest, opts ...grpc.CallOption) (*IngestTracesResponse, error)
 	// Cost operations
 	GetPriceBook(ctx context.Context, in *GetPriceBookRequest, opts ...grpc.CallOption) (*PriceBook, error)
 	GetSpendReport(ctx context.Context, in *GetSpendReportRequest, opts ...grpc.CallOption) (*SpendReport, error)
@@ -211,6 +225,102 @@ func (c *runtimeServiceClient) QuerySpans(ctx context.Context, in *QuerySpansReq
 	return out, nil
 }
 
+func (c *runtimeServiceClient) WatchEvents(ctx context.Context, in *WatchEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[RuntimeEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RuntimeService_ServiceDesc.Streams[1], RuntimeService_WatchEvents_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchEventsRequest, RuntimeEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_WatchEventsClient = grpc.ServerStreamingClient[RuntimeEvent]
+
+func (c *runtimeServiceClient) WatchLogs(ctx context.Context, in *WatchLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLine], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RuntimeService_ServiceDesc.Streams[2], RuntimeService_WatchLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WatchLogsRequest, LogLine]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_WatchLogsClient = grpc.ServerStreamingClient[LogLine]
+
+func (c *runtimeServiceClient) TailTraces(ctx context.Context, in *TailTracesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[TraceEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RuntimeService_ServiceDesc.Streams[3], RuntimeService_TailTraces_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[TailTracesRequest, TraceEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_TailTracesClient = grpc.ServerStreamingClient[TraceEvent]
+
+func (c *runtimeServiceClient) StreamSpans(ctx context.Context, in *StreamSpansRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SpanEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &RuntimeService_ServiceDesc.Streams[4], RuntimeService_StreamSpans_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamSpansRequest, SpanEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_StreamSpansClient = grpc.ServerStreamingClient[SpanEvent]
+
+func (c *runtimeServiceClient) ExportTrace(ctx context.Context, in *ExportTraceRequest, opts ...grpc.CallOption) (*ExportTraceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExportTraceResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_ExportTrace_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeServiceClient) IngestTraces(ctx context.Context, in *IngestTracesRequest, opts ...grpc.CallOption) (*IngestTracesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(IngestTracesResponse)
+	err := c.cc.Invoke(ctx, RuntimeService_IngestTraces_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *runtimeServiceClient) GetPriceBook(ctx context.Context, in *GetPriceBookRequest, opts ...grpc.CallOption) (*PriceBook, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PriceBook)
@@ -254,6 +364,14 @@ type RuntimeServiceServer interface {
 	CloseSpan(context.Context, *CloseSpanRequest) (*SpanRow, error)
 	GetSpan(context.Context, *GetSpanRequest) (*SpanRow, error)
 	QuerySpans(context.Context, *QuerySpansRequest) (*QuerySpansResponse, error)
+	// Streaming operations
+	WatchEvents(*WatchEventsRequest, grpc.ServerStreamingServer[RuntimeEvent]) error
+	WatchLogs(*WatchLogsRequest, grpc.ServerStreamingServer[LogLine]) error
+	TailTraces(*TailTracesRequest, grpc.ServerStreamingServer[TraceEvent]) error
+	StreamSpans(*StreamSpansRequest, grpc.ServerStreamingServer[SpanEvent]) error
+	// Trace operations
+	ExportTrace(context.Context, *ExportTraceRequest) (*ExportTraceResponse, error)
+	IngestTraces(context.Context, *IngestTracesRequest) (*IngestTracesResponse, error)
 	// Cost operations
 	GetPriceBook(context.Context, *GetPriceBookRequest) (*PriceBook, error)
 	GetSpendReport(context.Context, *GetSpendReportRequest) (*SpendReport, error)
@@ -305,6 +423,24 @@ func (UnimplementedRuntimeServiceServer) GetSpan(context.Context, *GetSpanReques
 }
 func (UnimplementedRuntimeServiceServer) QuerySpans(context.Context, *QuerySpansRequest) (*QuerySpansResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QuerySpans not implemented")
+}
+func (UnimplementedRuntimeServiceServer) WatchEvents(*WatchEventsRequest, grpc.ServerStreamingServer[RuntimeEvent]) error {
+	return status.Errorf(codes.Unimplemented, "method WatchEvents not implemented")
+}
+func (UnimplementedRuntimeServiceServer) WatchLogs(*WatchLogsRequest, grpc.ServerStreamingServer[LogLine]) error {
+	return status.Errorf(codes.Unimplemented, "method WatchLogs not implemented")
+}
+func (UnimplementedRuntimeServiceServer) TailTraces(*TailTracesRequest, grpc.ServerStreamingServer[TraceEvent]) error {
+	return status.Errorf(codes.Unimplemented, "method TailTraces not implemented")
+}
+func (UnimplementedRuntimeServiceServer) StreamSpans(*StreamSpansRequest, grpc.ServerStreamingServer[SpanEvent]) error {
+	return status.Errorf(codes.Unimplemented, "method StreamSpans not implemented")
+}
+func (UnimplementedRuntimeServiceServer) ExportTrace(context.Context, *ExportTraceRequest) (*ExportTraceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ExportTrace not implemented")
+}
+func (UnimplementedRuntimeServiceServer) IngestTraces(context.Context, *IngestTracesRequest) (*IngestTracesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method IngestTraces not implemented")
 }
 func (UnimplementedRuntimeServiceServer) GetPriceBook(context.Context, *GetPriceBookRequest) (*PriceBook, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPriceBook not implemented")
@@ -560,6 +696,86 @@ func _RuntimeService_QuerySpans_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RuntimeService_WatchEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchEventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RuntimeServiceServer).WatchEvents(m, &grpc.GenericServerStream[WatchEventsRequest, RuntimeEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_WatchEventsServer = grpc.ServerStreamingServer[RuntimeEvent]
+
+func _RuntimeService_WatchLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RuntimeServiceServer).WatchLogs(m, &grpc.GenericServerStream[WatchLogsRequest, LogLine]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_WatchLogsServer = grpc.ServerStreamingServer[LogLine]
+
+func _RuntimeService_TailTraces_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(TailTracesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RuntimeServiceServer).TailTraces(m, &grpc.GenericServerStream[TailTracesRequest, TraceEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_TailTracesServer = grpc.ServerStreamingServer[TraceEvent]
+
+func _RuntimeService_StreamSpans_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamSpansRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(RuntimeServiceServer).StreamSpans(m, &grpc.GenericServerStream[StreamSpansRequest, SpanEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type RuntimeService_StreamSpansServer = grpc.ServerStreamingServer[SpanEvent]
+
+func _RuntimeService_ExportTrace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportTraceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).ExportTrace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_ExportTrace_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).ExportTrace(ctx, req.(*ExportTraceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RuntimeService_IngestTraces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(IngestTracesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).IngestTraces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_IngestTraces_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).IngestTraces(ctx, req.(*IngestTracesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _RuntimeService_GetPriceBook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetPriceBookRequest)
 	if err := dec(in); err != nil {
@@ -652,6 +868,14 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _RuntimeService_QuerySpans_Handler,
 		},
 		{
+			MethodName: "ExportTrace",
+			Handler:    _RuntimeService_ExportTrace_Handler,
+		},
+		{
+			MethodName: "IngestTraces",
+			Handler:    _RuntimeService_IngestTraces_Handler,
+		},
+		{
 			MethodName: "GetPriceBook",
 			Handler:    _RuntimeService_GetPriceBook_Handler,
 		},
@@ -664,6 +888,26 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchRuns",
 			Handler:       _RuntimeService_WatchRuns_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchEvents",
+			Handler:       _RuntimeService_WatchEvents_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchLogs",
+			Handler:       _RuntimeService_WatchLogs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "TailTraces",
+			Handler:       _RuntimeService_TailTraces_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamSpans",
+			Handler:       _RuntimeService_StreamSpans_Handler,
 			ServerStreams: true,
 		},
 	},
