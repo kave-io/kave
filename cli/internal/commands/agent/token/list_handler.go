@@ -2,18 +2,39 @@ package token
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
+	"github.com/kave-io/kave/cli/internal/runtime"
+	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
 )
 
 type ListInput struct {
-	Agent string
+	Agent  string
+	Limit  int32
+	Cursor string
 }
 
 type ListOutput struct {
-	Items []map[string]any `json:"items"`
+	Tokens     []*controlv1.AgentToken `json:"tokens"`
+	NextCursor string                  `json:"next_cursor,omitempty"`
 }
 
 func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "agent token list is not exposed by the HTTP bridge yet", Exit: 1}
+	rt, ok := runtime.FromContext(ctx)
+	if !ok || rt == nil {
+		return nil, fmt.Errorf("runtime missing")
+	}
+	t, err := rt.GetTransport()
+	if err != nil {
+		return nil, err
+	}
+	svc, err := t.ControlSvc()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.ListTokens(ctx, &controlv1.ListTokensRequest{AgentId: in.Agent, Limit: in.Limit, Cursor: in.Cursor})
+	if err != nil {
+		return nil, err
+	}
+	return &ListOutput{Tokens: resp.GetTokens(), NextCursor: resp.GetNextCursor()}, nil
 }

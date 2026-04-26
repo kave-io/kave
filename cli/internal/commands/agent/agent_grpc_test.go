@@ -9,11 +9,29 @@ import (
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type stubControlSvc struct {
 	controlv1.UnimplementedControlPlaneServiceServer
-	agents []*controlv1.Agent
+	agents      []*controlv1.Agent
+	deletedIDs  []string
+	restoredIDs []string
+}
+
+func (s *stubControlSvc) DeleteAgent(_ context.Context, req *controlv1.DeleteAgentRequest) (*emptypb.Empty, error) {
+	for _, a := range s.agents {
+		if a.Id == req.Id {
+			s.deletedIDs = append(s.deletedIDs, req.Id)
+			return &emptypb.Empty{}, nil
+		}
+	}
+	return nil, status.Errorf(codes.NotFound, "agent %q not found", req.Id)
+}
+
+func (s *stubControlSvc) RestoreAgent(_ context.Context, req *controlv1.RestoreAgentRequest) (*controlv1.Agent, error) {
+	s.restoredIDs = append(s.restoredIDs, req.Id)
+	return &controlv1.Agent{Id: req.Id, Name: "restored"}, nil
 }
 
 func (s *stubControlSvc) GetAgent(_ context.Context, req *controlv1.GetAgentRequest) (*controlv1.Agent, error) {
@@ -72,5 +90,39 @@ func TestAgentList_gRPC(t *testing.T) {
 	}
 	if len(out.Items) != 2 {
 		t.Fatalf("expected 2 items, got %d", len(out.Items))
+	}
+}
+
+func TestAgentDelete_gRPC(t *testing.T) {
+	stub := &stubControlSvc{agents: []*controlv1.Agent{{Id: "agt-1"}}}
+	h := testutil.NewGRPCHarness(t, nil, stub)
+	out, err := agent.RunDelete(h.Context(), agent.DeleteInput{ID: "agt-1"})
+	if err != nil {
+		t.Fatalf("RunDelete: %v", err)
+	}
+	if !out.Deleted || len(stub.deletedIDs) != 1 || stub.deletedIDs[0] != "agt-1" {
+		t.Fatalf("unexpected: out=%+v deleted=%v", out, stub.deletedIDs)
+	}
+}
+
+func TestAgentDelete_NotFound(t *testing.T) {
+	h := testutil.NewGRPCHarness(t, nil, &stubControlSvc{})
+	if _, err := agent.RunDelete(h.Context(), agent.DeleteInput{ID: "missing"}); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestAgentRestore_gRPC(t *testing.T) {
+	stub := &stubControlSvc{}
+	h := testutil.NewGRPCHarness(t, nil, stub)
+	out, err := agent.RunRestore(h.Context(), agent.RestoreInput{ID: "agt-9"})
+	if err != nil {
+		t.Fatalf("RunRestore: %v", err)
+	}
+	if out.Data == nil || out.Data.Id != "agt-9" {
+		t.Fatalf("unexpected output: %+v", out)
+	}
+	if len(stub.restoredIDs) != 1 {
+		t.Fatalf("server not called: %v", stub.restoredIDs)
 	}
 }
