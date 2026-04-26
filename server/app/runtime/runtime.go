@@ -394,4 +394,32 @@ func (s *Server) GetSpendReport(ctx context.Context, req *runtimev1.GetSpendRepo
 	return spendReportToProto(report), nil
 }
 
+// ── Streaming Operations ───────────────────────────────────────────────────
+
+func (s *Server) WatchEvents(req *runtimev1.WatchEventsRequest, stream grpc.ServerStreamingServer[runtimev1.RuntimeEvent]) error {
+	return status.Error(codes.Unimplemented, "not yet implemented")
+}
+
+func (s *Server) WatchLogs(req *runtimev1.WatchLogsRequest, stream grpc.ServerStreamingServer[runtimev1.LogLine]) error {
+	return status.Error(codes.Unimplemented, "not yet implemented")
+}
+
+func (s *Server) TailTraces(req *runtimev1.TailTracesRequest, stream grpc.ServerStreamingServer[runtimev1.TraceEvent]) error {
+	return status.Error(codes.Unimplemented, "not yet implemented")
+}
+
+func (s *Server) StreamSpans(req *runtimev1.StreamSpansRequest, stream grpc.ServerStreamingServer[runtimev1.SpanEvent]) error {
+	return status.Error(codes.Unimplemented, "not yet implemented")
+}
+
+// ── Trace Operations ───────────────────────────────────────────────────────
+
+func (s *Server) ExportTrace(ctx context.Context, req *runtimev1.ExportTraceRequest) (*runtimev1.ExportTraceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented")
+}
+
+func (s *Server) IngestTraces(ctx context.Context, req *runtimev1.IngestTracesRequest) (*runtimev1.IngestTracesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not yet implemented")
+}
+
 func stringPtr(s string) *string { return &s }
