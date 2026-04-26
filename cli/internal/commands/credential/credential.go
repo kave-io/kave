@@ -26,26 +26,29 @@ func Register(parent *cobra.Command) {
 }
 
 func newListCmd() *cobra.Command {
+	var connectorType string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List",
+		Short: "List credentials",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunList(cmd.Context(), ListInput{})
+			out, err := RunList(cmd.Context(), ListInput{ConnectorType: connectorType})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "List")
 		},
 	}
+	cmd.Flags().StringVar(&connectorType, "connector", "", "Filter by connector type")
 	return cmd
 }
 
 func newGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get",
+		Use:   "get <id>",
+		Short: "Get a credential by ID",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGet(cmd.Context(), GetInput{})
+			out, err := RunGet(cmd.Context(), GetInput{ID: args[0]})
 			if err != nil {
 				return err
 			}
@@ -132,10 +135,11 @@ func newRevokeCmd() *cobra.Command {
 
 func newDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete",
-		Short: "Delete",
+		Use:   "delete <id>",
+		Short: "Delete a credential",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunDelete(cmd.Context(), DeleteInput{})
+			out, err := RunDelete(cmd.Context(), DeleteInput{ID: args[0]})
 			if err != nil {
 				return err
 			}

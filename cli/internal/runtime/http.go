@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/kave-io/kave/cli/internal/contract"
 	"github.com/kave-io/kave/cli/internal/output"
@@ -26,22 +25,6 @@ type HTTPClient struct {
 	SessionKey string
 }
 
-func (rt *Runtime) Client() *HTTPClient {
-	base := resolveBaseURL(rt)
-	timeout := 30 * time.Second
-	if rt != nil && rt.Resolution != nil {
-		if raw := strings.TrimSpace(rt.Resolution.Options.Timeout); raw != "" {
-			if d, err := time.ParseDuration(raw); err == nil && d > 0 {
-				timeout = d
-			}
-		}
-	}
-	return &HTTPClient{
-		BaseURL:    base,
-		HTTP:       &http.Client{Timeout: timeout},
-		SessionKey: sessionAccount(base),
-	}
-}
 
 func resolveBaseURL(rt *Runtime) string {
 	if rt == nil || rt.Resolution == nil {

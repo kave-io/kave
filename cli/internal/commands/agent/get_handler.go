@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kave-io/kave/cli/internal/runtime"
+	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
 )
 
 type GetInput struct {
@@ -12,8 +13,7 @@ type GetInput struct {
 }
 
 type GetOutput struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	Data *controlv1.Agent `json:"data"`
 }
 
 func RunGet(ctx context.Context, in GetInput) (*GetOutput, error) {
@@ -21,9 +21,17 @@ func RunGet(ctx context.Context, in GetInput) (*GetOutput, error) {
 	if !ok || rt == nil {
 		return nil, fmt.Errorf("runtime missing")
 	}
-	var out GetOutput
-	if err := rt.Client().Get(ctx, "/api/v1/agents/"+in.Identifier, nil, &out); err != nil {
+	t, err := rt.GetTransport()
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
+	svc, err := t.ControlSvc()
+	if err != nil {
+		return nil, err
+	}
+	rec, err := svc.GetAgent(ctx, &controlv1.GetAgentRequest{Id: in.Identifier})
+	if err != nil {
+		return nil, err
+	}
+	return &GetOutput{Data: rec}, nil
 }

@@ -28,7 +28,7 @@ func Register(parent *cobra.Command) {
 func newListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List",
+		Short: "List policies",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := RunList(cmd.Context(), ListInput{})
 			if err != nil {
@@ -42,10 +42,11 @@ func newListCmd() *cobra.Command {
 
 func newGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get",
+		Use:   "get <id>",
+		Short: "Get a policy by ID",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGet(cmd.Context(), GetInput{})
+			out, err := RunGet(cmd.Context(), GetInput{ID: args[0]})
 			if err != nil {
 				return err
 			}

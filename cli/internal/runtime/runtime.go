@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/kave-io/kave/cli/internal/config"
 	"github.com/kave-io/kave/cli/internal/output"
@@ -32,6 +33,10 @@ type Runtime struct {
 	Resolution *config.Resolution
 	Output     output.Format
 	Services   Services
+
+	transportOnce sync.Once
+	transport     *Transport
+	transportErr  error
 }
 
 func New(resolution *config.Resolution, outputFormat output.Format) *Runtime {
@@ -61,6 +66,32 @@ func (NotImplementedDispatcher) Dispatch(_ context.Context, invocation Invocatio
 		Message: fmt.Sprintf("%s is not exposed by the HTTP bridge yet", invocation.CommandPath),
 		Exit:    1,
 	}
+}
+
+// InjectTransport sets a pre-built Transport, bypassing lazy initialization.
+// Intended for tests only.
+func (rt *Runtime) InjectTransport(t *Transport) {
+	rt.transportOnce.Do(func() {
+		rt.transport = t
+	})
+}
+
+// GetTransport returns the lazily initialized Transport for this runtime.
+func (rt *Runtime) GetTransport() (*Transport, error) {
+	rt.transportOnce.Do(func() {
+		rt.transport, rt.transportErr = newTransport(rt)
+	})
+	return rt.transport, rt.transportErr
+}
+
+// Client returns the HTTP bridge client (backward compat for bridge-only commands).
+func (rt *Runtime) Client() *HTTPClient {
+	t, err := rt.GetTransport()
+	if err != nil {
+		// Return a minimal client so callers get a descriptive error on first use.
+		return &HTTPClient{BaseURL: "http://127.0.0.1:8080", HTTP: httpClientFromRuntime(rt), SessionKey: ""}
+	}
+	return t.HTTP()
 }
 
 func MustDispatch(rt *Runtime, ctx context.Context, invocation Invocation) error {

@@ -3,10 +3,10 @@ package agent
 import (
 	"context"
 	"fmt"
-	"net/url"
 
 	"github.com/kave-io/kave/cli/internal/flags"
 	"github.com/kave-io/kave/cli/internal/runtime"
+	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
 )
 
 type ListInput struct {
@@ -14,7 +14,8 @@ type ListInput struct {
 }
 
 type ListOutput struct {
-	Items []map[string]any `json:"items"`
+	Items      []*controlv1.Agent `json:"items"`
+	NextCursor string             `json:"next_cursor,omitempty"`
 }
 
 func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
@@ -22,27 +23,24 @@ func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
 	if !ok || rt == nil {
 		return nil, fmt.Errorf("runtime missing")
 	}
-	query := map[string]string{}
-	if env := runtime.ActiveEnv(ctx); env != "" {
-		query["env_id"] = env
-	}
-	if in.Page.Limit > 0 {
-		query["limit"] = fmt.Sprintf("%d", in.Page.Limit)
-	}
-	if in.Page.Cursor != "" {
-		query["cursor"] = in.Page.Cursor
-	}
-	var out ListOutput
-	if err := rt.Client().Get(ctx, "/api/v1/agents", toValues(query), &out); err != nil {
+	t, err := rt.GetTransport()
+	if err != nil {
 		return nil, err
 	}
-	return &out, nil
-}
-
-func toValues(values map[string]string) url.Values {
-	out := make(url.Values, len(values))
-	for k, v := range values {
-		out.Set(k, v)
+	svc, err := t.ControlSvc()
+	if err != nil {
+		return nil, err
 	}
-	return out
+	req := &controlv1.ListAgentsRequest{
+		Limit:  int32(in.Page.Limit),
+		Cursor: in.Page.Cursor,
+	}
+	if env := runtime.ActiveEnv(ctx); env != "" {
+		req.EnvId = env
+	}
+	resp, err := svc.ListAgents(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &ListOutput{Items: resp.Agents, NextCursor: resp.NextCursor}, nil
 }

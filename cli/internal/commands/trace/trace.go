@@ -23,26 +23,29 @@ func Register(parent *cobra.Command) {
 }
 
 func newListCmd() *cobra.Command {
+	var agentID string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List",
+		Short: "List traces",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunList(cmd.Context(), ListInput{})
+			out, err := RunList(cmd.Context(), ListInput{AgentID: agentID})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "List")
 		},
 	}
+	cmd.Flags().StringVar(&agentID, "agent", "", "Filter by agent ID")
 	return cmd
 }
 
 func newGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get",
+		Use:   "get <id>",
+		Short: "Get a trace by run ID",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGet(cmd.Context(), GetInput{})
+			out, err := RunGet(cmd.Context(), GetInput{ID: args[0]})
 			if err != nil {
 				return err
 			}

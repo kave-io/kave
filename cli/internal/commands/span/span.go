@@ -22,26 +22,29 @@ func Register(parent *cobra.Command) {
 }
 
 func newListCmd() *cobra.Command {
+	var runID string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List",
+		Short: "List spans",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunList(cmd.Context(), ListInput{})
+			out, err := RunList(cmd.Context(), ListInput{RunID: runID})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "List")
 		},
 	}
+	cmd.Flags().StringVar(&runID, "run", "", "Filter by run ID")
 	return cmd
 }
 
 func newGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get",
+		Use:   "get <id>",
+		Short: "Get a span by ID",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGet(cmd.Context(), GetInput{})
+			out, err := RunGet(cmd.Context(), GetInput{ID: args[0]})
 			if err != nil {
 				return err
 			}
