@@ -26,6 +26,7 @@ import (
 	"github.com/kave-io/kave/server/internal/gateway"
 	"github.com/kave-io/kave/server/internal/httpbridge"
 	"github.com/kave-io/kave/server/internal/logsink"
+	appcasbin "github.com/kave-io/kave/server/internal/infra/casbin"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
 	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
@@ -102,9 +103,23 @@ func main() {
 		portgrpc.NewAuthStreamInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
 	)
 
+	// Build the casbin engine when Security.Casbin is configured. Nil disables
+	// authorization enforcement (auth/policy interceptors fall through gracefully).
+	var casbinEngine appcasbin.Casbin
+	if cfg.Security.Casbin != nil {
+		casbinEngine, err = appcasbin.NewEnforcer(appcasbin.Config{
+			CasbinModelPath:  cfg.Security.Casbin.ModelPath,
+			DatabaseDSN:      cfg.Security.Casbin.DatabaseDSN,
+			SuperAdminBypass: cfg.Security.Casbin.SuperAdminBypass,
+		})
+		if err != nil {
+			log.Fatalf("casbin enforcer: %v", err)
+		}
+	}
+
 	// Create pipeline interceptors in order: auth → policy → budget → trace.
-	authInterceptor := serverauth.NewInterceptor(nil, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens)
-	policyInterceptor := policy.New(appStore, nil)
+	authInterceptor := serverauth.NewInterceptor(casbinEngine, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens)
+	policyInterceptor := policy.New(appStore, casbinEngine)
 	budgetInterceptor := budget.New(appStore, costService)
 	traceInterceptor := trace.New(storeManager, costService, eventBus)
 

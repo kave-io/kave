@@ -132,6 +132,16 @@ type SecurityConfig struct {
 	SessionTTL        time.Duration `mapstructure:"session_ttl"`
 	TokenTTL          time.Duration `mapstructure:"token_ttl"`
 	Vault             *VaultConfig  `mapstructure:"vault"`
+	Casbin            *CasbinConfig `mapstructure:"casbin"`
+}
+
+type CasbinConfig struct {
+	// ModelPath optionally overrides the built-in RBAC-with-domains model.
+	ModelPath string `mapstructure:"model_path"`
+	// DatabaseDSN persists policies; when empty the engine runs in-memory.
+	DatabaseDSN string `mapstructure:"database_dsn"`
+	// SuperAdminBypass allows the platform super-admin role to bypass enforcement.
+	SuperAdminBypass bool `mapstructure:"super_admin_bypass"`
 }
 
 type VaultConfig struct {

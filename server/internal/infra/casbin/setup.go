@@ -1,6 +1,7 @@
 package casbin
 
 import (
+	_ "embed"
 	"fmt"
 	"log/slog"
 
@@ -11,6 +12,9 @@ import (
 	rds "github.com/redis/go-redis/v9"
 )
 
+//go:embed default_model.conf
+var defaultRBACModel string
+
 // NewEnforcer creates a fully-wired Casbin enforcer.
 //
 // Behaviour by config:
@@ -19,7 +23,15 @@ import (
 //   - PolicySyncEnabled     → a Redis pub/sub watcher is added so every policy mutation
 //     is broadcast to all instances, which update their in-memory state incrementally
 func NewEnforcer(cfg Config) (Casbin, error) {
-	m, err := model.NewModelFromFile(cfg.CasbinModelPath)
+	var (
+		m   model.Model
+		err error
+	)
+	if cfg.CasbinModelPath == "" {
+		m, err = model.NewModelFromString(defaultRBACModel)
+	} else {
+		m, err = model.NewModelFromFile(cfg.CasbinModelPath)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("casbin: load model %q: %w", cfg.CasbinModelPath, err)
 	}

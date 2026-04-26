@@ -57,14 +57,14 @@ func (m *TokenManager) IssueSession(userID, sessionID, orgID string) (string, er
 	if !m.Enabled() {
 		return opaqueToken("ks_"), nil
 	}
-	return m.issue("session", userID, sessionID, orgID, "", "", "", m.sessionTTL)
+	return m.issue(string(authctx.KindUser), userID, sessionID, orgID, "", "", "", m.sessionTTL)
 }
 
 func (m *TokenManager) IssueAgentToken(agentID, projectID, envID, orgID string) (string, error) {
 	if !m.Enabled() {
 		return opaqueToken("kav_"), nil
 	}
-	return m.issue("agent", agentID, "", orgID, agentID, projectID, envID, m.tokenTTL)
+	return m.issue(string(authctx.KindAgent), agentID, "", orgID, agentID, projectID, envID, m.tokenTTL)
 }
 
 func (m *TokenManager) Verify(token string) (*authctx.Identity, error) {
@@ -115,13 +115,13 @@ func (m *TokenManager) issue(kind, subject, sessionID, orgID, agentID, projectID
 	tok.SetSubject(subject)
 	tok.SetString("kind", kind)
 	tok.SetString("org", orgID)
-	switch kind {
-	case "session":
+	switch authctx.Kind(kind) {
+	case authctx.KindUser:
 		tok.SetString("uid", subject)
 		if sessionID != "" {
 			tok.SetString("sid", sessionID)
 		}
-	case "agent":
+	case authctx.KindAgent:
 		tok.SetString("aid", agentID)
 		tok.SetString("pid", projectID)
 		tok.SetString("eid", envID)
