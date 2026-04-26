@@ -59,47 +59,71 @@ func newGetCmd() *cobra.Command {
 }
 
 func newCreateCmd() *cobra.Command {
+	in := CreateInput{}
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create",
+		Short: "Create a credential",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunCreate(cmd.Context(), CreateInput{})
+			out, err := RunCreate(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Create")
 		},
 	}
+	cmd.Flags().StringVar(&in.EnvID, "env", "", "Environment ID")
+	cmd.Flags().StringVar(&in.ConnectorType, "connector-type", "", "Connector type (e.g. openai, github)")
+	cmd.Flags().StringVar(&in.Label, "label", "", "Label")
+	cmd.Flags().StringVar(&in.Secret, "secret", "", "Raw secret (server encrypts at rest)")
 	return cmd
 }
 
 func newUpdateCmd() *cobra.Command {
+	var label, description, accountID string
 	cmd := &cobra.Command{
-		Use:   "update",
-		Short: "Update",
+		Use:   "update <id>",
+		Short: "Update a credential",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunUpdate(cmd.Context(), UpdateInput{})
+			in := UpdateInput{ID: args[0]}
+			if cmd.Flags().Changed("label") {
+				in.Label = &label
+			}
+			if cmd.Flags().Changed("description") {
+				in.Description = &description
+			}
+			if cmd.Flags().Changed("account-id") {
+				in.AccountID = &accountID
+			}
+			out, err := RunUpdate(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Update")
 		},
 	}
+	cmd.Flags().StringVar(&label, "label", "", "Label")
+	cmd.Flags().StringVar(&description, "description", "", "Description")
+	cmd.Flags().StringVar(&accountID, "account-id", "", "Account ID")
 	return cmd
 }
 
 func newRotateCmd() *cobra.Command {
+	in := RotateInput{}
 	cmd := &cobra.Command{
-		Use:   "rotate",
-		Short: "Rotate",
+		Use:   "rotate <id>",
+		Short: "Rotate a credential",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunRotate(cmd.Context(), RotateInput{})
+			in.ID = args[0]
+			out, err := RunRotate(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Rotate")
 		},
 	}
+	cmd.Flags().StringVar(&in.Secret, "secret", "", "New raw secret")
 	return cmd
 }
 
@@ -119,17 +143,20 @@ func newTestCmd() *cobra.Command {
 }
 
 func newRevokeCmd() *cobra.Command {
+	var reason string
 	cmd := &cobra.Command{
-		Use:   "revoke",
-		Short: "Revoke",
+		Use:   "revoke <id>",
+		Short: "Revoke a credential",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunRevoke(cmd.Context(), RevokeInput{})
+			out, err := RunRevoke(cmd.Context(), RevokeInput{ID: args[0], Reason: reason})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Revoke")
 		},
 	}
+	cmd.Flags().StringVar(&reason, "reason", "", "Revocation reason")
 	return cmd
 }
 
