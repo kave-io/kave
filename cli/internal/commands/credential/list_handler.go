@@ -32,16 +32,23 @@ func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
 	if err != nil {
 		return nil, err
 	}
-	req := &controlv1.ListCredentialsRequest{
-		Limit:  int32(in.Page.Limit),
-		Cursor: in.Page.Cursor,
-	}
-	if in.ConnectorType != "" {
-		req.Filter = &controlv1.CredentialFilter{ConnectorType: in.ConnectorType}
-	}
-	resp, err := svc.ListCredentials(ctx, req)
+
+	items, nextCursor, err := flags.PaginateAll(ctx, in.Page.All, in.Page.Cursor, 0, func(cursor string) ([]*controlv1.ConnectorCredential, string, error) {
+		req := &controlv1.ListCredentialsRequest{
+			Limit:  int32(in.Page.Limit),
+			Cursor: cursor,
+		}
+		if in.ConnectorType != "" {
+			req.Filter = &controlv1.CredentialFilter{ConnectorType: in.ConnectorType}
+		}
+		resp, err := svc.ListCredentials(ctx, req)
+		if err != nil {
+			return nil, "", err
+		}
+		return resp.Credentials, resp.NextCursor, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &ListOutput{Items: resp.Credentials, NextCursor: resp.NextCursor}, nil
+	return &ListOutput{Items: items, NextCursor: nextCursor}, nil
 }

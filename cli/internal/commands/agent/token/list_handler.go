@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kave-io/kave/cli/internal/flags"
 	"github.com/kave-io/kave/cli/internal/runtime"
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
 )
 
 type ListInput struct {
-	Agent  string
-	Limit  int32
-	Cursor string
+	Agent string
+	Page  flags.PageInput
 }
 
 type ListOutput struct {
@@ -32,9 +32,16 @@ func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := svc.ListTokens(ctx, &controlv1.ListTokensRequest{AgentId: in.Agent, Limit: in.Limit, Cursor: in.Cursor})
+
+	items, nextCursor, err := flags.PaginateAll(ctx, in.Page.All, in.Page.Cursor, 0, func(cursor string) ([]*controlv1.AgentToken, string, error) {
+		resp, err := svc.ListTokens(ctx, &controlv1.ListTokensRequest{AgentId: in.Agent, Limit: int32(in.Page.Limit), Cursor: cursor})
+		if err != nil {
+			return nil, "", err
+		}
+		return resp.GetTokens(), resp.GetNextCursor(), nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &ListOutput{Tokens: resp.GetTokens(), NextCursor: resp.GetNextCursor()}, nil
+	return &ListOutput{Tokens: items, NextCursor: nextCursor}, nil
 }

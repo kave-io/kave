@@ -5,23 +5,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
-func Register(parent *cobra.Command) {
+func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "apply",
-		Short: "Declarative provisioning",
+		Short: "Apply a kave.yaml file to the daemon",
 		Long:  "Apply a kave.yaml file to the daemon.",
-	}
-	cmd.AddCommand(newApplyCmd())
-
-
-	parent.AddCommand(cmd)
-}
-
-func newApplyCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "apply",
-		Short: "Apply",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := RunApply(cmd.Context(), ApplyInput{})
 			if err != nil {

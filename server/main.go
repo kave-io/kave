@@ -18,6 +18,7 @@ import (
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
+	appaudit "github.com/kave-io/kave/server/app/audit"
 	appcontrol "github.com/kave-io/kave/server/app/control"
 	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/server/internal/config"
@@ -96,9 +97,11 @@ func main() {
 
 	controlServer := appcontrol.New(appStore, eventBus)
 	runtimeServer := appruntime.New(appStore, storeManager, eventBus)
+	auditServer := appaudit.New(storeManager.AuditStore())
 	grpcServer := portgrpc.New(
 		controlServer,
 		runtimeServer,
+		auditServer,
 		portgrpc.NewAuthUnaryInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
 		portgrpc.NewAuthStreamInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
 	)

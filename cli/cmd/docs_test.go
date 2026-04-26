@@ -14,7 +14,7 @@ func TestDocOutputPath(t *testing.T) {
 		"kave_agent_list.md":       "agent/list.md",
 		"kave_admin_store_get.md":  "admin/store/get.md",
 		"kave_completion_zsh.md":   "completion/zsh.md",
-		"kave_version_version.md":  "version/version.md",
+		"kave_version.md":          "version/index.md",
 		"./kave_agent_list.md":     "agent/list.md",
 		"/tmp/kave_agent_list.md":  "agent/list.md",
 		"nested/kave_agent_get.md": "agent/get.md",

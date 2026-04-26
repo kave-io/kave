@@ -19,6 +19,7 @@ import (
 
 type Manager struct {
 	app       store.AppStore
+	audit     store.AuditStore
 	storage   config.StorageConfig
 	postgres  config.PostgresConfig
 	spanMu    sync.Mutex
@@ -33,8 +34,14 @@ func NewManager(ctx context.Context, storageCfg config.StorageConfig, postgresCf
 		return nil, err
 	}
 
+	audit, err := newAuditStoreFromSpec(ctx, storageCfg.AppDefault(), postgresCfg)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Manager{
 		app:       app,
+		audit:     audit,
 		storage:   storageCfg,
 		postgres:  postgresCfg,
 		spanCache: map[string]store.SpanStore{},
@@ -43,6 +50,10 @@ func NewManager(ctx context.Context, storageCfg config.StorageConfig, postgresCf
 
 func (m *Manager) AppStore() store.AppStore {
 	return m.app
+}
+
+func (m *Manager) AuditStore() store.AuditStore {
+	return m.audit
 }
 
 func (m *Manager) SpanStore(ctx context.Context, agentID string) (store.SpanStore, error) {
@@ -75,6 +86,9 @@ func (m *Manager) Close() error {
 	for key, span := range m.spanCache {
 		_ = span.Close()
 		delete(m.spanCache, key)
+	}
+	if m.audit != nil {
+		_ = m.audit.Close()
 	}
 	if m.app != nil {
 		return m.app.Close()
@@ -308,4 +322,26 @@ func storeDSN(spec config.StoreSpec, postgresCfg config.PostgresConfig) string {
 		return spec.DSN
 	}
 	return postgresCfg.UnixSocketDSN()
+}
+
+func newAuditStoreFromSpec(ctx context.Context, spec config.StoreSpec, postgresCfg config.PostgresConfig) (store.AuditStore, error) {
+	switch spec.Kind {
+	case "postgres":
+		dsn := storeDSN(spec, postgresCfg)
+		pool, err := postgresdb.NewWithDSN(ctx, dsn, postgresCfg)
+		if err != nil {
+			return nil, err
+		}
+		return postgresimpl.NewAuditStore(pool), nil
+
+	case "sqlite", "":
+		path := spec.Path
+		if path == "" {
+			path = "kave.db"
+		}
+		return sqliteimpl.NewAuditStoreFromPath(path)
+
+	default:
+		return nil, fmt.Errorf("unknown audit store backend %q", spec.Kind)
+	}
 }

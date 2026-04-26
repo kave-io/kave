@@ -34,22 +34,28 @@ func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
 		return nil, err
 	}
 
-	filter := &runtimev1.RunFilter{}
-	if env := runtime.ActiveEnv(ctx); env != "" {
-		filter.EnvId = env
-	}
-	if in.AgentID != "" {
-		filter.AgentId = in.AgentID
-	}
+	items, nextCursor, err := flags.PaginateAll(ctx, in.Page.All, in.Page.Cursor, 0, func(cursor string) ([]*runtimev1.RunRecord, string, error) {
+		filter := &runtimev1.RunFilter{}
+		if env := runtime.ActiveEnv(ctx); env != "" {
+			filter.EnvId = env
+		}
+		if in.AgentID != "" {
+			filter.AgentId = in.AgentID
+		}
 
-	req := &runtimev1.ListRunsRequest{
-		Filter: filter,
-		Limit:  int32(in.Page.Limit),
-		Cursor: in.Page.Cursor,
-	}
-	resp, err := svc.ListRuns(ctx, req)
+		req := &runtimev1.ListRunsRequest{
+			Filter: filter,
+			Limit:  int32(in.Page.Limit),
+			Cursor: cursor,
+		}
+		resp, err := svc.ListRuns(ctx, req)
+		if err != nil {
+			return nil, "", err
+		}
+		return resp.Runs, resp.NextCursor, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &ListOutput{Items: resp.Runs, NextCursor: resp.NextCursor}, nil
+	return &ListOutput{Items: items, NextCursor: nextCursor}, nil
 }

@@ -5,23 +5,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
-func Register(parent *cobra.Command) {
+func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
-		Short: "Version information",
+		Short: "Show version and build information",
 		Long:  "Show version and build information.",
-	}
-	cmd.AddCommand(newVersionCmd())
-
-
-	parent.AddCommand(cmd)
-}
-
-func newVersionCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "version",
-		Short: "Version",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out, err := RunVersion(cmd.Context(), VersionInput{})
 			if err != nil {

@@ -1,6 +1,7 @@
 package token
 
 import (
+	"github.com/kave-io/kave/cli/internal/flags"
 	"github.com/kave-io/kave/cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -37,19 +38,22 @@ func newIssueCmd() *cobra.Command {
 }
 
 func newListCmd() *cobra.Command {
+	var in ListInput
 	cmd := &cobra.Command{
 		Use:   "list <agent>",
 		Short: "List tokens for an agent",
 		Long:  "Lists all non-revoked tokens for an agent.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunList(cmd.Context(), ListInput{Agent: args[0]})
+			in.Agent = args[0]
+			out, err := RunList(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "TokenList")
 		},
 	}
+	flags.AddPageFlags(cmd, &in.Page)
 	return cmd
 }
 

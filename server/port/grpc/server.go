@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 
+	appaudit "github.com/kave-io/kave/server/app/audit"
 	appcontrol "github.com/kave-io/kave/server/app/control"
 	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"google.golang.org/grpc"
@@ -15,7 +16,7 @@ type Server struct {
 }
 
 // New constructs a gRPC server and registers all service handlers.
-func New(control *appcontrol.Server, runtime *appruntime.Server, unary grpc.UnaryServerInterceptor, stream grpc.StreamServerInterceptor) *Server {
+func New(control *appcontrol.Server, runtime *appruntime.Server, audit *appaudit.Server, unary grpc.UnaryServerInterceptor, stream grpc.StreamServerInterceptor) *Server {
 	opts := make([]grpc.ServerOption, 0, 2)
 	if unary != nil {
 		opts = append(opts, grpc.ChainUnaryInterceptor(unary))
@@ -26,6 +27,9 @@ func New(control *appcontrol.Server, runtime *appruntime.Server, unary grpc.Unar
 	g := grpc.NewServer(opts...)
 	control.Register(g)
 	runtime.Register(g)
+	if audit != nil {
+		audit.Register(g)
+	}
 	srv := &Server{grpc: g}
 	return srv
 }

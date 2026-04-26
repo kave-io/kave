@@ -30,7 +30,7 @@ func registerCommands(root *cobra.Command) {
 	lifecycle.Register(root)
 
 	// Declarative provisioning
-	apply.Register(root)
+	root.AddCommand(apply.NewCommand())
 
 	// Observability
 	trace.Register(root)
@@ -57,6 +57,6 @@ func registerCommands(root *cobra.Command) {
 
 	// Administration and metadata
 	admin.Register(root)
-	version.Register(root)
+	root.AddCommand(version.NewCommand())
 	completion.Register(root)
 }
