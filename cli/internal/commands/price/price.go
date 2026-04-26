@@ -40,17 +40,20 @@ func newListCmd() *cobra.Command {
 }
 
 func newGetCmd() *cobra.Command {
+	in := GetInput{}
 	cmd := &cobra.Command{
 		Use:   "get",
-		Short: "Get",
+		Short: "Get a price entry",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGet(cmd.Context(), GetInput{})
+			out, err := RunGet(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Get")
 		},
 	}
+	cmd.Flags().StringVar(&in.Provider, "provider", "", "Provider (e.g. openai, anthropic)")
+	cmd.Flags().StringVar(&in.Match, "match", "", "Model match string")
 	return cmd
 }
 

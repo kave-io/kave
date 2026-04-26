@@ -74,17 +74,21 @@ func newSetCmd() *cobra.Command {
 }
 
 func newReportCmd() *cobra.Command {
+	in := ReportInput{}
 	cmd := &cobra.Command{
 		Use:   "report",
-		Short: "Report",
+		Short: "Spend report",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunReport(cmd.Context(), ReportInput{})
+			out, err := RunReport(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Report")
 		},
 	}
+	cmd.Flags().StringVar(&in.ProjectID, "project", "", "Project ID")
+	cmd.Flags().StringVar(&in.EnvID, "env", "", "Environment ID")
+	cmd.Flags().StringVar(&in.PolicyID, "policy", "", "Policy ID")
 	return cmd
 }
 
