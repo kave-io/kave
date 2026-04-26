@@ -37,32 +37,39 @@ func newListCmd() *cobra.Command {
 }
 
 func newGetCmd() *cobra.Command {
+	in := GetInput{}
 	cmd := &cobra.Command{
 		Use:   "get",
-		Short: "Get",
+		Short: "Get a budget",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGet(cmd.Context(), GetInput{})
+			out, err := RunGet(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Get")
 		},
 	}
+	cmd.Flags().StringVar(&in.AgentID, "agent", "", "Agent ID")
 	return cmd
 }
 
 func newSetCmd() *cobra.Command {
+	in := SetInput{}
 	cmd := &cobra.Command{
 		Use:   "set",
-		Short: "Set",
+		Short: "Set a budget",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunSet(cmd.Context(), SetInput{})
+			out, err := RunSet(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Set")
 		},
 	}
+	cmd.Flags().StringVar(&in.AgentID, "agent", "", "Agent ID")
+	cmd.Flags().StringVar(&in.HardCap, "hard-cap", "", "Hard cap (format: currency,amount)")
+	cmd.Flags().StringVar(&in.SoftCap, "soft-cap", "", "Soft cap (format: currency,amount)")
+	cmd.Flags().StringVar(&in.Period, "period", "", "Billing period (daily|monthly|yearly)")
 	return cmd
 }
 
