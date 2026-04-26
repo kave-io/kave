@@ -57,41 +57,63 @@ func newGetCmd() *cobra.Command {
 }
 
 func newCreateCmd() *cobra.Command {
+	in := CreateInput{}
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create",
+		Short: "Create a policy",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunCreate(cmd.Context(), CreateInput{})
+			out, err := RunCreate(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Create")
 		},
 	}
+	cmd.Flags().StringVar(&in.EnvID, "env", "", "Environment ID")
+	cmd.Flags().StringVar(&in.Name, "name", "", "Policy name")
+	cmd.Flags().StringVar(&in.Description, "description", "", "Description")
+	cmd.Flags().StringVar(&in.Mode, "mode", "", "Mode: enforce | shadow")
 	return cmd
 }
 
 func newUpdateCmd() *cobra.Command {
+	in := UpdateInput{}
+	var description string
+	var setDescription bool
 	cmd := &cobra.Command{
-		Use:   "update",
-		Short: "Update",
+		Use:   "update <id>",
+		Short: "Update a policy",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunUpdate(cmd.Context(), UpdateInput{})
+			in.ID = args[0]
+			if setDescription {
+				in.Description = &description
+			}
+			out, err := RunUpdate(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Update")
 		},
 	}
+	cmd.Flags().StringSliceVar(&in.AllowedTypes, "allowed-types", nil, "Replace allowed action types")
+	cmd.Flags().StringSliceVar(&in.AllowedConnectors, "allowed-connectors", nil, "Replace allowed connectors")
+	cmd.Flags().StringSliceVar(&in.AllowedMethods, "allowed-methods", nil, "Replace allowed methods")
+	cmd.Flags().StringVar(&description, "description", "", "Description")
+	cmd.PreRunE = func(c *cobra.Command, _ []string) error {
+		setDescription = c.Flags().Changed("description")
+		return nil
+	}
 	return cmd
 }
 
 func newExportCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "export",
-		Short: "Export",
+		Use:   "export <id>",
+		Short: "Export a policy as YAML",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunExport(cmd.Context(), ExportInput{})
+			out, err := RunExport(cmd.Context(), ExportInput{ID: args[0]})
 			if err != nil {
 				return err
 			}
@@ -103,10 +125,11 @@ func newExportCmd() *cobra.Command {
 
 func newDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "delete",
-		Short: "Delete",
+		Use:   "delete <id>",
+		Short: "Delete a policy",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunDelete(cmd.Context(), DeleteInput{})
+			out, err := RunDelete(cmd.Context(), DeleteInput{ID: args[0]})
 			if err != nil {
 				return err
 			}
@@ -117,17 +140,20 @@ func newDeleteCmd() *cobra.Command {
 }
 
 func newValidateCmd() *cobra.Command {
+	in := ValidateInput{}
 	cmd := &cobra.Command{
 		Use:   "validate",
-		Short: "Validate",
+		Short: "Validate a policy YAML document",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunValidate(cmd.Context(), ValidateInput{})
+			out, err := RunValidate(cmd.Context(), in)
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Validate")
 		},
 	}
+	cmd.Flags().StringVar(&in.File, "file", "", "Path to a policy YAML file")
+	cmd.Flags().StringVar(&in.YAML, "yaml", "", "Inline policy YAML")
 	return cmd
 }
 
