@@ -444,10 +444,10 @@ func nowMS() int64 {
 }
 
 // generateToken produces a raw token, its 8-char prefix, and its SHA256 hex hash.
-func generateToken() (raw, prefix, hash string) {
+func generateToken() (raw, prefix, hash string, err error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("rand.Read: %v", err))
+		return "", "", "", fmt.Errorf("generate token: %w", err)
 	}
 	raw = "kave_" + hex.EncodeToString(b)
 	prefix = raw[:8]

@@ -301,7 +301,7 @@ func (s *Server) CreatePolicy(ctx context.Context, req *controlv1.CreatePolicyRe
 	if err := s.appStore.CreatePolicy(ctx, pol); err != nil {
 		return nil, err
 	}
-	s.publish("policy.updated", pol)
+	s.publish("policy.created", pol)
 	return policyToProto(pol), nil
 }
 
@@ -434,7 +434,10 @@ func (s *Server) ValidatePolicy(ctx context.Context, req *controlv1.ValidatePoli
 // ── Token Operations ───────────────────────────────────────────────────────
 
 func (s *Server) CreateToken(ctx context.Context, req *controlv1.CreateTokenRequest) (*controlv1.CreateTokenResponse, error) {
-	raw, prefix, hash := generateToken()
+	raw, prefix, hash, err := generateToken()
+	if err != nil {
+		return nil, err
+	}
 	now := nowMS()
 	tok := &control.AgentToken{
 		ID:          newID("tok"),

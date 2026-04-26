@@ -24,10 +24,18 @@ func (p *Pipeline) Execute(ctx context.Context, action *runtime.Action, handler 
 	var err error
 
 	if action.TraceID == "" {
-		action.TraceID = ids.TraceID()
+		traceID, err := ids.TraceID()
+		if err != nil {
+			return nil, err
+		}
+		action.TraceID = traceID
 	}
 	if action.SpanID == "" {
-		action.SpanID = ids.SpanID()
+		spanID, err := ids.SpanID()
+		if err != nil {
+			return nil, err
+		}
+		action.SpanID = spanID
 	}
 
 	traceCtx := runtime.TraceFrom(ctx)

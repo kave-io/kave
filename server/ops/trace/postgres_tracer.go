@@ -49,7 +49,11 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 
 	spanID := action.SpanID
 	if spanID == "" {
-		spanID = ids.SpanID()
+		newID, err := ids.SpanID()
+		if err != nil {
+			return err
+		}
+		spanID = newID
 	}
 	traceCtx := runtime.TraceFrom(ctx)
 	rootSpanID := traceCtx.RootSpanID
