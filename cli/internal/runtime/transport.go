@@ -80,6 +80,24 @@ func (t *Transport) ControlSvc() (controlv1.ControlPlaneServiceClient, error) {
 	return controlv1.NewControlPlaneServiceClient(conn), nil
 }
 
+// DaemonSvc returns the gRPC DaemonServiceClient.
+func (t *Transport) DaemonSvc() (controlv1.DaemonServiceClient, error) {
+	conn, err := t.grpcConn()
+	if err != nil {
+		return nil, err
+	}
+	return controlv1.NewDaemonServiceClient(conn), nil
+}
+
+// RBACSvc returns the gRPC RBACServiceClient.
+func (t *Transport) RBACSvc() (controlv1.RBACServiceClient, error) {
+	conn, err := t.grpcConn()
+	if err != nil {
+		return nil, err
+	}
+	return controlv1.NewRBACServiceClient(conn), nil
+}
+
 // Close releases the gRPC connection if one was opened.
 func (t *Transport) Close() error {
 	t.mu.Lock()

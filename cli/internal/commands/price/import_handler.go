@@ -14,5 +14,5 @@ type ImportOutput struct {
 }
 
 func RunImport(ctx context.Context, in ImportInput) (*ImportOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "price import is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "price import : not yet implemented", Exit: 1}
 }

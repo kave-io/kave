@@ -7,6 +7,8 @@ import (
 	appaudit "github.com/kave-io/kave/server/app/audit"
 	appcontrol "github.com/kave-io/kave/server/app/control"
 	appruntime "github.com/kave-io/kave/server/app/runtime"
+	"github.com/kave-io/kave/server/internal/daemon"
+	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"google.golang.org/grpc"
 )
 
@@ -16,7 +18,7 @@ type Server struct {
 }
 
 // New constructs a gRPC server and registers all service handlers.
-func New(control *appcontrol.Server, runtime *appruntime.Server, audit *appaudit.Server, unary grpc.UnaryServerInterceptor, stream grpc.StreamServerInterceptor) *Server {
+func New(control *appcontrol.Server, runtime *appruntime.Server, audit *appaudit.Server, daemonState *daemon.State, tokens *serverauth.TokenManager, unary grpc.UnaryServerInterceptor, stream grpc.StreamServerInterceptor) *Server {
 	opts := make([]grpc.ServerOption, 0, 2)
 	if unary != nil {
 		opts = append(opts, grpc.ChainUnaryInterceptor(unary))
@@ -25,7 +27,7 @@ func New(control *appcontrol.Server, runtime *appruntime.Server, audit *appaudit
 		opts = append(opts, grpc.ChainStreamInterceptor(stream))
 	}
 	g := grpc.NewServer(opts...)
-	control.Register(g)
+	control.RegisterWithChildren(g, daemonState, tokens)
 	runtime.Register(g)
 	if audit != nil {
 		audit.Register(g)

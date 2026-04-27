@@ -12,6 +12,10 @@ import (
 
 func NewAuthUnaryInterceptor(app store.AppStore, tokens *serverauth.TokenManager, allowAnonymous, allowLegacy bool) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		// These methods must be reachable without a token.
+		if isPublicMethod(info.FullMethod) {
+			return handler(ctx, req)
+		}
 		id, err := identityFromMetadata(ctx, app, tokens, allowLegacy)
 		if err != nil {
 			id = authctx.Identity{Kind: authctx.KindInvalid, Err: err.Error()}
@@ -27,6 +31,10 @@ func NewAuthUnaryInterceptor(app store.AppStore, tokens *serverauth.TokenManager
 
 func NewAuthStreamInterceptor(app store.AppStore, tokens *serverauth.TokenManager, allowAnonymous, allowLegacy bool) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		// These methods must be reachable without a token.
+		if isPublicMethod(info.FullMethod) {
+			return handler(srv, ss)
+		}
 		ctx := ss.Context()
 		id, err := identityFromMetadata(ctx, app, tokens, allowLegacy)
 		if err != nil {
@@ -51,6 +59,15 @@ func identityFromMetadata(ctx context.Context, app store.AppStore, tokens *serve
 		authHeader = vals[0]
 	}
 	return serverauth.ParseIdentity(ctx, authHeader, app, tokens, allowLegacy)
+}
+
+func isPublicMethod(fullMethod string) bool {
+	switch fullMethod {
+	case "/kave.control.v1.AuthService/Register",
+		"/kave.control.v1.AuthService/Login":
+		return true
+	}
+	return false
 }
 
 type serverStreamWithContext struct {

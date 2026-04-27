@@ -14,5 +14,5 @@ type ConvertOutput struct {
 }
 
 func RunConvert(ctx context.Context, in ConvertInput) (*ConvertOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "fx convert is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "fx convert : not yet implemented", Exit: 1}
 }

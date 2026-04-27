@@ -23,32 +23,38 @@ func Register(parent *cobra.Command) {
 }
 
 func newGrantCmd() *cobra.Command {
+	var roleID, subject, scope string
 	cmd := &cobra.Command{
 		Use:   "grant",
 		Short: "Grant",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGrant(cmd.Context(), GrantInput{})
+			out, err := RunGrant(cmd.Context(), GrantInput{RoleID: roleID, Subject: subject, Scope: scope})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Grant")
 		},
 	}
+	cmd.Flags().StringVar(&roleID, "role-id", "", "role ID")
+	cmd.Flags().StringVar(&subject, "subject", "", "subject (e.g. user:<id>)")
+	cmd.Flags().StringVar(&scope, "scope", "*:*", "scope")
 	return cmd
 }
 
 func newRevokeCmd() *cobra.Command {
+	var id string
 	cmd := &cobra.Command{
 		Use:   "revoke",
 		Short: "Revoke",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunRevoke(cmd.Context(), RevokeInput{})
+			out, err := RunRevoke(cmd.Context(), RevokeInput{BindingID: id})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Revoke")
 		},
 	}
+	cmd.Flags().StringVar(&id, "id", "", "binding ID")
 	return cmd
 }
 

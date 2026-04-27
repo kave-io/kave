@@ -86,17 +86,19 @@ func newGraphCmd() *cobra.Command {
 }
 
 func newExportCmd() *cobra.Command {
+	var traceID string
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "Export",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunExport(cmd.Context(), ExportInput{})
+			out, err := RunExport(cmd.Context(), ExportInput{TraceID: traceID})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Export")
 		},
 	}
+	cmd.Flags().StringVar(&traceID, "trace-id", "", "trace ID")
 	return cmd
 }
 

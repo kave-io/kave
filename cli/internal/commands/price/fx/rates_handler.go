@@ -14,5 +14,5 @@ type RatesOutput struct {
 }
 
 func RunRates(ctx context.Context, in RatesInput) (*RatesOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "fx rates is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "fx rates : not yet implemented", Exit: 1}
 }

@@ -14,5 +14,5 @@ type ExportOutput struct {
 }
 
 func RunExport(ctx context.Context, in ExportInput) (*ExportOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "price export is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "price export : not yet implemented", Exit: 1}
 }

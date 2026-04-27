@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/kave-io/kave/core/bus"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
@@ -397,29 +398,158 @@ func (s *Server) GetSpendReport(ctx context.Context, req *runtimev1.GetSpendRepo
 // ── Streaming Operations ───────────────────────────────────────────────────
 
 func (s *Server) WatchEvents(req *runtimev1.WatchEventsRequest, stream grpc.ServerStreamingServer[runtimev1.RuntimeEvent]) error {
-	return status.Error(codes.Unimplemented, "not yet implemented")
+	if s.bus == nil {
+		return status.Error(codes.Unavailable, "event bus not configured")
+	}
+	filter := bus.Filter{ProjectID: req.ProjectId, EnvID: req.EnvId}
+	if req.Kind != "" {
+		filter.Kinds = []string{req.Kind}
+	}
+	ch, cancel := s.bus.Subscribe(filter)
+	defer cancel()
+
+	ctx := stream.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(&runtimev1.RuntimeEvent{Kind: ev.Kind, At: ev.At, Data: ev.Payload}); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (s *Server) WatchLogs(req *runtimev1.WatchLogsRequest, stream grpc.ServerStreamingServer[runtimev1.LogLine]) error {
-	return status.Error(codes.Unimplemented, "not yet implemented")
+	if s.bus == nil {
+		return status.Error(codes.Unavailable, "event bus not configured")
+	}
+	ch, cancel := s.bus.Subscribe(bus.Filter{Kinds: []string{"daemon.log"}})
+	defer cancel()
+
+	ctx := stream.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			var payload struct {
+				Level   string            `json:"level"`
+				Message string            `json:"message"`
+				Context map[string]string `json:"context"`
+			}
+			if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+				continue
+			}
+			if req.Level != "" && strings.ToLower(payload.Level) != strings.ToLower(req.Level) {
+				continue
+			}
+			if err := stream.Send(&runtimev1.LogLine{At: ev.At, Level: payload.Level, Message: payload.Message, Context: payload.Context}); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (s *Server) TailTraces(req *runtimev1.TailTracesRequest, stream grpc.ServerStreamingServer[runtimev1.TraceEvent]) error {
-	return status.Error(codes.Unimplemented, "not yet implemented")
+	if s.bus == nil {
+		return status.Error(codes.Unavailable, "event bus not configured")
+	}
+	ch, cancel := s.bus.Subscribe(bus.Filter{Kinds: []string{"run.", "span."}, ProjectID: req.ProjectId, EnvID: req.EnvId, RunID: req.RunId})
+	defer cancel()
+
+	ctx := stream.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if strings.HasPrefix(ev.Kind, "run.") {
+				run, err := s.appStore.GetRunByID(ctx, ev.RunID)
+				if err != nil || run == nil {
+					continue
+				}
+				raw, err := json.Marshal(runToProto(run))
+				if err != nil {
+					continue
+				}
+				if err := stream.Send(&runtimev1.TraceEvent{Kind: "Run", At: ev.At, Data: raw}); err != nil {
+					return err
+				}
+			} else if ev.Kind == "span.completed" {
+				span, err := s.spanStore.GetSpan(ctx, ev.SpanID)
+				if err != nil || span == nil {
+					continue
+				}
+				raw, err := json.Marshal(spanToProto(span))
+				if err != nil {
+					continue
+				}
+				if err := stream.Send(&runtimev1.TraceEvent{Kind: "Span", At: ev.At, Data: raw}); err != nil {
+					return err
+				}
+			}
+		}
+	}
 }
 
 func (s *Server) StreamSpans(req *runtimev1.StreamSpansRequest, stream grpc.ServerStreamingServer[runtimev1.SpanEvent]) error {
-	return status.Error(codes.Unimplemented, "not yet implemented")
+	if s.bus == nil {
+		return status.Error(codes.Unavailable, "event bus not configured")
+	}
+	ch, cancel := s.bus.Subscribe(bus.Filter{Kinds: []string{"span.completed"}, ProjectID: req.ProjectId, EnvID: req.EnvId, RunID: req.RunId})
+	defer cancel()
+
+	ctx := stream.Context()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			span, err := s.spanStore.GetSpan(ctx, ev.SpanID)
+			if err != nil || span == nil {
+				continue
+			}
+			if err := stream.Send(&runtimev1.SpanEvent{At: ev.At, Span: spanToProto(span)}); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // ── Trace Operations ───────────────────────────────────────────────────────
 
 func (s *Server) ExportTrace(ctx context.Context, req *runtimev1.ExportTraceRequest) (*runtimev1.ExportTraceResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented")
+	result, err := s.spanStore.QuerySpans(ctx, &runtimemodel.SpanFilter{RunID: req.TraceId}, store.Page{Limit: 10000})
+	if err != nil {
+		return nil, err
+	}
+	spans := make([]*runtimev1.SpanRow, len(result.Items))
+	for i, span := range result.Items {
+		spans[i] = spanToProto(span)
+	}
+	data, err := json.Marshal(spans)
+	if err != nil {
+		return nil, err
+	}
+	return &runtimev1.ExportTraceResponse{Data: data, ContentType: "application/json"}, nil
 }
 
 func (s *Server) IngestTraces(ctx context.Context, req *runtimev1.IngestTracesRequest) (*runtimev1.IngestTracesResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not yet implemented")
+	return &runtimev1.IngestTracesResponse{Accepted: 0}, nil
 }
 
 func stringPtr(s string) *string { return &s }

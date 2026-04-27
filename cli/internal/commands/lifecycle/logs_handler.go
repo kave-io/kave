@@ -1,11 +1,11 @@
 package lifecycle
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"time"
 
+	runtimev1 "github.com/kave-io/kave/proto/gen/kave/runtime/v1"
 	"github.com/kave-io/kave/cli/internal/runtime"
 )
 
@@ -21,16 +21,27 @@ func RunLogs(ctx context.Context, in LogsInput) (*LogsOutput, error) {
 	if !ok || rt == nil {
 		return nil, fmt.Errorf("runtime missing")
 	}
-	streamCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	rc, err := rt.Client().Stream(streamCtx, "/api/v1/logs/tail", nil)
+	t, err := rt.GetTransport()
 	if err != nil {
 		return nil, err
 	}
-	defer rc.Close()
-	scanner := bufio.NewScanner(rc)
-	if !scanner.Scan() {
-		return &LogsOutput{Data: map[string]any{"status": "ok"}}, scanner.Err()
+	svc, err := t.RuntimeSvc()
+	if err != nil {
+		return nil, err
 	}
-	return &LogsOutput{Data: map[string]any{"frame": scanner.Text()}}, nil
+	streamCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	stream, err := svc.WatchLogs(streamCtx, &runtimev1.WatchLogsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	var lines []any
+	for {
+		line, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		lines = append(lines, line)
+	}
+	return &LogsOutput{Data: map[string]any{"lines": lines}}, nil
 }

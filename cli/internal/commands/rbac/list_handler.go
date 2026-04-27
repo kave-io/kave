@@ -2,8 +2,10 @@ package rbac
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
+	"github.com/kave-io/kave/cli/internal/runtime"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type ListInput struct {
@@ -14,5 +16,21 @@ type ListOutput struct {
 }
 
 func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "rbac list is not exposed by the HTTP bridge yet", Exit: 1}
+	rt, ok := runtime.FromContext(ctx)
+	if !ok || rt == nil {
+		return nil, fmt.Errorf("runtime missing")
+	}
+	t, err := rt.GetTransport()
+	if err != nil {
+		return nil, err
+	}
+	svc, err := t.RBACSvc()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.ListBindings(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	return &ListOutput{Data: resp.Bindings}, nil
 }

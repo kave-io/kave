@@ -37,47 +37,55 @@ func newListCmd() *cobra.Command {
 }
 
 func newGetCmd() *cobra.Command {
+	var id string
 	cmd := &cobra.Command{
 		Use:   "get",
 		Short: "Get",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunGet(cmd.Context(), GetInput{})
+			out, err := RunGet(cmd.Context(), GetInput{ID: id})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Get")
 		},
 	}
+	cmd.Flags().StringVar(&id, "id", "", "role ID")
 	return cmd
 }
 
 func newCreateCmd() *cobra.Command {
+	var name string
+	var permissions []string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunCreate(cmd.Context(), CreateInput{})
+			out, err := RunCreate(cmd.Context(), CreateInput{Name: name, Permissions: permissions})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Create")
 		},
 	}
+	cmd.Flags().StringVar(&name, "name", "", "role name")
+	cmd.Flags().StringSliceVar(&permissions, "permissions", nil, "permissions")
 	return cmd
 }
 
 func newDeleteCmd() *cobra.Command {
+	var id string
 	cmd := &cobra.Command{
 		Use:   "delete",
 		Short: "Delete",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunDelete(cmd.Context(), DeleteInput{})
+			out, err := RunDelete(cmd.Context(), DeleteInput{ID: id})
 			if err != nil {
 				return err
 			}
 			return output.Render(cmd, out, "Delete")
 		},
 	}
+	cmd.Flags().StringVar(&id, "id", "", "role ID")
 	return cmd
 }
 

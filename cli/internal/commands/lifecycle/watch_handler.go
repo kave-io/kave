@@ -1,12 +1,11 @@
 package lifecycle
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
+	runtimev1 "github.com/kave-io/kave/proto/gen/kave/runtime/v1"
 	"github.com/kave-io/kave/cli/internal/runtime"
 )
 
@@ -22,34 +21,27 @@ func RunWatch(ctx context.Context, in WatchInput) (*WatchOutput, error) {
 	if !ok || rt == nil {
 		return nil, fmt.Errorf("runtime missing")
 	}
-	type sample struct {
-		Stream string `json:"stream"`
-		Frame  string `json:"frame"`
+	t, err := rt.GetTransport()
+	if err != nil {
+		return nil, err
 	}
-	paths := []string{"/api/v1/spans/stream", "/api/v1/events/tail", "/api/v1/logs/tail"}
-	out := make([]sample, 0, len(paths))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, p := range paths {
-		wg.Add(1)
-		go func(path string) {
-			defer wg.Done()
-			streamCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			defer cancel()
-			rc, err := rt.Client().Stream(streamCtx, path, nil)
-			if err != nil {
-				return
-			}
-			defer rc.Close()
-			scanner := bufio.NewScanner(rc)
-			if !scanner.Scan() {
-				return
-			}
-			mu.Lock()
-			out = append(out, sample{Stream: path, Frame: scanner.Text()})
-			mu.Unlock()
-		}(p)
+	svc, err := t.RuntimeSvc()
+	if err != nil {
+		return nil, err
 	}
-	wg.Wait()
-	return &WatchOutput{Data: map[string]any{"frames": out}}, nil
+	streamCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	stream, err := svc.TailTraces(streamCtx, &runtimev1.TailTracesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	var frames []any
+	for {
+		ev, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		frames = append(frames, ev)
+	}
+	return &WatchOutput{Data: map[string]any{"frames": frames}}, nil
 }

@@ -14,5 +14,5 @@ type EnableOutput struct {
 }
 
 func RunEnable(ctx context.Context, in EnableInput) (*EnableOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector enable is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector enable : not yet implemented", Exit: 1}
 }

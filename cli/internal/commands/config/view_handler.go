@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kave-io/kave/cli/internal/runtime"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type ViewInput struct {
@@ -19,9 +20,17 @@ func RunView(ctx context.Context, in ViewInput) (*ViewOutput, error) {
 	if !ok || rt == nil {
 		return nil, fmt.Errorf("runtime missing")
 	}
-	var out any
-	if err := rt.Client().Get(ctx, "/api/v1/config/view", nil, &out); err != nil {
+	t, err := rt.GetTransport()
+	if err != nil {
 		return nil, err
 	}
-	return &ViewOutput{Data: out}, nil
+	svc, err := t.DaemonSvc()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.ConfigView(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	return &ViewOutput{Data: resp}, nil
 }

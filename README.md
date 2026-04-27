@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/kave-io/kave-docs/main/src/assets/kave-logo.svg" alt="Kave" width="72" />
-  <h1>Kave</h1>
+  <img src="https://raw.githubusercontent.com/kave-io/docs/main/src/assets/kave-full.webp" alt="Kave" width="72" />
+  <h1></h1>
   <p><strong>The control plane for AI agents.</strong></p>
   <p>Observe, authorize, validate, and cost-control every agent action — across any framework, any model, any language.</p>
 
-  <p>
+<p>
     <a href="https://kave.io/docs"><img src="https://img.shields.io/badge/docs-kave.io-0F6E56?style=flat-square" /></a>
     <a href="https://github.com/kave-io/kave/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" /></a>
     <a href="https://github.com/kave-io/kave/releases"><img src="https://img.shields.io/github/v/release/kave-io/kave?style=flat-square&color=85B7EB" /></a>
@@ -65,21 +65,21 @@ export OPENAI_BASE_URL=https://your.kave.instance/frameworks/claude-code/openai
 
 ## The four modules
 
-| Module | What it does |
-|--------|-------------|
-| `core/trace` | Records every agent action as a structured, replayable span tree |
-| `core/auth` | Agent identities, scoped permissions, ephemeral credentials, audit logs |
-| `core/validate` | Schema validation, retry policies, content guardrails on all outputs |
-| `core/cost` | Token metering, budget enforcement, spend attribution, routing recommendations |
+| Module            | What it does                                                                   |
+| ----------------- | ------------------------------------------------------------------------------ |
+| `core/trace`    | Records every agent action as a structured, replayable span tree               |
+| `core/auth`     | Agent identities, scoped permissions, ephemeral credentials, audit logs        |
+| `core/validate` | Schema validation, retry policies, content guardrails on all outputs           |
+| `core/cost`     | Token metering, budget enforcement, spend attribution, routing recommendations |
 
 ## Connectors
 
 Kave works with everything — via framework gateways, native SDK wrappers, or OpenTelemetry:
 
-**Frameworks** — LangChain · LangGraph · CrewAI · OpenAI Agents SDK · OpenClaw · AutoGen · Google ADK  
-**Models** — OpenAI · Anthropic · Ollama · Gemini · Groq · Mistral · DeepSeek · any OpenAI-compatible endpoint  
-**Tools** — GitHub · Stripe · Zarinpal · Gmail · Slack · PostgreSQL · S3 · and more  
-**Protocols** — MCP (wraps any MCP server) · OpenTelemetry · A2A  
+**Frameworks** — LangChain · LangGraph · CrewAI · OpenAI Agents SDK · OpenClaw · AutoGen · Google ADK
+**Models** — OpenAI · Anthropic · Ollama · Gemini · Groq · Mistral · DeepSeek · any OpenAI-compatible endpoint
+**Tools** — GitHub · Stripe · Zarinpal · Gmail · Slack · PostgreSQL · S3 · and more
+**Protocols** — MCP (wraps any MCP server) · OpenTelemetry · A2A
 
 ## Repo structure
 

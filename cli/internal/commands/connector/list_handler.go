@@ -14,5 +14,5 @@ type ListOutput struct {
 }
 
 func RunList(ctx context.Context, in ListInput) (*ListOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector list is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector list : not yet implemented", Exit: 1}
 }

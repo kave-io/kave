@@ -2,11 +2,16 @@ package rbac
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/kave-io/kave/cli/internal/output"
+	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
+	"github.com/kave-io/kave/cli/internal/runtime"
 )
 
 type GrantInput struct {
+	RoleID  string
+	Subject string
+	Scope   string
 }
 
 type GrantOutput struct {
@@ -14,5 +19,25 @@ type GrantOutput struct {
 }
 
 func RunGrant(ctx context.Context, in GrantInput) (*GrantOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "rbac grant is not exposed by the HTTP bridge yet", Exit: 1}
+	rt, ok := runtime.FromContext(ctx)
+	if !ok || rt == nil {
+		return nil, fmt.Errorf("runtime missing")
+	}
+	t, err := rt.GetTransport()
+	if err != nil {
+		return nil, err
+	}
+	svc, err := t.RBACSvc()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.CreateBinding(ctx, &controlv1.CreateBindingRequest{
+		RoleId:  in.RoleID,
+		Subject: in.Subject,
+		Scope:   in.Scope,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &GrantOutput{Data: resp}, nil
 }

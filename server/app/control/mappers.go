@@ -455,3 +455,31 @@ func generateToken() (raw, prefix, hash string, err error) {
 	hash = hex.EncodeToString(sum[:])
 	return
 }
+
+// ── RBAC ───────────────────────────────────────────────────────────────────
+
+func roleToProto(r *control.Role) *controlv1.Role {
+	if r == nil {
+		return nil
+	}
+	return &controlv1.Role{
+		Id:          r.ID,
+		Name:        r.Name,
+		Permissions: r.Permissions,
+		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
+	}
+}
+
+func bindingToProto(b *control.Binding) *controlv1.Binding {
+	if b == nil {
+		return nil
+	}
+	return &controlv1.Binding{
+		Id:        b.ID,
+		RoleId:    b.RoleID,
+		Subject:   b.Subject,
+		Scope:     b.Scope,
+		CreatedAt: b.CreatedAt,
+	}
+}

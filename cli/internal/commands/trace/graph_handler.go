@@ -14,5 +14,5 @@ type GraphOutput struct {
 }
 
 func RunGraph(ctx context.Context, in GraphInput) (*GraphOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "trace graph is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "trace graph: not yet implemented", Exit: 1}
 }

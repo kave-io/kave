@@ -14,5 +14,5 @@ type ApplyOutput struct {
 }
 
 func RunApply(ctx context.Context, in ApplyInput) (*ApplyOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "apply apply is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "apply apply : not yet implemented", Exit: 1}
 }

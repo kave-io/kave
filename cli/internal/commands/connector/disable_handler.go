@@ -14,5 +14,5 @@ type DisableOutput struct {
 }
 
 func RunDisable(ctx context.Context, in DisableInput) (*DisableOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector disable is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector disable : not yet implemented", Exit: 1}
 }

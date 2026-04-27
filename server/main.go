@@ -25,7 +25,6 @@ import (
 	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/internal/daemon"
 	"github.com/kave-io/kave/server/internal/gateway"
-	"github.com/kave-io/kave/server/internal/httpbridge"
 	"github.com/kave-io/kave/server/internal/logsink"
 	appcasbin "github.com/kave-io/kave/server/internal/infra/casbin"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
@@ -98,10 +97,15 @@ func main() {
 	controlServer := appcontrol.New(appStore, eventBus)
 	runtimeServer := appruntime.New(appStore, storeManager, eventBus)
 	auditServer := appaudit.New(storeManager.AuditStore())
+
+	daemonState := daemon.New(config.LoadOpts{StartDir: "."}, loadRes, appStore, storeManager, fxService, costService, eventBus, buildVersion)
+
 	grpcServer := portgrpc.New(
 		controlServer,
 		runtimeServer,
 		auditServer,
+		daemonState,
+		authTokens,
 		portgrpc.NewAuthUnaryInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
 		portgrpc.NewAuthStreamInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
 	)
@@ -152,12 +156,6 @@ func main() {
 	gatewayServer.RegisterRoutes(mux)
 	fx.RegisterRoutes(mux, fxService)
 
-	bridgeMux := http.NewServeMux()
-	httpbridge.Register(bridgeMux, httpbridge.BuildRoutes(controlServer, runtimeServer, appStore, storeManager, authTokens))
-	daemonState := daemon.New(config.LoadOpts{StartDir: "."}, loadRes, appStore, storeManager, fxService, costService, eventBus, buildVersion)
-	httpbridge.Register(bridgeMux, httpbridge.BuildDaemonRoutes(daemonState))
-	httpbridge.RegisterStreams(bridgeMux, appStore, storeManager, eventBus)
-	httpbridge.RegisterTraceRoutes(bridgeMux, storeManager)
 	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
 		log.Fatalf("build apply plan: %v", err)
 	} else if _, err := daemonState.Apply(context.Background(), plan, false); err != nil {
@@ -192,15 +190,7 @@ func main() {
 		}, nil, nil)
 	})
 
-	// Bridge first, then the dashboard SPA.
-	root := httpbridge.NewAuthMiddleware(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens).Wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, pattern := bridgeMux.Handler(r); pattern != "" {
-			bridgeMux.ServeHTTP(w, r)
-			return
-		}
-		ui.Handler().ServeHTTP(w, r)
-	}))
-	mux.Handle("/", root)
+	mux.Handle("/", ui.Handler())
 
 	// Start HTTP server
 	addr := cfg.Server.Addr()

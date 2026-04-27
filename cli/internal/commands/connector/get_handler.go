@@ -14,5 +14,5 @@ type GetOutput struct {
 }
 
 func RunGet(ctx context.Context, in GetInput) (*GetOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector get is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "connector get : not yet implemented", Exit: 1}
 }

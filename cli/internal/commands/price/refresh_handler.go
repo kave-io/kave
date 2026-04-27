@@ -14,5 +14,5 @@ type RefreshOutput struct {
 }
 
 func RunRefresh(ctx context.Context, in RefreshInput) (*RefreshOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "price refresh is not exposed by the HTTP bridge yet", Exit: 1}
+	return nil, &output.CommandError{Code: "command.unavailable", Message: "price refresh : not yet implemented", Exit: 1}
 }

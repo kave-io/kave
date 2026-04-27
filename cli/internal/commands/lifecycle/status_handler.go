@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/kave-io/kave/cli/internal/runtime"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type StatusInput struct {
@@ -19,9 +20,17 @@ func RunStatus(ctx context.Context, in StatusInput) (*StatusOutput, error) {
 	if !ok || rt == nil {
 		return nil, fmt.Errorf("runtime missing")
 	}
-	var out any
-	if err := rt.Client().Get(ctx, "/api/v1/status", nil, &out); err != nil {
+	t, err := rt.GetTransport()
+	if err != nil {
 		return nil, err
 	}
-	return &StatusOutput{Data: out}, nil
+	svc, err := t.DaemonSvc()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := svc.Status(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	return &StatusOutput{Data: resp}, nil
 }

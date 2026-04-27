@@ -2,8 +2,11 @@ package span
 
 import (
 	"context"
+	"fmt"
+	"time"
 
-	"github.com/kave-io/kave/cli/internal/output"
+	runtimev1 "github.com/kave-io/kave/proto/gen/kave/runtime/v1"
+	"github.com/kave-io/kave/cli/internal/runtime"
 )
 
 type TailInput struct {
@@ -14,5 +17,31 @@ type TailOutput struct {
 }
 
 func RunTail(ctx context.Context, in TailInput) (*TailOutput, error) {
-	return nil, &output.CommandError{Code: "command.unavailable", Message: "span tail is not exposed by the HTTP bridge yet", Exit: 1}
+	rt, ok := runtime.FromContext(ctx)
+	if !ok || rt == nil {
+		return nil, fmt.Errorf("runtime missing")
+	}
+	t, err := rt.GetTransport()
+	if err != nil {
+		return nil, err
+	}
+	svc, err := t.RuntimeSvc()
+	if err != nil {
+		return nil, err
+	}
+	streamCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	stream, err := svc.StreamSpans(streamCtx, &runtimev1.StreamSpansRequest{})
+	if err != nil {
+		return nil, err
+	}
+	var spans []any
+	for {
+		sp, err := stream.Recv()
+		if err != nil {
+			break
+		}
+		spans = append(spans, sp)
+	}
+	return &TailOutput{Data: spans}, nil
 }
