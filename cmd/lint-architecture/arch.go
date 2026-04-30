@@ -12,18 +12,15 @@ import (
 )
 
 type LoadOptions struct {
-	Root    string // repository root
-	Only    string // only run this rule ID
+	Root    string
+	Only    string
 	Verbose bool
 }
 
-// Run loads the workspace and runs all applicable rules.
 func Run(opts LoadOptions) []rules.Violation {
 	if opts.Root == "" {
 		opts.Root = "."
 	}
-
-	// Load all packages in the module
 	pkgs, err := packages.Load(
 		&packages.Config{
 			Mode: packages.NeedImports | packages.NeedName | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
@@ -39,24 +36,16 @@ func Run(opts LoadOptions) []rules.Violation {
 	if opts.Verbose {
 		fmt.Printf("loaded %d packages\n", len(pkgs))
 	}
-
-	// Load allowlist
 	allowlist := loadAllowlist(opts.Root)
-
-	// Prepare context
 	ctx := &rules.Context{
 		Packages:   pkgs,
 		Allowlist:  allowlist,
 		ModuleRoot: opts.Root,
 		Verbose:    opts.Verbose,
 	}
-
-	// Get token.FileSet from first package
 	if len(pkgs) > 0 && pkgs[0].Fset != nil {
 		ctx.FileSet = pkgs[0].Fset
 	}
-
-	// Run rules
 	var allViolations []rules.Violation
 	for _, rule := range rules.All() {
 		if opts.Only != "" && rule.ID() != opts.Only {
@@ -70,8 +59,6 @@ func Run(opts LoadOptions) []rules.Violation {
 		violations := rule.Check(ctx)
 		allViolations = append(allViolations, violations...)
 	}
-
-	// Sort by file and line
 	sort.Slice(allViolations, func(i, j int) bool {
 		if allViolations[i].Pos.Filename != allViolations[j].Pos.Filename {
 			return allViolations[i].Pos.Filename < allViolations[j].Pos.Filename
@@ -84,8 +71,6 @@ func Run(opts LoadOptions) []rules.Violation {
 
 func loadAllowlist(root string) map[string][]rules.Allow {
 	allowlist := make(map[string][]rules.Allow)
-
-	// Load allowlist files
 	allowlistDir := filepath.Join(root, "cmd/lint-architecture/allowlist")
 	files := []struct {
 		name   string
@@ -125,8 +110,6 @@ func loadAllowlist(root string) map[string][]rules.Allow {
 
 	return allowlist
 }
-
-// FormatViolation formats a violation for display.
 func FormatViolation(v rules.Violation) string {
 	return fmt.Sprintf(
 		"%s:%d:%d: %s: %s — %s\n  fix: %s",

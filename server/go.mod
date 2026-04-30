@@ -5,7 +5,6 @@ go 1.26.1
 require (
 	aidanwoods.dev/go-paseto v1.6.0
 	github.com/ClickHouse/clickhouse-go/v2 v2.45.0
-	github.com/alitto/pond/v2 v2.7.0
 	github.com/apache/arrow-go/v18 v18.1.0
 	github.com/casbin/casbin/v3 v3.10.0
 	github.com/casbin/redis-watcher/v2 v2.8.0

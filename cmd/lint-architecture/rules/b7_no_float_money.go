@@ -9,8 +9,10 @@ import (
 
 type B7NoFloatMoney struct{}
 
-func (B7NoFloatMoney) ID() string          { return "B7-no-float-money" }
-func (B7NoFloatMoney) Description() string { return "No float32/float64 in cost/price/amount/spend/budget outside PriceBook" }
+func (B7NoFloatMoney) ID() string { return "B7-no-float-money" }
+func (B7NoFloatMoney) Description() string {
+	return "No float32/float64 in cost/price/amount/spend/budget outside PriceBook"
+}
 
 func (B7NoFloatMoney) Check(ctx *Context) []Violation {
 	var out []Violation
@@ -24,7 +26,6 @@ func (B7NoFloatMoney) Check(ctx *Context) []Violation {
 
 		for _, file := range pkg.Syntax {
 			for _, decl := range file.Decls {
-				// Look for struct declarations
 				if typeDecl, ok := decl.(*ast.GenDecl); ok && typeDecl.Tok.String() == "type" {
 					for _, spec := range typeDecl.Specs {
 						if typeSpec, ok := spec.(*ast.TypeSpec); ok {
@@ -33,7 +34,6 @@ func (B7NoFloatMoney) Check(ctx *Context) []Violation {
 									for _, name := range field.Names {
 										if moneyRegex.MatchString(name.Name) {
 											if isFloatType(field.Type) {
-												// Allow in PriceBook
 												if strings.Contains(pkg.PkgPath, "cost/service") {
 													continue
 												}

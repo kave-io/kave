@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
+import type { NavigationMenuItem } from '@nuxt/ui'
 import LocaleSelector from '../components/LocaleSelector.vue'
 import CurrencySelector from '../components/CurrencySelector.vue'
 import { RTL_CODES } from '@/stores/locale'
@@ -12,30 +12,6 @@ const open = ref(true)
 const isRtl = computed(() => RTL_CODES.includes(locale.value))
 const sidebarSide = computed(() => (isRtl.value ? 'right' : 'left'))
 const toggleIcon = computed(() => (isRtl.value ? 'i-lucide-panel-right' : 'i-lucide-panel-left'))
-
-const workspaceKeys = ['production', 'staging', 'development'] as const
-const workspaceIcons: Record<string, string> = {
-  production: 'i-lucide-globe',
-  staging: 'i-lucide-flask-conical',
-  development: 'i-lucide-code',
-}
-const selectedWorkspaceKey = ref<string>('production')
-
-const workspaceItems = computed<DropdownMenuItem[][]>(() => [
-  workspaceKeys.map((key) => ({
-    label: t(`workspace.${key}`),
-    icon: workspaceIcons[key],
-    onSelect() {
-      selectedWorkspaceKey.value = key
-    },
-  })),
-  [{ label: t('workspace.add'), icon: 'i-lucide-circle-plus' }],
-])
-
-const selectedWorkspace = computed(() => ({
-  label: t(`workspace.${selectedWorkspaceKey.value}`),
-  icon: workspaceIcons[selectedWorkspaceKey.value],
-}))
 
 const navItems = computed<NavigationMenuItem[][]>(() => [
   [
@@ -90,7 +66,6 @@ const externalLinks = [
             :ui="{ link: 'p-1.5 overflow-hidden' }"
           />
 
-          <!-- External Links Section -->
           <div v-if="state === 'expanded'" class="mt-auto border-t border-default p-3 space-y-2">
             <p class="text-xs font-semibold text-muted uppercase tracking-wide px-1">Resources</p>
             <div class="flex flex-col gap-1.5">
@@ -109,7 +84,6 @@ const externalLinks = [
             </div>
           </div>
 
-          <!-- Collapsed External Links -->
           <div v-else class="mt-auto border-t border-default p-2 flex flex-col gap-1.5 items-center">
             <a
               v-for="link in externalLinks"

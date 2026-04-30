@@ -7,8 +7,10 @@ import (
 
 type B4NoAuthInPolicy struct{}
 
-func (B4NoAuthInPolicy) ID() string          { return "B4-no-auth-in-policy" }
-func (B4NoAuthInPolicy) Description() string { return "server/ops/policy/* must not import server/ops/auth/*" }
+func (B4NoAuthInPolicy) ID() string { return "B4-no-auth-in-policy" }
+func (B4NoAuthInPolicy) Description() string {
+	return "server/ops/policy/* must not import server/ops/auth/*"
+}
 
 func (B4NoAuthInPolicy) Check(ctx *Context) []Violation {
 	var out []Violation
@@ -35,8 +37,10 @@ func (B4NoAuthInPolicy) Check(ctx *Context) []Violation {
 
 type B4NoPolicyInAuth struct{}
 
-func (B4NoPolicyInAuth) ID() string          { return "B4-no-policy-in-auth" }
-func (B4NoPolicyInAuth) Description() string { return "server/ops/auth/* must not import server/ops/policy/*" }
+func (B4NoPolicyInAuth) ID() string { return "B4-no-policy-in-auth" }
+func (B4NoPolicyInAuth) Description() string {
+	return "server/ops/auth/* must not import server/ops/policy/*"
+}
 
 func (B4NoPolicyInAuth) Check(ctx *Context) []Violation {
 	var out []Violation

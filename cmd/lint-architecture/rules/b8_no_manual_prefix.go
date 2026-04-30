@@ -10,14 +10,15 @@ import (
 
 type B8NoManualPrefix struct{}
 
-func (B8NoManualPrefix) ID() string          { return "B8-no-manual-prefix" }
-func (B8NoManualPrefix) Description() string { return "All IDs from core/pkg/ids.New(); no manual prefix concat" }
+func (B8NoManualPrefix) ID() string { return "B8-no-manual-prefix" }
+func (B8NoManualPrefix) Description() string {
+	return "All IDs from core/pkg/ids.New(); no manual prefix concat"
+}
 
 func (B8NoManualPrefix) Check(ctx *Context) []Violation {
 	var out []Violation
 
 	for _, pkg := range ctx.Packages {
-		// Allow in ids package itself
 		if strings.HasSuffix(pkg.PkgPath, "/ids") {
 			continue
 		}
@@ -49,16 +50,11 @@ func (pv *prefixVisitor) Visit(n ast.Node) ast.Visitor {
 	if n == nil {
 		return nil
 	}
-
-	// Look for patterns like: prefix + "_" + ...
 	if binOp, ok := n.(*ast.BinaryExpr); ok {
 		if binOp.Op.String() == "+" {
-			// Check if this looks like prefix concatenation
 			if isStringLiteral(binOp.X) && isStringLiteral(binOp.Y) {
-				// Check pattern: <prefix>_<something>
 				if xStr, ok := binOp.X.(*ast.BasicLit); ok {
 					if strings.Contains(xStr.Value, "_") && len(xStr.Value) < 20 {
-						// Looks like a manual prefix concat
 						pos := pv.ctx.FileSet.Position(binOp.Pos())
 						*pv.violations = append(*pv.violations, Violation{
 							RuleID:  "B8-no-manual-prefix",

@@ -1,21 +1,17 @@
 # Kave Core
 
-Control plane runtime for AI agents.
+Pure Go contracts and mapping code shared by the server and CLI.
 
-## Package Architecture
+## Layout
 
-Four-package rule:
-
-- **`runtime/`** — live execution domain (Action, Run, Policy, Outcome)
-- **`model/`** — persisted records (ActionRecord, SpanRow, BudgetEntry)
-- **`ops/`** — module interfaces and decision types (auth.Decision, cost.BudgetStatus)
-- **`mappers/`** — translation layer between runtime ↔ model (only)
-
-See `CLAUDE.md` for the complete design spec, confirmed decisions, and data models.
-
-## Building
+- `runtime/` live execution types.
+- `model/` persisted records.
+- `pipeline/` interceptor chain.
+- `connectors/` framework, model, tool, and protocol connector contracts.
+- `mappers/` conversion boundaries between runtime and storage shapes.
+- `pkg/` small shared primitives.
 
 ```bash
-go build ./...
 go test ./...
+go build ./...
 ```

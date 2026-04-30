@@ -21,19 +21,14 @@ func (B3BudgetCardinality) Check(ctx *Context) []Violation {
 
 		for _, file := range pkg.Syntax {
 			for _, decl := range file.Decls {
-				// Look for struct declarations
 				if typeDecl, ok := decl.(*ast.GenDecl); ok && typeDecl.Tok.String() == "type" {
 					for _, spec := range typeDecl.Specs {
 						if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-							// Skip Agent type
 							if typeSpec.Name.Name == "Agent" {
 								continue
 							}
-
-							// Check if this is a struct with forbidden types
 							if structType, ok := typeSpec.Type.(*ast.StructType); ok {
 								for _, field := range structType.Fields.List {
-									// Look for BudgetCap or similar fields
 									if containsForbiddenBudgetField(field) {
 										pos := ctx.FileSet.Position(field.Pos())
 										out = append(out, Violation{

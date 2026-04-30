@@ -10,8 +10,10 @@ import (
 
 type B6NoCrossStoreTx struct{}
 
-func (B6NoCrossStoreTx) ID() string          { return "B6-no-cross-store-tx" }
-func (B6NoCrossStoreTx) Description() string { return "WithTx closures must not reference SpanStore or AuditStore" }
+func (B6NoCrossStoreTx) ID() string { return "B6-no-cross-store-tx" }
+func (B6NoCrossStoreTx) Description() string {
+	return "WithTx closures must not reference SpanStore or AuditStore"
+}
 
 func (B6NoCrossStoreTx) Check(ctx *Context) []Violation {
 	var out []Violation
@@ -44,14 +46,10 @@ func (tv *txVisitor) Visit(n ast.Node) ast.Visitor {
 	if n == nil {
 		return nil
 	}
-
-	// Look for WithTx calls
 	if call, ok := n.(*ast.CallExpr); ok {
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "WithTx" {
-			// The closure is typically the first argument
 			if len(call.Args) > 0 {
 				if fn, ok := call.Args[0].(*ast.FuncLit); ok {
-					// Check if the closure body references forbidden stores
 					if referencesForbiddenStore(fn.Body) {
 						pos := tv.ctx.FileSet.Position(call.Pos())
 						*tv.violations = append(*tv.violations, Violation{

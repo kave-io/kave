@@ -10,8 +10,10 @@ import (
 
 type B2NoTickers struct{}
 
-func (B2NoTickers) ID() string          { return "B2-no-tickers-in-core" }
-func (B2NoTickers) Description() string { return "core/* must not use time.NewTicker or time.AfterFunc without explicit allow comment" }
+func (B2NoTickers) ID() string { return "B2-no-tickers-in-core" }
+func (B2NoTickers) Description() string {
+	return "core/* must not use time.NewTicker or time.AfterFunc without explicit allow comment"
+}
 
 func (B2NoTickers) Check(ctx *Context) []Violation {
 	var out []Violation
@@ -23,9 +25,9 @@ func (B2NoTickers) Check(ctx *Context) []Violation {
 
 		for _, file := range pkg.Syntax {
 			v := &tickerVisitor{
-				pkg:       pkg,
-				ctx:       ctx,
-				allowlist: ctx.Allowlist["B2-no-tickers-in-core"],
+				pkg:        pkg,
+				ctx:        ctx,
+				allowlist:  ctx.Allowlist["B2-no-tickers-in-core"],
 				violations: &out,
 			}
 			ast.Walk(v, file)
@@ -46,8 +48,6 @@ func (tv *tickerVisitor) Visit(n ast.Node) ast.Visitor {
 	if n == nil {
 		return nil
 	}
-
-	// Look for calls to time.NewTicker or time.AfterFunc
 	if call, ok := n.(*ast.CallExpr); ok {
 		var funcName string
 		switch fn := call.Fun.(type) {
@@ -58,11 +58,8 @@ func (tv *tickerVisitor) Visit(n ast.Node) ast.Visitor {
 		}
 
 		if funcName == "NewTicker" || funcName == "AfterFunc" {
-			// Check if this file/position matches the allowlist
 			pos := tv.ctx.FileSet.Position(call.Pos())
 			filePath := pos.Filename
-
-			// Simple allowlist check
 			isAllowed := false
 			for _, allow := range tv.allowlist {
 				if strings.Contains(filePath, allow.Path) {
@@ -85,4 +82,3 @@ func (tv *tickerVisitor) Visit(n ast.Node) ast.Visitor {
 
 	return tv
 }
-

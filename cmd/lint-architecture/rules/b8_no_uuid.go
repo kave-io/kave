@@ -7,8 +7,10 @@ import (
 
 type B8NoUUID struct{}
 
-func (B8NoUUID) ID() string          { return "B8-no-uuid" }
-func (B8NoUUID) Description() string { return "No direct uuid.NewString() usage; use core/pkg/ids instead" }
+func (B8NoUUID) ID() string { return "B8-no-uuid" }
+func (B8NoUUID) Description() string {
+	return "No direct uuid.NewString() usage; use core/pkg/ids instead"
+}
 
 func (B8NoUUID) Check(ctx *Context) []Violation {
 	var out []Violation
@@ -17,8 +19,6 @@ func (B8NoUUID) Check(ctx *Context) []Violation {
 		if !strings.HasPrefix(pkg.PkgPath, "github.com/kave-io/kave/") {
 			continue
 		}
-
-		// Allow uuid imports in test files and the ids package itself
 		pkgName := pkg.PkgPath
 		if strings.HasSuffix(pkgName, "_test") || strings.Contains(pkgName, "/ids") {
 			continue

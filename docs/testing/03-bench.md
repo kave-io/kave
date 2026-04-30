@@ -61,15 +61,15 @@ much does an average call cost?** The output of every benchmark goes into
 **Report:** ns/op, allocs/op. Targets: ≤200 ns/span, ≤2 allocs/span on commodity x86.
 
 ### B8. `BenchmarkCostMeter_Compute`
-**File:** `server/ops/cost/meter_bench_test.go`.
+**File:** `server/ops/cost/service_bench_test.go`.
 **Setup:** snapshot with non-zero pricing across all six categories; `CostUsage` populated.
 **Loop:** `Calculate(...)` → discard.
 **Report:** allocs/op should be `0` (pure arithmetic). If non-zero, file a finding.
 
 ### B9. `BenchmarkSSEFanout_100Subscribers`
-**File:** `server/internal/httpbridge/streams_bench_test.go` (or current location).
-**Setup:** fanout hub with 100 subscribers.
-**Loop:** publish a 256-byte event; assert all 100 receive within 1ms via `Eventually`.
+**File:** `server/internal/gateway/gateway_bench_test.go`.
+**Setup:** gateway streaming path with 100 concurrent clients.
+**Loop:** forward a 256-byte SSE event; assert all clients receive within 1ms via `Eventually`.
 **Report:** ns/op (per publish), allocs/op. Sub-bench: `subs=10|100|1000`.
 
 ### B10. `BenchmarkMoneyAmount_AddMul`

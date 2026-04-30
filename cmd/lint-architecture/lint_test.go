@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-// TestArchitectureLint is the CI gate for architectural compliance.
 func TestArchitectureLint(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipped in -short")

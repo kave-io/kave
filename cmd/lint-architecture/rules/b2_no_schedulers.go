@@ -12,8 +12,6 @@ func (B2NoSchedulers) Description() string { return "core/* must not import cron
 
 func (B2NoSchedulers) Check(ctx *Context) []Violation {
 	var out []Violation
-
-	// Forbidden scheduler libraries
 	forbiddenImports := []string{
 		"github.com/robfig/cron",
 		"github.com/jasonlvhit/gocron",

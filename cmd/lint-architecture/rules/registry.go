@@ -1,6 +1,5 @@
 package rules
 
-// All returns all registered architecture rules.
 func All() []Rule {
 	return []Rule{
 		&B1LayerDirection{},
@@ -17,7 +16,6 @@ func All() []Rule {
 		&B8NoUUID{},
 		&B8NoManualPrefix{},
 		&B9NoTimeInModels{},
-		&B9TimeNowJustified{},
 		&B10HTTPAllowlist{},
 	}
 }

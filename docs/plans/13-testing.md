@@ -13,8 +13,8 @@
   - `core/pipeline/pipeline.go` — every request passes through.
   - `server/internal/gateway/routes.go` — streaming forwarder (SSE tee, gzip).
   - `server/internal/store/duckdb/span_store.go` + `postgres/span_store.go` — high write volume.
-  - `server/internal/httpbridge/streams.go` — SSE fanout.
-  - `server/ops/cost/meter.go` — cost calculation, called per action.
+  - `server/internal/gateway/routes.go` — SSE forwarding and gateway routing.
+  - `server/ops/cost/service.go` — cost calculation, called per action.
   - `server/ops/trace/tree.go` — O(n) spans per trace, called per view.
 
 ## Design
@@ -29,10 +29,10 @@ Targets and mandatory coverage:
 | `core/pkg/ids` | prefix registry, ULID monotonic, uniqueness under tight loops |
 | `core/pkg/keyring` | encrypt/decrypt round-trip, wrong-key failure, empty input |
 | `core/pkg/authhash` | same-input determinism, cost parameters, timing-safe compare |
-| `core/pkg/fp`, `pointer`, `timex` | everything exported |
+| `core/pkg/timex` | everything exported |
 | `core/pipeline` | order of Before stages, short-circuit on error, After in reverse, panic recovery |
 | `core/mappers` | runtime ↔ model ↔ proto round-trips for every model |
-| `server/ops/cost/meter` | all six token categories, cache-read vs cache-write pricing, missing price → zero cost (no crash) |
+| `server/ops/cost` | token categories, cache-read vs cache-write pricing, missing price → zero cost (no crash) |
 | `server/ops/trace/tree` | single root, multiple roots (error), cycles (error), stable child order by `started_at`, orphan detection |
 | `server/ops/trace/export/*` | each formatter against a known 5-span fixture → golden file |
 | `server/internal/config/layered` | 5-layer merge precedence, `${VAR:-default}` expansion, list-replace semantics, invalid YAML error |
@@ -53,8 +53,8 @@ Targets:
 5. **Auth round-trip** — login → session PASETO → use bearer → identity resolves → policy enforced.
 6. **Vault credential resolve** — against `hashicorp/vault:latest` container; asserts upstream request carries real key.
 7. **Apply engine** — apply a `kave.yaml` that creates 3 agents + 2 policies, then diff against live state = empty.
-8. **Trace tree** — run a synthetic nested-action sequence, GET `/api/v1/traces/:id` returns the expected tree shape.
-9. **SSE fanout** — 10 concurrent subscribers to `/api/v1/spans/stream` each receive the same 100 events in order.
+8. **Trace tree** — run a synthetic nested-action sequence and query the trace tree through the current runtime surface.
+9. **SSE forwarding** — streaming gateway clients receive ordered upstream chunks and close cleanly.
 10. **Cross-store parity** — run the span-store test suite against both duckdb and postgres (shared table test from `core/store/storetest/`).
 
 Integration test harness: `server/internal/testutil/harness.go` — boots an in-process server with in-memory sqlite + real duckdb + mock upstream. Each test calls `harness.New(t)` and gets `*http.Client`, `*grpc.ClientConn`, store handles.
@@ -109,7 +109,7 @@ Run in CI nightly (not per-PR). Archive results to `benchmarks/history/<date>.js
 
 ### Contract stability
 
-Golden file for every HTTP endpoint's happy-path response JSON, under `server/internal/httpbridge/testdata/contracts/<endpoint>.json`. A single `contract_test.go` walks the table. Changing a shape requires regenerating the golden file — that diff is the contract review.
+Golden file for every intentionally public HTTP endpoint's happy-path response JSON, under `server/internal/gateway/testdata/contracts/<endpoint>.json`. A single `contract_test.go` walks the table. Changing a shape requires regenerating the golden file — that diff is the contract review.
 
 For proto: `buf breaking --against origin/main` in CI.
 
@@ -122,7 +122,7 @@ Create:
 - `cmd/loadgen/main.go`.
 - `e2e/*_test.go` (3 tests).
 - Fuzz corpora: `core/pkg/money/testdata/fuzz/`, similar for others.
-- `server/internal/httpbridge/testdata/contracts/*.json` — golden contract files.
+- `server/internal/gateway/testdata/contracts/*.json` — golden contract files.
 - `.github/workflows/test.yml` — unit+integration on push, bench+e2e+loadgen nightly.
 
 Modify:

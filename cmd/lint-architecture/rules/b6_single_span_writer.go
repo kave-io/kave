@@ -10,8 +10,10 @@ import (
 
 type B6SingleSpanWriter struct{}
 
-func (B6SingleSpanWriter) ID() string          { return "B6-single-span-writer" }
-func (B6SingleSpanWriter) Description() string { return "OpenSpan/CloseSpan only in core/runtime/trace/* and *_test.go" }
+func (B6SingleSpanWriter) ID() string { return "B6-single-span-writer" }
+func (B6SingleSpanWriter) Description() string {
+	return "OpenSpan/CloseSpan only in core/runtime/trace/* and *_test.go"
+}
 
 func (B6SingleSpanWriter) Check(ctx *Context) []Violation {
 	var out []Violation
@@ -46,12 +48,9 @@ func (sw *spanWriterVisitor) Visit(n ast.Node) ast.Visitor {
 	if n == nil {
 		return nil
 	}
-
-	// Look for OpenSpan / CloseSpan calls
 	if call, ok := n.(*ast.CallExpr); ok {
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 			if sel.Sel.Name == "OpenSpan" || sel.Sel.Name == "CloseSpan" {
-				// Allowed in trace/ or test files
 				if strings.Contains(sw.filename, "/core/runtime/trace/") ||
 					strings.HasSuffix(sw.filename, "_test.go") {
 					return sw

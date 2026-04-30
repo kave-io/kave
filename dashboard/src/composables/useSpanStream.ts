@@ -30,7 +30,7 @@ export function useSpanStream(options: UseSpanStreamOptions = {}): UseSpanStream
   es.onmessage = (e: MessageEvent) => {
     try {
       const span = JSON.parse(e.data) as Span
-      spans.value.unshift(span) // newest first
+      spans.value.unshift(span)
       if (spans.value.length > MAX_LIVE_SPANS) {
         spans.value.length = MAX_LIVE_SPANS
       }
@@ -41,7 +41,6 @@ export function useSpanStream(options: UseSpanStreamOptions = {}): UseSpanStream
 
   es.onerror = () => {
     isLive.value = false
-    // EventSource auto-reconnects; flip live back on next open
   }
 
   onUnmounted(() => {

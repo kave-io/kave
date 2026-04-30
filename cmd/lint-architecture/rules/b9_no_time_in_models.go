@@ -8,14 +8,15 @@ import (
 
 type B9NoTimeInModels struct{}
 
-func (B9NoTimeInModels) ID() string          { return "B9-no-time-in-models" }
-func (B9NoTimeInModels) Description() string { return "core/model/* and proto/* must use int64 unix-ms, not time.Time" }
+func (B9NoTimeInModels) ID() string { return "B9-no-time-in-models" }
+func (B9NoTimeInModels) Description() string {
+	return "core/model/* and proto/* must use int64 unix-ms, not time.Time"
+}
 
 func (B9NoTimeInModels) Check(ctx *Context) []Violation {
 	var out []Violation
 
 	for _, pkg := range ctx.Packages {
-		// Only check model and proto packages
 		if !strings.HasPrefix(pkg.PkgPath, "github.com/kave-io/kave/core/model") &&
 			!strings.HasPrefix(pkg.PkgPath, "github.com/kave-io/kave/proto/") {
 			continue

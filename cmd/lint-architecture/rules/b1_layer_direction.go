@@ -8,14 +8,15 @@ import (
 
 type B1LayerDirection struct{}
 
-func (B1LayerDirection) ID() string          { return "B1-layer-direction" }
-func (B1LayerDirection) Description() string { return "proto must not import core; model must not import runtime" }
+func (B1LayerDirection) ID() string { return "B1-layer-direction" }
+func (B1LayerDirection) Description() string {
+	return "proto must not import core; model must not import runtime"
+}
 
 func (B1LayerDirection) Check(ctx *Context) []Violation {
 	var out []Violation
 
 	for _, pkg := range ctx.Packages {
-		// Rule: proto/* packages must not import core/*
 		if strings.HasPrefix(pkg.PkgPath, "github.com/kave-io/kave/proto/") {
 			for _, imp := range pkg.Imports {
 				if strings.Contains(imp.PkgPath, "/core/") {
@@ -29,8 +30,6 @@ func (B1LayerDirection) Check(ctx *Context) []Violation {
 				}
 			}
 		}
-
-		// Rule: core/model/* must not import core/runtime/*
 		if strings.HasPrefix(pkg.PkgPath, "github.com/kave-io/kave/core/model/") {
 			for _, imp := range pkg.Imports {
 				if strings.HasPrefix(imp.PkgPath, "github.com/kave-io/kave/core/runtime/") {

@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
 import DetailRow from '../components/DetailRow.vue'
-import type { Policy } from '@/types/api'
 import { useAgents, usePolicy } from '@/lib/queries'
 import { envId } from '@/stores/workspace'
 import { useCurrencyStore } from '@/stores/currency'
@@ -14,7 +13,6 @@ const currencyStore = useCurrencyStore()
 const { data: agents, isLoading } = useAgents(envId)
 const selectedPolicyId = ref<string | null>(null)
 
-// Collect unique policy IDs from agents
 const policyIds = computed(() => {
   const ids = new Set<string>()
   agents.value?.forEach(a => {
@@ -23,11 +21,9 @@ const policyIds = computed(() => {
   return Array.from(ids)
 })
 
-// Fetch selected policy if available
 const policyId = computed(() => selectedPolicyId.value || '')
 const { data: selectedPolicy } = usePolicy(policyId)
 
-// Count which agents use each policy
 const policiesWithUsage = computed(() => {
   return policyIds.value.map(policyId => {
     const agentCount = (agents.value ?? []).filter(a => a.policy_id === policyId).length

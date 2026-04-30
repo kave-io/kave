@@ -204,8 +204,7 @@ heisenbugs in cursor pagination.
 
 **What.** Storage shapes (`core/model/*`) and wire shapes (`proto/*`) use
 `int64` unix-ms. `time.Time` appears only at edges (parsing, formatting,
-business logic). `time.Now()` outside `core/pkg/timex` requires
-`// reason: <why>`.
+business logic). Prefer `core/pkg/timex` for new business-logic timestamps.
 
 **Why.** Cross-language wire compatibility, deterministic test fixtures,
 no timezone surprises in storage.
@@ -213,10 +212,8 @@ no timezone surprises in storage.
 **Enforced by.**
 - Lint rule `B9-no-time-in-models`: AST scan of struct fields in
   `core/model/*` and `proto/gen/*`; fail on any `time.Time` field.
-- Lint rule `B9-time-now-justified`: `time.Now()` callers outside
-  `core/pkg/timex` need an adjacent `// reason:` comment within 2 lines.
 
-**Override.** Per-call via `// reason:` comment.
+**Override.** None for persisted model fields.
 
 ---
 
