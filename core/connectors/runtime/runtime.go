@@ -49,6 +49,7 @@ type LLMConnector interface {
 	Name() string
 	PrepareRequest(call *LLMCall, credential string) (*PreparedRequest, error)
 	ParseResponse(body []byte, contentType string) (*pipeline.Result, error)
+	RequiresAuth() bool // true if upstream provider requires credentials; false for local/free providers
 }
 
 // CloneHeader copies a header map for safe mutation.

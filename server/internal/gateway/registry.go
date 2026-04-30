@@ -3,6 +3,7 @@ package gateway
 import (
 	"fmt"
 
+	"github.com/kave-io/kave/core/connectors/runtime"
 	serverframework "github.com/kave-io/kave/server/internal/gateway/connectors/framework"
 )
 
@@ -27,6 +28,17 @@ func (r *Registry) Register(family serverframework.LLMFamily) {
 		r.frameworks = make(map[string]serverframework.LLMFamily)
 	}
 	r.frameworks[family.Name] = family
+}
+
+// ResolveConnector returns the LLMConnector for a given provider name (e.g. "openai", "ollama").
+// It searches across all registered framework families.
+func (r *Registry) ResolveConnector(provider string) (runtime.LLMConnector, error) {
+	for _, family := range r.frameworks {
+		if conn, ok := family.Providers[provider]; ok {
+			return conn, nil
+		}
+	}
+	return nil, fmt.Errorf("no connector for provider %q", provider)
 }
 
 // Resolve returns the family for the given framework name.

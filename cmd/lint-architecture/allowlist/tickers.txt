@@ -1,0 +1,5 @@
+# B2-no-tickers-in-core
+# Approved time.NewTicker / time.AfterFunc usages in core
+# Format: <package-or-file> : <reason>
+
+core/connectors/llm/ollama/client.go : ForceUnload polls for VRAM eviction, synchronous within request lifecycle

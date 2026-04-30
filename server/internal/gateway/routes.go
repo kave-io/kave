@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	controlmodel "github.com/kave-io/kave/core/model/control"
 	"github.com/kave-io/kave/core/connectors/runtime"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
@@ -16,7 +17,7 @@ import (
 	"github.com/kave-io/kave/core/pkg/timex"
 	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/kave-io/kave/server/internal/authctx"
-	"github.com/kave-io/kave/server/internal/contract"
+	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
 )
 
@@ -30,7 +31,7 @@ func (g *FrameworkGateway) RegisterRoutes(mux *http.ServeMux) {
 func (g *FrameworkGateway) handleRaw(provider string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/v1/"+provider+"/") {
-			contract.WriteError(w, http.StatusBadRequest, "gateway.bad_request", "invalid provider route", nil)
+			writeError(w, http.StatusBadRequest, "gateway.bad_request", "invalid provider route", nil)
 			return
 		}
 		g.handleProxy(w, r, "raw")
@@ -41,7 +42,7 @@ func (g *FrameworkGateway) handleFramework(w http.ResponseWriter, r *http.Reques
 	rest := strings.TrimPrefix(r.URL.Path, "/frameworks/")
 	parts := strings.SplitN(rest, "/", 2)
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		contract.WriteError(w, http.StatusBadRequest, "gateway.bad_request", "invalid framework route", nil)
+		writeError(w, http.StatusBadRequest, "gateway.bad_request", "invalid framework route", nil)
 		return
 	}
 	g.handleProxy(w, r, parts[0])
@@ -53,46 +54,96 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 
 	identity, ok := authctx.From(ctx)
 	if !ok {
-		identity = authctx.Identity{Kind: authctx.KindAnonymous}
+		identity, _ = serverauth.ParseIdentity(ctx, r.Header.Get("Authorization"), g.app, nil, true)
 	}
 	if identity.IsInvalid() {
-		contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "invalid authorization", nil)
+		writeError(tw, http.StatusUnauthorized, "gateway.unauthorized", "invalid authorization", nil)
 		return
-	}
-	agentID := "default"
-	switch {
-	case identity.IsAgentToken():
-		if identity.AgentID != "" {
-			agentID = identity.AgentID
-		}
-	case identity.IsUser():
-		if identity.AgentID != "" {
-			agentID = identity.AgentID
-		} else if !g.allowAnonymous {
-			contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "user identity is not bound to an agent", nil)
-			return
-		}
-	case identity.IsAnonymous():
-		if !g.allowAnonymous {
-			contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "missing agent token", nil)
-			return
-		}
-	default:
-		if !g.allowAnonymous {
-			contract.WriteError(tw, http.StatusUnauthorized, "gateway.unauthorized", "missing agent token", nil)
-			return
-		}
 	}
 
-	agent, err := g.app.GetAgentByID(ctx, agentID)
-	if err != nil || agent == nil {
-		contract.WriteError(tw, http.StatusUnauthorized, "gateway.agent_not_found", "agent not found", nil)
+	// Three-axis auth boundary decision
+	var agentID string
+	var isGuest bool
+
+	if identity.IsAgentToken() || identity.IsUser() {
+		// Authenticated: use the identity's agent
+		if identity.AgentID != "" {
+			agentID = identity.AgentID
+		} else {
+			writeError(tw, http.StatusUnauthorized, "gateway.unauthorized", "authenticated identity is not bound to an agent", nil)
+			return
+		}
+	} else if identity.IsAnonymous() {
+		// Anonymous: try the three-axis decision
+		// Need to parse provider from the path to resolve connector
+		provider := g.parseProviderFromPath(r.URL.Path, framework)
+		if provider == "" {
+			writeError(tw, http.StatusBadRequest, "gateway.bad_request", "cannot determine provider from path", nil)
+			return
+		}
+
+		connector, err := g.registry.ResolveConnector(provider)
+		if err != nil {
+			writeError(tw, http.StatusBadRequest, "gateway.provider_not_supported", err.Error(), nil)
+			return
+		}
+
+		// Parse environment from the context or from request (for now, use default)
+		// In a real scenario, this might come from a routing parameter
+		env, err := g.app.GetEnvironmentBySlug(ctx, "default", "default")
+		if err != nil || env == nil {
+			// Fallback: treat as strict
+			writeError(tw, http.StatusUnauthorized, "gateway.env_requires_authentication", "environment not found", nil)
+			return
+		}
+
+		// Axis 1: Environment trust mode
+		if env.TrustMode != controlmodel.TrustPermissive {
+			writeError(tw, http.StatusUnauthorized, "gateway.env_requires_authentication", "environment requires authentication", nil)
+			return
+		}
+
+		// Axis 2: Provider auth requirement
+		if connector.RequiresAuth() {
+			writeError(tw, http.StatusUnauthorized, "gateway.provider_requires_authentication", "provider requires authentication", nil)
+			return
+		}
+
+		// Axis 3: Rate limit guest traffic (10 RPS per connector × remote addr)
+		remoteAddr := getRemoteAddr(r)
+		limiter := g.getGuestLimiter(provider, remoteAddr)
+		if !limiter.Allow() {
+			writeError(tw, http.StatusTooManyRequests, "gateway.rate_limited", "too many requests", nil)
+			return
+		}
+
+		// All three axes permit: create synthetic guest identity
+		isGuest = true
+		identity = authctx.NewGuest(env.ID, env.ID, provider, getBindScope(r))
+		ctx = authctx.With(ctx, identity)
+	} else if identity.IsGuest() {
+		// Guest identity already set (shouldn't happen at this level)
+		isGuest = true
+	} else {
+		writeError(tw, http.StatusUnauthorized, "gateway.unauthorized", "missing agent token", nil)
 		return
+	}
+
+	var agent *controlmodel.Agent
+	var err error
+
+	// For guests, don't look up an agent (they have zero budget and no agent binding)
+	if !isGuest {
+		agent, err = g.app.GetAgentByID(ctx, agentID)
+		if err != nil || agent == nil {
+			writeError(tw, http.StatusUnauthorized, "gateway.agent_not_found", "agent not found", nil)
+			return
+		}
 	}
 
 	family, err := g.registry.Resolve(framework)
 	if err != nil {
-		contract.WriteError(tw, http.StatusBadRequest, "gateway.framework_not_supported", err.Error(), nil)
+		writeError(tw, http.StatusBadRequest, "gateway.framework_not_supported", err.Error(), nil)
 		return
 	}
 
@@ -109,7 +160,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		Body:     body,
 	})
 	if err != nil {
-		contract.WriteError(tw, http.StatusBadRequest, "gateway.bad_request", err.Error(), nil)
+		writeError(tw, http.StatusBadRequest, "gateway.bad_request", err.Error(), nil)
 		return
 	}
 
@@ -127,7 +178,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		UpdatedAt: now,
 	}
 	if err := g.app.CreateRun(ctx, run); err != nil {
-		contract.WriteError(tw, http.StatusInternalServerError, "gateway.create_run_failed", "create run failed", nil)
+		writeError(tw, http.StatusInternalServerError, "gateway.create_run_failed", "create run failed", nil)
 		return
 	}
 
@@ -151,13 +202,13 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		Metadata:   map[string]any{},
 		CreatedAt:  now,
 	}); err != nil {
-		contract.WriteError(tw, http.StatusInternalServerError, "gateway.create_action_failed", "create action failed", nil)
+		writeError(tw, http.StatusInternalServerError, "gateway.create_action_failed", "create action failed", nil)
 		return
 	}
 
 	provider, err := runtime.RequireProvider(family.Providers, call.Provider)
 	if err != nil {
-		contract.WriteError(tw, http.StatusBadRequest, "gateway.provider_not_supported", err.Error(), nil)
+		writeError(tw, http.StatusBadRequest, "gateway.provider_not_supported", err.Error(), nil)
 		return
 	}
 
@@ -189,7 +240,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 	g.finishRun(ctx, run.ID, err)
 	if err != nil && result == nil && !tw.WroteHeader() {
 		status, code, message, details := mapError(err)
-		contract.WriteError(tw, status, code, message, details)
+		writeError(tw, status, code, message, details)
 	}
 }
 

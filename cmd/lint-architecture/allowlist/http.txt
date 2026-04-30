@@ -1,0 +1,13 @@
+# B10-http-allowlist
+# HTTP routes allowed after v1 (gRPC-only control plane)
+# Format: <route-pattern> : <reason>
+
+GET /health : healthz endpoint
+POST /v1/openai/* : LLM gateway proxy
+POST /v1/anthropic/* : LLM gateway proxy
+POST /v1/google/* : LLM gateway proxy
+* /frameworks/* : framework adapter routes
+GET /api/v1/fx/currencies : pre-migration FX HTTP route (will be deleted in B2 cleanup)
+GET /api/v1/fx/rates : pre-migration FX HTTP route (will be deleted in B2 cleanup)
+GET /api/v1/fx/convert : pre-migration FX HTTP route (will be deleted in B2 cleanup)
+POST /api/v1/fx/refresh : pre-migration FX HTTP route (will be deleted in B2 cleanup)

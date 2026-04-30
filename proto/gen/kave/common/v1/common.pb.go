@@ -22,11 +22,12 @@ const (
 )
 
 // Amount is a canonical decimal monetary quantity encoded as text.
-// It never uses float/double and does not carry currency by itself.
-// The enclosing contract defines the currency context.
+// It never uses float/double and carries currency for conversion operations.
+// The enclosing contract may override or ignore the currency field.
 type Amount struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Decimal       string                 `protobuf:"bytes,1,opt,name=decimal,proto3" json:"decimal,omitempty"`
+	Currency      string                 `protobuf:"bytes,2,opt,name=currency,proto3" json:"currency,omitempty"` // ISO 4217 currency code (e.g., "USD", "EUR", "TMN")
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -68,13 +69,21 @@ func (x *Amount) GetDecimal() string {
 	return ""
 }
 
+func (x *Amount) GetCurrency() string {
+	if x != nil {
+		return x.Currency
+	}
+	return ""
+}
+
 var File_kave_common_v1_common_proto protoreflect.FileDescriptor
 
 const file_kave_common_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x1bkave/common/v1/common.proto\x12\x0ekave.common.v1\"\"\n" +
+	"\x1bkave/common/v1/common.proto\x12\x0ekave.common.v1\">\n" +
 	"\x06Amount\x12\x18\n" +
-	"\adecimal\x18\x01 \x01(\tR\adecimalB\xb6\x01\n" +
+	"\adecimal\x18\x01 \x01(\tR\adecimal\x12\x1a\n" +
+	"\bcurrency\x18\x02 \x01(\tR\bcurrencyB\xb6\x01\n" +
 	"\x12com.kave.common.v1B\vCommonProtoP\x01Z9github.com/kave-io/kave/proto/gen/kave/common/v1;commonv1\xa2\x02\x03KCX\xaa\x02\x0eKave.Common.V1\xca\x02\x0eKave\\Common\\V1\xe2\x02\x1aKave\\Common\\V1\\GPBMetadata\xea\x02\x10Kave::Common::V1b\x06proto3"
 
 var (

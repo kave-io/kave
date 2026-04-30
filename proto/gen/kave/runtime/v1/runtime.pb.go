@@ -1706,7 +1706,7 @@ var File_kave_runtime_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_kave_runtime_v1_runtime_proto_rawDesc = "" +
 	"\n" +
-	"\x1dkave/runtime/v1/runtime.proto\x12\x0fkave.runtime.v1\x1a\x1ckave/runtime/v1/action.proto\x1a\x1akave/runtime/v1/cost.proto\x1a\x19kave/runtime/v1/run.proto\x1a\x1akave/runtime/v1/span.proto\"\xcf\x03\n" +
+	"\x1dkave/runtime/v1/runtime.proto\x12\x0fkave.runtime.v1\x1a\x1ckave/runtime/v1/action.proto\x1a\x1akave/runtime/v1/cost.proto\x1a\x18kave/runtime/v1/fx.proto\x1a\x19kave/runtime/v1/run.proto\x1a\x1akave/runtime/v1/span.proto\"\xcf\x03\n" +
 	"\x10CreateRunRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x15\n" +
@@ -1995,6 +1995,7 @@ func file_kave_runtime_v1_runtime_proto_init() {
 	}
 	file_kave_runtime_v1_action_proto_init()
 	file_kave_runtime_v1_cost_proto_init()
+	file_kave_runtime_v1_fx_proto_init()
 	file_kave_runtime_v1_run_proto_init()
 	file_kave_runtime_v1_span_proto_init()
 	file_kave_runtime_v1_runtime_proto_msgTypes[0].OneofWrappers = []any{}

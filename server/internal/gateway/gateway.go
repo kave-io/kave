@@ -3,7 +3,10 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
+	"sync"
 
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
@@ -12,31 +15,47 @@ import (
 	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
+	"golang.org/x/time/rate"
 )
 
 type FrameworkGateway struct {
-	app            store.AppStore
-	encKey         []byte
-	pipeline       *pipeline.Pipeline
-	transport      *HTTPTransport
-	registry       *Registry
-	allowAnonymous bool
-	vault          credresolve.VaultClient
+	app       store.AppStore
+	encKey    []byte
+	pipeline  *pipeline.Pipeline
+	transport *HTTPTransport
+	registry  *Registry
+	vault     credresolve.VaultClient
+	// Per-IP rate limiter for guest traffic: map[connector+remoteAddr] -> limiter
+	guestLimiters map[string]*rate.Limiter
+	limiterMu     sync.Mutex
 }
 
-func New(app store.AppStore, encKey []byte, p *pipeline.Pipeline, registry *Registry, allowAnonymous bool, vault credresolve.VaultClient) *FrameworkGateway {
+func New(app store.AppStore, encKey []byte, p *pipeline.Pipeline, registry *Registry, _ bool, vault credresolve.VaultClient) *FrameworkGateway {
 	if registry == nil {
 		registry = NewRegistry()
 	}
 	return &FrameworkGateway{
-		app:            app,
-		encKey:         encKey,
-		pipeline:       p,
-		transport:      NewHTTPTransport(),
-		registry:       registry,
-		allowAnonymous: allowAnonymous,
-		vault:          vault,
+		app:           app,
+		encKey:        encKey,
+		pipeline:      p,
+		transport:     NewHTTPTransport(),
+		registry:      registry,
+		vault:         vault,
+		guestLimiters: make(map[string]*rate.Limiter),
 	}
+}
+
+// getGuestLimiter returns a rate limiter for guest traffic (10 RPS per connector × remote address).
+func (g *FrameworkGateway) getGuestLimiter(connector, remoteAddr string) *rate.Limiter {
+	key := connector + ":" + remoteAddr
+	g.limiterMu.Lock()
+	defer g.limiterMu.Unlock()
+	if limiter, ok := g.guestLimiters[key]; ok {
+		return limiter
+	}
+	limiter := rate.NewLimiter(10, 10)
+	g.guestLimiters[key] = limiter
+	return limiter
 }
 
 func (g *FrameworkGateway) resolveCredential(ctx context.Context, envID, connector string) (string, error) {
@@ -56,6 +75,50 @@ func copyHeaders(dst, src http.Header) {
 			dst.Add(key, value)
 		}
 	}
+}
+
+// parseProviderFromPath extracts the provider name from the request path.
+// For raw paths (/v1/openai/, /v1/anthropic/, /v1/google/) it returns the segment.
+// For framework paths (/frameworks/<name>/<provider>/...) it returns the provider.
+func (g *FrameworkGateway) parseProviderFromPath(path, framework string) string {
+	if framework == "raw" {
+		// path: /v1/<provider>/...
+		parts := strings.SplitN(strings.TrimPrefix(path, "/v1/"), "/", 2)
+		if len(parts) > 0 && parts[0] != "" {
+			return parts[0]
+		}
+		return ""
+	}
+	// path: /frameworks/<framework>/<provider>/...
+	rest := strings.TrimPrefix(path, "/frameworks/"+framework+"/")
+	parts := strings.SplitN(rest, "/", 2)
+	if len(parts) > 0 && parts[0] != "" {
+		return parts[0]
+	}
+	return ""
+}
+
+// getRemoteAddr extracts the real remote address from the request, respecting X-Forwarded-For.
+func getRemoteAddr(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		parts := strings.SplitN(fwd, ",", 2)
+		return strings.TrimSpace(parts[0])
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// getBindScope returns "loopback" if the request came from a loopback address, else "public".
+func getBindScope(r *http.Request) string {
+	addr := getRemoteAddr(r)
+	ip := net.ParseIP(addr)
+	if ip != nil && ip.IsLoopback() {
+		return "loopback"
+	}
+	return "public"
 }
 
 func (g *FrameworkGateway) finishRun(ctx context.Context, runID string, runErr error) {

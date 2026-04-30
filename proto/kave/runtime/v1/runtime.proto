@@ -4,6 +4,7 @@ package kave.runtime.v1;
 
 import "kave/runtime/v1/action.proto";
 import "kave/runtime/v1/cost.proto";
+import "kave/runtime/v1/fx.proto";
 import "kave/runtime/v1/run.proto";
 import "kave/runtime/v1/span.proto";
 

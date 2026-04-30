@@ -81,3 +81,7 @@ func (c *Connector) ParseResponse(body []byte, _ string) (*pipeline.Result, erro
 	}
 	return result, nil
 }
+
+func (c *Connector) RequiresAuth() bool {
+	return false // Ollama is a local provider that does not require credentials
+}

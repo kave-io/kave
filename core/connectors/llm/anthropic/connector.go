@@ -111,3 +111,7 @@ func (c *Connector) ParseResponse(body []byte, _ string) (*pipeline.Result, erro
 
 	return result, nil
 }
+
+func (c *Connector) RequiresAuth() bool {
+	return true // Anthropic is a paid provider requiring credentials
+}

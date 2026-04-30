@@ -135,6 +135,7 @@ buf-format: buf-up
 
 buf-generate: buf-up
 	@docker exec $(BUF_CONTAINER) buf generate
+	@git checkout -- proto/gen/go.mod proto/gen/go.sum 2>/dev/null || true
 
 buf-breaking: buf-up
 	@docker exec $(BUF_CONTAINER) buf breaking --against '.git#branch=main'

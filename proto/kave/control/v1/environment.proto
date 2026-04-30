@@ -13,6 +13,13 @@ enum EnvironmentType {
   ENVIRONMENT_TYPE_CUSTOM = 4;
 }
 
+// TrustMode controls whether anonymous guest access is permitted.
+enum TrustMode {
+  TRUST_MODE_UNSPECIFIED = 0;
+  TRUST_MODE_STRICT = 1;     // default — auth required
+  TRUST_MODE_PERMISSIVE = 2; // anonymous allowed when other axes also permit
+}
+
 // Environment scopes agents, policies, credentials, and runtime data within a project.
 // A project has at least one environment (default: "dev").
 message Environment {
@@ -21,6 +28,7 @@ message Environment {
   string name = 3;
   string slug = 4; // URL-safe; matches the type for built-ins, user-defined for custom
   EnvironmentType type = 5;
+  TrustMode trust_mode = 8; // default: TRUST_MODE_STRICT
   int64 created_at_ms = 6; // UnixMilli
   int64 updated_at_ms = 7; // UnixMilli
 }

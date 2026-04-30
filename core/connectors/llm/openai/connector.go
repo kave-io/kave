@@ -97,6 +97,10 @@ func (c *Connector) ParseResponse(body []byte, _ string) (*pipeline.Result, erro
 	return result, nil
 }
 
+func (c *Connector) RequiresAuth() bool {
+	return true // OpenAI is a paid provider requiring credentials
+}
+
 func streamUsage(body []byte, field string) int {
 	for _, line := range shared.SplitSSEDataLines(body) {
 		if len(line) == 0 || line == "[DONE]" {

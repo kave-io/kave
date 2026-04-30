@@ -17,13 +17,16 @@ One plan = one haiku agent session. Ordered by dependency.
 ## Remaining plans
 
 1. [12-dashboard-sync.md](12-dashboard-sync.md) — catch the Vue UI up to the post-`core/` data model (Org/User/Env, money.Amount, provenance, trace tree view).
-2. [13-testing.md](13-testing.md) — exhaustive test strategy: unit, integration, e2e, benchmarks, and perf baselines on the hot paths (pipeline, gateway, span store).
+2. [13-testing.md](13-testing.md) — exhaustive test strategy: unit, integration, e2e, benchmarks, and perf baselines on the hot paths (pipeline, gateway, span store). Detailed implementation specs split into 5 work-packages under [../testing/](../testing/README.md).
 3. [14-kave-cloud.md](14-kave-cloud.md) — detailed design + data model for the hosted SaaS layer. Separate repo, consumed here.
-4. [15-http-reduction.md](15-http-reduction.md) — delete the HTTP bridge (~3k LOC), finish the gRPC services that replace it, wire the 29 remaining CLI stubs, implement real `kave start/stop/watch/logs` daemon control. Half of the proto + auth service is already in place; this plan finishes the job.
+
+## Done
+
+- ✅ **Plan 15 (HTTP reduction)** — control plane is gRPC-only. `server/internal/httpbridge` removed. Remaining HTTP surface (intentional): `/health`, the LLM gateway proxy (`/v1/openai|anthropic|google`, `/frameworks/*`), and `/api/v1/fx/*`.
 
 ## Suggested order
 
-Plan 15 first — it unblocks the rest of the CLI (lifecycle, ctx use, config set, rbac, streaming) and removes a large amount of dead surface, which makes plan 12 (dashboard) and plan 13 (testing) easier to scope. Plan 14 is independent.
+Plan 13 (testing) first — closes v1 contract. Plan 12 in parallel (dashboard work doesn't block tests). Plan 14 is independent and post-v1.
 
 ### Workflow
 User hands plan to a haiku agent. Returns. Opus reviews diffs; issues next two plans.

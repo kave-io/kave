@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/kave-io/kave/core/bus"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/internal/config"
-	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/ops/cost"
 	"github.com/kave-io/kave/server/ops/fx"
 )
@@ -54,7 +52,7 @@ func New(opts config.LoadOpts, res *config.LoadResult, app store.AppStore, span 
 		PID:           os.Getpid(),
 		StartedAt:     time.Now().UTC(),
 		Version:       version,
-		SchemaVersion: strconv.Itoa(contract.SchemaVersion),
+		SchemaVersion: "1",
 		loadOpts:      opts,
 		res:           res,
 		resourceSource: map[string]config.Source{},

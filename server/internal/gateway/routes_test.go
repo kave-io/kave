@@ -13,7 +13,6 @@ import (
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/runtime"
-	"github.com/kave-io/kave/server/internal/contract"
 	serverbudget "github.com/kave-io/kave/server/ops/budget"
 	serverpolicy "github.com/kave-io/kave/server/ops/policy"
 )
@@ -177,7 +176,7 @@ func TestGatewayRoutes(t *testing.T) {
 				t.Fatalf("got status %d want %d body=%s", w.Code, tt.expectStatus, w.Body.String())
 			}
 			if tt.expectCode != "" {
-				var envelope contract.ErrorEnvelope
+				var envelope ErrorEnvelope
 				if err := json.Unmarshal(w.Body.Bytes(), &envelope); err != nil {
 					t.Fatalf("decode error envelope: %v body=%s", err, w.Body.String())
 				}

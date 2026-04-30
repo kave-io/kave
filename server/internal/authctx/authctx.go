@@ -10,6 +10,7 @@ const (
 	KindAnonymous Kind = "anonymous"
 	KindUser      Kind = "user"
 	KindAgent     Kind = "agent"
+	KindGuest     Kind = "guest"
 	KindInvalid   Kind = "invalid"
 )
 
@@ -26,6 +27,8 @@ type Identity struct {
 	TokenID          string
 	Scopes           []string
 	RawAuthorization string
+	ConnectorName    string // for KindGuest: the LLM connector name (e.g., "ollama")
+	BindScope        string // for KindGuest: "loopback" or "public"
 	Legacy           bool
 	Err              string
 }
@@ -33,6 +36,7 @@ type Identity struct {
 func (i Identity) IsAnonymous() bool  { return i.Kind == "" || i.Kind == KindAnonymous }
 func (i Identity) IsUser() bool       { return i.Kind == KindUser }
 func (i Identity) IsAgentToken() bool { return i.Kind == KindAgent }
+func (i Identity) IsGuest() bool      { return i.Kind == KindGuest }
 func (i Identity) IsInvalid() bool    { return i.Kind == KindInvalid }
 
 func (i Identity) Subject() string {
@@ -41,10 +45,23 @@ func (i Identity) Subject() string {
 		return "user:" + i.UserID
 	case i.IsAgentToken() && i.AgentID != "":
 		return "agent:" + i.AgentID
+	case i.IsGuest() && i.ConnectorName != "":
+		return "guest:" + i.ConnectorName
 	case i.OrgID != "":
 		return "org:" + i.OrgID
 	default:
 		return "anonymous"
+	}
+}
+
+// NewGuest creates a synthetic guest identity.
+func NewGuest(envID, orgID, connector, bindScope string) Identity {
+	return Identity{
+		Kind:         KindGuest,
+		EnvID:        envID,
+		OrgID:        orgID,
+		ConnectorName: connector,
+		BindScope:    bindScope,
 	}
 }
 

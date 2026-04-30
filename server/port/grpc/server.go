@@ -49,3 +49,8 @@ func (s *Server) ListenAndServe(addr string) error {
 func (s *Server) GracefulStop() {
 	s.grpc.GracefulStop()
 }
+
+// GRPC returns the underlying grpc.Server for registering additional services.
+func (s *Server) GRPC() *grpc.Server {
+	return s.grpc
+}
