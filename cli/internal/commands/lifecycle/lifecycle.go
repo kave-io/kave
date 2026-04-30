@@ -22,6 +22,14 @@ func Register(parent *cobra.Command) {
 
 
 	parent.AddCommand(cmd)
+	// Top-level compatibility commands (kave status, kave watch, ...).
+	parent.AddCommand(newInitCmd())
+	parent.AddCommand(newDoctorCmd())
+	parent.AddCommand(newStartCmd())
+	parent.AddCommand(newStopCmd())
+	parent.AddCommand(newStatusCmd())
+	parent.AddCommand(newLogsCmd())
+	parent.AddCommand(newWatchCmd())
 }
 
 func newInitCmd() *cobra.Command {
@@ -128,4 +136,3 @@ func newWatchCmd() *cobra.Command {
 	}
 	return cmd
 }
-

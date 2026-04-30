@@ -278,17 +278,25 @@ func Resolve(opts RootOptions) (*Resolution, error) {
 		return nil, fmt.Errorf("resolve home directory: %w", err)
 	}
 
-	projectPath := opts.ConfigPath
+	userPath := filepath.Join(home, ".kave", ConfigNameYAML)
+	projectPath := ""
 	selectedFromEnv := false
 	envConfigPath := os.Getenv("KAVE_CONFIG")
-	if projectPath == "" && envConfigPath != "" {
-		projectPath = envConfigPath
+	configPath := opts.ConfigPath
+	if configPath == "" && envConfigPath != "" {
+		configPath = envConfigPath
 		selectedFromEnv = true
+	}
+	if configPath == "" && pathExists(userPath) {
+		configPath = userPath
 	}
 	if projectPath == "" {
 		if discovered, err := DiscoverProjectConfig(""); err == nil {
 			projectPath = discovered
 		}
+	}
+	if configPath == "" {
+		configPath = projectPath
 	}
 
 	systemPath := filepath.Join(string(os.PathSeparator), "etc", "kave", ConfigNameYAML)
@@ -302,9 +310,9 @@ func Resolve(opts RootOptions) (*Resolution, error) {
 	resolution := &Resolution{
 		Options:     opts,
 		ProjectPath: projectPath,
-		UserPath:    filepath.Join(home, ".kave", ConfigNameYAML),
+		UserPath:    userPath,
 		SystemPath:  systemPath,
-		ConfigPath:  projectPath,
+		ConfigPath:  configPath,
 		LayerFiles: []LayerFile{
 			{Layer: BuiltinLayer, Path: "<compiled>", Exists: true, Loaded: true},
 		},

@@ -1,7 +1,9 @@
 .PHONY: help dev dev-server dev-dashboard serve build build-server dashboard-build \
         test test-fast lint fmt vet migrate clean cli-docs \
+        kave-local-install kave-local-uninstall kave-local-reinstall \
         buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
         buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev
+.NOTPARALLEL: kave-local-install kave-local-uninstall kave-local-reinstall
 
 DASHBOARD_DIR := dashboard
 SERVER_DIR    := server
@@ -33,6 +35,11 @@ help:
 	@echo "Ops:"
 	@echo "  make migrate           Run database migrations"
 	@echo "  make clean             Remove binaries, dist, and cache"
+	@echo ""
+	@echo "Local Install:"
+	@echo "  make kave-local-install    Build/install user binaries, write ~/.kave/kave.yaml, and enable user systemd service"
+	@echo "  make kave-local-uninstall  Stop/disable service and remove installed files for a fresh reinstall"
+	@echo "  make kave-local-reinstall  Uninstall then install in one command"
 
 # ── Dev ───────────────────────────────────────────────────────────────────────
 
@@ -172,3 +179,86 @@ cli-docs:
 	@echo "  KAVE_DOCS_DIR=../kave-docs make cli-docs"
 	@test -n "$(KAVE_DOCS_DIR)" || (echo "error: KAVE_DOCS_DIR not set" && exit 1)
 	cd cli && env GOCACHE=/tmp/go-build go run ./tools/gen-docs $(KAVE_DOCS_DIR)/src/content/docs/cli/reference
+
+kave-local-install:
+	@set -eu; \
+	BIN_DIR="$(HOME)/.local/bin"; \
+	CFG_DIR="$(HOME)/.kave"; \
+	SVC_DIR="$(HOME)/.config/systemd/user"; \
+	SVC_FILE="$$SVC_DIR/kave.service"; \
+	mkdir -p "$$BIN_DIR" "$$CFG_DIR" "$$SVC_DIR"; \
+	echo "Building CLI binary -> $$BIN_DIR/kave"; \
+	cd cli && go build -o "$$BIN_DIR/kave" .; \
+	cd - >/dev/null; \
+	echo "Building daemon binary -> $$BIN_DIR/kave-server"; \
+	cd server && go build -o "$$BIN_DIR/kave-server" .; \
+	cd - >/dev/null; \
+	echo "Writing local config -> $$CFG_DIR/kave.yaml"; \
+	printf '%s\n' \
+		'apiVersion: kave.io/v1' \
+		'kind: KaveConfig' \
+		'' \
+		'daemon:' \
+		'  address: 127.0.0.1:19090' \
+		'  proxy_address: 127.0.0.1:18081' \
+		'  data_dir: ~/.kave' \
+		'  log_level: info' \
+		'  log_format: text' \
+		'' \
+		'contexts:' \
+		'  - name: default' \
+		'    server: 127.0.0.1:19090' \
+		'    user: local@kave.local' \
+		'    project: kave-local' \
+		'    env: dev' \
+		'currentContext: default' \
+		'' \
+		'server:' \
+		'  addr: 127.0.0.1:18080' \
+		'' \
+		'grpc:' \
+		'  addr: 127.0.0.1:19090' \
+		'' \
+		'storage:' \
+		'  defaults:' \
+		'    app:' \
+		'      kind: sqlite' \
+		'      path: ${HOME}/.kave/app.db' \
+		'    span:' \
+		'      kind: duckdb' \
+		'      path: ${HOME}/.kave/spans.duckdb' > "$$CFG_DIR/kave.yaml"; \
+	echo "Writing user systemd unit -> $$SVC_FILE"; \
+	printf '%s\n' \
+		'[Unit]' \
+		'Description=Kave Daemon' \
+		'After=network-online.target' \
+		'Wants=network-online.target' \
+		'' \
+		'[Service]' \
+		'Type=simple' \
+		'WorkingDirectory=%h/.kave' \
+		'Environment=HOME=%h' \
+		'ExecStart=%h/.local/bin/kave-server' \
+		'Restart=always' \
+		'RestartSec=2' \
+		'' \
+		'[Install]' \
+		'WantedBy=default.target' > "$$SVC_FILE"; \
+	systemctl --user daemon-reload; \
+	systemctl --user enable --now kave.service; \
+	echo "Installed and started kave.service (user unit)."
+
+kave-local-uninstall:
+	@set -eu; \
+	SVC_FILE="$(HOME)/.config/systemd/user/kave.service"; \
+	systemctl --user disable --now kave.service >/dev/null 2>&1 || true; \
+	rm -f "$$SVC_FILE"; \
+	systemctl --user daemon-reload >/dev/null 2>&1 || true; \
+	systemctl --user reset-failed >/dev/null 2>&1 || true; \
+	rm -f "$(HOME)/.local/bin/kave" "$(HOME)/.local/bin/kave-server"; \
+	rm -rf "$(HOME)/.kave"; \
+	echo "Removed user service, binaries, and ~/.kave."
+
+kave-local-reinstall:
+	@$(MAKE) kave-local-uninstall
+	@$(MAKE) kave-local-install
