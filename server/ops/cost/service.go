@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -60,6 +61,9 @@ func (s *Service) Current() *runtimemodel.PriceBook {
 
 func (s *Service) Replace(ctx context.Context, book *runtimemodel.PriceBook) error {
 	book = normalizeBook(book)
+	if err := validateCurrencies(book); err != nil {
+		return err
+	}
 	if err := s.app.SavePriceBook(ctx, book); err != nil {
 		return err
 	}
@@ -170,6 +174,20 @@ func DefaultBook() (*runtimemodel.PriceBook, error) {
 	}
 	book := mappers.AppPriceBookToModel(&appBook)
 	return normalizeBook(book), nil
+}
+
+// validateCurrencies rejects PriceBook entries with currencies other than USD or IRT (Toman).
+func validateCurrencies(book *runtimemodel.PriceBook) error {
+	for i, entry := range book.Entries {
+		switch entry.Currency {
+		case money.USD, money.IRT:
+			// allowed
+		default:
+			return fmt.Errorf("price book entry %d (%s/%s): currency %q not supported in v1; use %q or %q",
+				i, entry.Provider, entry.Match, entry.Currency, money.USD, money.IRT)
+		}
+	}
+	return nil
 }
 
 func normalizeBook(book *runtimemodel.PriceBook) *runtimemodel.PriceBook {

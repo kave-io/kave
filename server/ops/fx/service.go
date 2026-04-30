@@ -18,16 +18,12 @@ import (
 )
 
 const (
-	defaultBaseCurrency = money.EUR
+	defaultBaseCurrency = money.USD
 	defaultProvider     = "frankfurter"
 )
 
 var supportedCurrencies = []money.CurrencyCode{
 	money.USD,
-	money.EUR,
-	money.GBP,
-	money.CHF,
-	money.IRR,
 	money.IRT,
 }
 
@@ -295,7 +291,7 @@ func (s *Service) fetchCurrencies(ctx context.Context) ([]runtimemodel.FXCurrenc
 }
 
 func (s *Service) fetchRates(ctx context.Context) ([]runtimemodel.FXRateRecord, error) {
-	quotes := []string{string(money.USD), string(money.GBP), string(money.CHF), string(money.IRR)}
+	quotes := []string{"IRR"} // fetch IRR from Frankfurter; IRT is derived as IRR/10
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+"/rates?base="+string(defaultBaseCurrency)+"&quotes="+strings.Join(quotes, ","), nil)
 	if err != nil {
 		return nil, err
@@ -332,7 +328,8 @@ func (s *Service) fetchRates(ctx context.Context) ([]runtimemodel.FXRateRecord, 
 		pivot[money.CurrencyCode(strings.ToUpper(item.Quote))] = item.Rate.String()
 		asOfDate = item.Date
 	}
-	if irr, ok := pivot[money.IRR]; ok {
+	const irrCode money.CurrencyCode = "IRR"
+	if irr, ok := pivot[irrCode]; ok {
 		rat, err := parseDecimalRat(irr)
 		if err != nil {
 			return nil, err

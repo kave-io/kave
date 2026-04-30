@@ -18,6 +18,7 @@ type BudgetEntryInput struct {
 	Connector     string
 	TokenUsage    *runtime.TokenUsage
 	Cost          money.Amount
+	Currency      money.CurrencyCode // USD or IRT; derived from PriceSnapshot if empty
 	PriceVersion  string
 	PriceSnapshot *runtimemodel.PriceSnapshot
 	Blocked       bool
@@ -42,6 +43,14 @@ func BudgetEntryFromUsage(in *BudgetEntryInput) *runtimemodel.BudgetEntry {
 		usage = *in.TokenUsage
 	}
 
+	currency := in.Currency
+	if currency == "" && in.PriceSnapshot != nil {
+		currency = in.PriceSnapshot.Currency
+	}
+	if currency == "" {
+		currency = money.USD
+	}
+
 	return &runtimemodel.BudgetEntry{
 		ID:               in.ID,
 		ProjectID:        in.ProjectID,
@@ -57,6 +66,7 @@ func BudgetEntryFromUsage(in *BudgetEntryInput) *runtimemodel.BudgetEntry {
 		CacheReadTokens:  usage.CacheRead,
 		CacheWriteTokens: usage.CacheWrite,
 		Cost:             in.Cost,
+		Currency:         currency,
 		PriceVersion:     in.PriceVersion,
 		PriceSnapshot:    in.PriceSnapshot,
 		Blocked:          in.Blocked,

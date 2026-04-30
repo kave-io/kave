@@ -27,12 +27,19 @@ type CurrencyCode string
 
 const (
 	USD CurrencyCode = "USD"
-	EUR CurrencyCode = "EUR"
-	GBP CurrencyCode = "GBP"
-	CHF CurrencyCode = "CHF"
-	IRR CurrencyCode = "IRR"
-	IRT CurrencyCode = "IRT"
+	IRT CurrencyCode = "IRT" // Iranian Toman, unit: milli-Toman (3 decimals)
 )
+
+// ErrCurrencyNotV1 is returned when a currency is not supported in v1 (USD or IRT only).
+var ErrCurrencyNotV1 = errors.New("money: currency not supported in v1")
+
+// ValidateV1Currency returns an error if code is not a v1-supported currency (USD or IRT).
+func ValidateV1Currency(code CurrencyCode) error {
+	if code == USD || code == IRT {
+		return nil
+	}
+	return fmt.Errorf("%w: %q (v1 supports %q and %q)", ErrCurrencyNotV1, code, USD, IRT)
+}
 
 type Currency struct {
 	Code           CurrencyCode
@@ -68,11 +75,7 @@ var (
 
 var currencies = map[CurrencyCode]Currency{
 	USD: {Code: USD, Name: "US Dollar", Symbol: "$", SymbolOnLeft: true, DecimalSep: ".", ThousandsSep: ",", FractionDigits: 2},
-	EUR: {Code: EUR, Name: "Euro", Symbol: "EUR", SymbolOnLeft: false, SpaceBetween: true, DecimalSep: ",", ThousandsSep: ".", FractionDigits: 2},
-	GBP: {Code: GBP, Name: "Pound Sterling", Symbol: "GBP", SymbolOnLeft: true, SpaceBetween: true, DecimalSep: ".", ThousandsSep: ",", FractionDigits: 2},
-	CHF: {Code: CHF, Name: "Swiss Franc", Symbol: "CHF", SymbolOnLeft: false, SpaceBetween: true, DecimalSep: ".", ThousandsSep: "'", FractionDigits: 2},
-	IRR: {Code: IRR, Name: "Iranian Rial", Symbol: "IRR", SymbolOnLeft: false, SpaceBetween: true, DecimalSep: ".", ThousandsSep: ",", FractionDigits: 0},
-	IRT: {Code: IRT, Name: "Iranian Toman", Symbol: "IRT", SymbolOnLeft: false, SpaceBetween: true, DecimalSep: ".", ThousandsSep: ",", FractionDigits: 0},
+	IRT: {Code: IRT, Name: "Iranian Toman", Symbol: "T", SymbolOnLeft: false, SpaceBetween: true, DecimalSep: ".", ThousandsSep: ",", FractionDigits: 3},
 }
 
 func LookupCurrency(code string) (Currency, bool) {

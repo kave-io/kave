@@ -14,8 +14,7 @@ func TestLookupCurrency(t *testing.T) {
 		ok   bool
 	}{
 		{"usd", USD, true},
-		{" EUR ", EUR, true},
-		{"irr", IRR, true},
+		{" IRT ", IRT, true},
 		{"irt", IRT, true},
 		{"xxx", "", false},
 	}
@@ -27,6 +26,21 @@ func TestLookupCurrency(t *testing.T) {
 		if ok && got.Code != tc.want {
 			t.Fatalf("%q code=%s want %s", tc.code, got.Code, tc.want)
 		}
+	}
+}
+
+func TestValidateV1Currency(t *testing.T) {
+	if err := ValidateV1Currency(USD); err != nil {
+		t.Fatalf("USD: %v", err)
+	}
+	if err := ValidateV1Currency(IRT); err != nil {
+		t.Fatalf("IRT: %v", err)
+	}
+	if err := ValidateV1Currency(CurrencyCode("EUR")); err == nil {
+		t.Fatal("EUR should be rejected by v1 validator")
+	}
+	if err := ValidateV1Currency(CurrencyCode("TMN")); err == nil {
+		t.Fatal("TMN should be rejected by v1 validator")
 	}
 }
 
@@ -221,26 +235,21 @@ func TestMoneyConstructionAndFormatting(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 
-	eur := MustMoney(MustParseAmount("1.25"), EUR)
-	if got := eur.String(); got != "1,25 EUR" {
-		t.Fatalf("got %q", got)
-	}
-
-	irr := MustMoney(MustParseAmount("125000"), IRR)
-	if got := irr.String(); got != "125,000 IRR" {
+	toman := MustMoney(MustParseAmount("125000"), IRT)
+	if got := toman.String(); got != "125,000 T" {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestParseMoney(t *testing.T) {
-	m, err := Parse("1,25", EUR)
+	m, err := Parse("1234.567", IRT)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Amount != MustParseAmount("1.25") {
-		t.Fatalf("got %s want 1.25", m.Amount)
+	if m.Amount != MustParseAmount("1234.567") {
+		t.Fatalf("got %s want 1234.567", m.Amount)
 	}
-	if m.String() != "1,25 EUR" {
+	if m.String() != "1,234.567 T" {
 		t.Fatalf("got %q", m.String())
 	}
 }
@@ -256,7 +265,7 @@ func TestMoneyOperations(t *testing.T) {
 	if err != nil || diff.Amount.String() != "0.75" {
 		t.Fatalf("diff=%+v err=%v", diff, err)
 	}
-	if _, err := a.Add(MustMoney(MustParseAmount("1"), EUR)); !errors.Is(err, ErrCurrencyMismatch) {
+	if _, err := a.Add(MustMoney(MustParseAmount("1"), IRT)); !errors.Is(err, ErrCurrencyMismatch) {
 		t.Fatalf("got %v", err)
 	}
 }

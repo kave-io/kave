@@ -92,6 +92,7 @@ type BudgetEntry struct {
 	StorageBytes      int64
 	BandwidthBytes    int64
 	Cost              money.Amount
+	Currency          money.CurrencyCode // USD or IRT; defaults to USD when empty
 	PriceVersion      string
 	PriceSnapshot     *PriceSnapshot
 	UsageDetail       map[string]any // serialized Usage struct (non-token fields)

@@ -13,16 +13,16 @@ import (
 	"time"
 
 	"github.com/kave-io/kave/core/bus"
+	corefx "github.com/kave-io/kave/core/fx"
 	controlmodel "github.com/kave-io/kave/core/model/control"
-	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
-	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
+	"net"
 	appaudit "github.com/kave-io/kave/server/app/audit"
 	appcontrol "github.com/kave-io/kave/server/app/control"
+	appfx "github.com/kave-io/kave/server/app/fx"
 	appruntime "github.com/kave-io/kave/server/app/runtime"
 	"github.com/kave-io/kave/server/internal/config"
-	"github.com/kave-io/kave/server/internal/contract"
 	"github.com/kave-io/kave/server/internal/daemon"
 	"github.com/kave-io/kave/server/internal/gateway"
 	"github.com/kave-io/kave/server/internal/logsink"
@@ -73,6 +73,12 @@ func main() {
 		log.Fatalf("refresh fx rates: %v", err)
 	}
 	fxService.Start(context.Background())
+	// core/fx.Service is used by the FX gRPC server (core/fx uses Frankfurter directly).
+	corefxService := corefx.NewService(appStore, 0) // 0 → default IRT/USD rate
+	if err := corefxService.Load(ctx); err != nil {
+		log.Printf("warn: core fx load failed (rates may be stale): %v", err)
+	}
+	corefxService.StartRefresh(context.Background())
 	if err := storeManager.Migrate(ctx); err != nil {
 		log.Fatalf("span store migrations: %v", err)
 	}
@@ -144,6 +150,18 @@ func main() {
 	// Seed default workspace, policy, and agent
 	seedDefaults(context.Background(), appStore)
 
+	// Check for permissive environments on public bind
+	bindAddr := cfg.Server.Addr()
+	if err := checkPermissivePublicBind(context.Background(), appStore, bindAddr); err != nil {
+		log.Fatalf("startup check failed: %v", err)
+	}
+	if isPermissivePublicBind(bindAddr) && os.Getenv("KAVE_ALLOW_PERMISSIVE_PUBLIC") == "1" {
+		log.Printf("warn: KAVE_ALLOW_PERMISSIVE_PUBLIC=1 is set — permissive environments will be accessible from the public network")
+	}
+
+	// Register FX gRPC service (wraps core/fx.Service).
+	appfx.New(corefxService).Register(grpcServer.GRPC())
+
 	go func() {
 		if err := grpcServer.ListenAndServe(cfg.GRPC.Addr()); err != nil {
 			log.Fatalf("grpc server: %v", err)
@@ -154,7 +172,6 @@ func main() {
 	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistry(), cfg.Security.AllowAnonymous, vaultResolver)
 	mux := http.NewServeMux()
 	gatewayServer.RegisterRoutes(mux)
-	fx.RegisterRoutes(mux, fxService)
 
 	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
 		log.Fatalf("build apply plan: %v", err)
@@ -178,16 +195,10 @@ func main() {
 
 	// Register health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			contract.WriteError(w, http.StatusMethodNotAllowed, "request.method_not_allowed", "method not allowed", nil)
-			return
-		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		now := time.Now().UnixMilli()
-		contract.WriteSuccess(w, http.StatusOK, "Health", map[string]any{
-			"status":        "ok",
-			"checked_at":    time.UnixMilli(now).UTC().Format(time.RFC3339Nano),
-			"checked_at_ms": now,
-		}, nil, nil)
+		fmt.Fprintf(w, `{"status":"ok","checked_at_ms":%d}`, now)
 	})
 
 	mux.Handle("/", ui.Handler())
@@ -245,7 +256,7 @@ func seedDefaults(ctx context.Context, app store.AppStore) {
 		})
 	}
 
-	// Seed default environment record BEFORE policy and agent
+	// Seed default environment record BEFORE policy
 	env, _ := app.GetEnvironmentBySlug(ctx, "default", "default")
 	if env == nil {
 		if err := app.CreateEnvironment(ctx, &controlmodel.Environment{
@@ -254,6 +265,7 @@ func seedDefaults(ctx context.Context, app store.AppStore) {
 			Name:      "default",
 			Slug:      "default",
 			Type:      "dev",
+			TrustMode: controlmodel.TrustPermissive, // dev env defaults to permissive for ergonomics
 			CreatedAt: now,
 			UpdatedAt: now,
 		}); err != nil {
@@ -277,41 +289,54 @@ func seedDefaults(ctx context.Context, app store.AppStore) {
 			CreatedAt:         now, UpdatedAt: now,
 		})
 	}
+}
 
-	if a, _ := app.GetAgentByID(ctx, "default"); a == nil {
-		defPolicy := "default"
-		budget := money.MustParseDollars("99999")
-		if err := app.CreateAgent(ctx, &controlmodel.Agent{
-			ID: "default", ProjectID: "default", EnvID: "default",
-			Name:          "default",
-			Description:   "Default agent — unauthenticated framework gateway calls are traced here",
-			PolicyID:      &defPolicy,
-			MonthlyBudget: &budget,
-			Status:        controlmodel.AgentStatusActive,
-			Metadata:      map[string]any{},
-			CreatedBy:     "system",
-			UpdatedBy:     "system",
-			CreatedAt:     now, UpdatedAt: now,
-		}); err != nil {
-			fmt.Printf("warn: seed default agent: %v\n", err)
+// isPermissivePublicBind returns true if the bind address is not loopback.
+func isPermissivePublicBind(addr string) bool {
+	// Extract host from addr (could be "host:port" or just ":port")
+	host := addr
+	if idx := strings.LastIndex(addr, ":"); idx >= 0 {
+		host = addr[:idx]
+	}
+	// Empty host or "0.0.0.0" or "::" means public bind
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		return true
+	}
+	// Check if it's a loopback address
+	ip := net.ParseIP(host)
+	return ip != nil && !ip.IsLoopback()
+}
+
+// checkPermissivePublicBind ensures no permissive env is exposed to public bind without override.
+func checkPermissivePublicBind(ctx context.Context, app store.AppStore, bindAddr string) error {
+	// If bind is loopback, always allowed
+	if !isPermissivePublicBind(bindAddr) {
+		return nil
+	}
+
+	// Public bind: check if any environment is permissive
+	result, err := app.ListEnvironments(ctx, "", store.Page{Limit: 500})
+	if err != nil {
+		return err
+	}
+
+	var permissiveEnvs []string
+	for _, env := range result.Items {
+		if env.TrustMode == controlmodel.TrustPermissive {
+			permissiveEnvs = append(permissiveEnvs, env.Name)
 		}
 	}
 
-	// Seed a "default" run for the default agent so we have a seed run_id
-	if r, _ := app.GetRunByID(ctx, "default-seed"); r == nil {
-		_ = app.CreateRun(ctx, &runtimemodel.RunRecord{
-			ID:        "default-seed",
-			ProjectID: "default",
-			EnvID:     "default",
-			AgentID:   "default",
-			Name:      "seed",
-			Status:    "completed",
-			Metadata:  map[string]any{},
-			StartedAt: now,
-			CreatedAt: now,
-			UpdatedAt: now,
-		})
+	// If there are permissive envs and override is not set, refuse to start
+	if len(permissiveEnvs) > 0 && os.Getenv("KAVE_ALLOW_PERMISSIVE_PUBLIC") != "1" {
+		return fmt.Errorf(
+			"cannot start: permissive environments [%s] are exposed to public bind %q without KAVE_ALLOW_PERMISSIVE_PUBLIC=1 override. Set this env var to allow public access to permissive envs (dev/sandbox only)",
+			strings.Join(permissiveEnvs, ", "),
+			bindAddr,
+		)
 	}
+
+	return nil
 }
 
 // printBanner prints the startup banner with connection instructions.

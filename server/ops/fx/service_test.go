@@ -57,8 +57,8 @@ func TestServiceRefreshLoadAndConvert(t *testing.T) {
 	}
 
 	currencies := svc.ListCurrencies()
-	if len(currencies) < 5 {
-		t.Fatalf("expected currencies, got %d", len(currencies))
+	if len(currencies) < 2 {
+		t.Fatalf("expected at least 2 currencies, got %d", len(currencies))
 	}
 	foundIRT := false
 	for _, item := range currencies {
@@ -138,7 +138,7 @@ func TestGetRateIdentity(t *testing.T) {
 
 func TestConvertErrors(t *testing.T) {
 	svc := NewService(nil, 0)
-	if _, _, err := svc.Convert("bad", money.USD, money.EUR); err == nil {
+	if _, _, err := svc.Convert("bad", money.USD, money.IRT); err == nil {
 		t.Fatal("expected parse error")
 	}
 	if _, err := parseDecimalRat("bad"); err == nil {
@@ -166,21 +166,15 @@ func newFrankfurterStub(t *testing.T, hits *atomic.Int32) *httptest.Server {
 		}
 		_ = json.NewEncoder(w).Encode([]map[string]any{
 			{"iso_code": "USD", "name": "US Dollar", "symbol": "$"},
-			{"iso_code": "EUR", "name": "Euro", "symbol": "€"},
-			{"iso_code": "GBP", "name": "Pound Sterling", "symbol": "£"},
-			{"iso_code": "CHF", "name": "Swiss Franc", "symbol": "CHF"},
-			{"iso_code": "IRR", "name": "Iranian Rial", "symbol": "IRR"},
 		})
 	})
 	handler.HandleFunc("/rates", func(w http.ResponseWriter, r *http.Request) {
 		if hits != nil {
 			hits.Add(1)
 		}
+		// IRR rate: 1 USD = 50000 IRR → derived IRT = 5000
 		_ = json.NewEncoder(w).Encode([]map[string]any{
-			{"date": "2026-04-17", "base": "EUR", "quote": "USD", "rate": "2"},
-			{"date": "2026-04-17", "base": "EUR", "quote": "GBP", "rate": "0.8"},
-			{"date": "2026-04-17", "base": "EUR", "quote": "CHF", "rate": "1.1"},
-			{"date": "2026-04-17", "base": "EUR", "quote": "IRR", "rate": "100000"},
+			{"date": "2026-04-17", "base": "USD", "quote": "IRR", "rate": "50000"},
 		})
 	})
 	return httptest.NewServer(handler)
