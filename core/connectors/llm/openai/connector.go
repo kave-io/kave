@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/kave-io/kave/core/connectors"
 	"github.com/kave-io/kave/core/connectors/llm/shared"
@@ -74,16 +75,22 @@ func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*r
 	}, nil
 }
 
-func (c *Connector) ParseResponse(body []byte, _ string) (*pipeline.Result, error) {
+func (c *Connector) ParseResponse(body []byte, contentType string) (*pipeline.Result, error) {
 	result := &pipeline.Result{Body: body}
 
-	input := int(gjson.GetBytes(body, "usage.prompt_tokens").Int())
-	output := int(gjson.GetBytes(body, "usage.completion_tokens").Int())
-	model := gjson.GetBytes(body, "model").String()
-	if input == 0 && output == 0 && model == "" {
+	var input, output int
+	var model string
+
+	// Use streaming parser for SSE responses; gjson finds "model" in raw SSE text
+	// causing the non-streaming path to think it already parsed the response.
+	if strings.Contains(contentType, "event-stream") {
 		input = streamUsage(body, "prompt_tokens")
 		output = streamUsage(body, "completion_tokens")
 		model = streamModel(body)
+	} else {
+		input = int(gjson.GetBytes(body, "usage.prompt_tokens").Int())
+		output = int(gjson.GetBytes(body, "usage.completion_tokens").Int())
+		model = gjson.GetBytes(body, "model").String()
 	}
 
 	if input != 0 || output != 0 || model != "" {

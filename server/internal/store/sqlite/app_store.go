@@ -1143,7 +1143,7 @@ func (s *SQLiteAppStore) InsertBudgetEntry(ctx context.Context, entry *runtimemo
 		entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheWriteTokens,
 		entry.ReasoningTokens, entry.AudioInputTokens, entry.AudioOutputTokens, entry.ImageUnits,
 		entry.RequestCount, entry.ComputeMs, entry.StorageBytes, entry.BandwidthBytes,
-		int64(entry.Cost), emptyToNil(entry.PriceVersion), string(snapshotJSON), string(usageJSON),
+		int64(entry.Cost), entry.PriceVersion, string(snapshotJSON), string(usageJSON),
 		entry.Blocked, emptyToNil(entry.BlockReason), emptyToNil(entry.BlockPeriod), entry.CreatedAt)
 	return err
 }
@@ -1496,7 +1496,7 @@ func (t *txAppStore) InsertBudgetEntry(ctx context.Context, entry *runtimemodel.
 		entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CacheWriteTokens,
 		entry.ReasoningTokens, entry.AudioInputTokens, entry.AudioOutputTokens, entry.ImageUnits,
 		entry.RequestCount, entry.ComputeMs, entry.StorageBytes, entry.BandwidthBytes,
-		int64(entry.Cost), emptyToNil(entry.PriceVersion), string(snapshotJSON), string(usageJSON),
+		int64(entry.Cost), entry.PriceVersion, string(snapshotJSON), string(usageJSON),
 		entry.Blocked, emptyToNil(entry.BlockReason), emptyToNil(entry.BlockPeriod), entry.CreatedAt)
 	return err
 }

@@ -1,5 +1,5 @@
 // Package duckdb provides a DuckDB-backed SpanStore implementation.
-// CGO_ENABLED=1 required — uses marcboeker/go-duckdb
+// CGO_ENABLED=1 required — uses duckdb/duckdb-go
 package duckdb
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/internal/store/spansql"
-	_ "github.com/marcboeker/go-duckdb"
+	_ "github.com/duckdb/duckdb-go/v2"
 )
 
 var _ store.SpanStore = (*DuckDBSpanStore)(nil)
@@ -266,8 +266,9 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 	if limit <= 0 {
 		limit = 100
 	}
-	query += ` ORDER BY started_at DESC LIMIT $` + fmt.Sprint(len(args)+1)
-	args = append(args, limit)
+	offset := store.PageOffset(page.Cursor)
+	query += ` ORDER BY started_at DESC LIMIT $` + fmt.Sprint(len(args)+1) + ` OFFSET $` + fmt.Sprint(len(args)+2)
+	args = append(args, limit, offset)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -320,7 +321,11 @@ func (s *DuckDBSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel.S
 		setNullInt32(&row.CacheWriteTokens, cacheWriteTokens)
 		spans = append(spans, row)
 	}
-	return store.PageResult[*runtimemodel.SpanRow]{Items: spans}, rows.Err()
+	result := store.PageResult[*runtimemodel.SpanRow]{Items: spans}
+	if len(spans) == limit {
+		result.NextCursor = store.PageNextCursor(offset + limit)
+	}
+	return result, rows.Err()
 }
 
 // SpendByDimension aggregates cost by the given dimension.
@@ -508,6 +513,7 @@ func updateSpan(tx *sql.Tx, spanID string, end *runtimemodel.SpanEnd) error {
 var allowedGroupBy = map[string]string{
 	"model":     "COALESCE(model, '')",
 	"run_id":    "run_id",
+	"agent_id":  "agent_id",
 	"connector": "connector",
 	"hour":      "date_trunc('hour', to_timestamp(started_at / 1000.0))",
 	"day":       "date_trunc('day', to_timestamp(started_at / 1000.0))",

@@ -30,6 +30,12 @@ type FrameworkGateway struct {
 	limiterMu     sync.Mutex
 }
 
+// SetTransport replaces the HTTP transport used for upstream requests.
+// Intended for tests only.
+func (g *FrameworkGateway) SetTransport(rt http.RoundTripper) {
+	g.transport.client.Transport = rt
+}
+
 func New(app store.AppStore, encKey []byte, p *pipeline.Pipeline, registry *Registry, _ bool, vault credresolve.VaultClient) *FrameworkGateway {
 	if registry == nil {
 		registry = NewRegistry()

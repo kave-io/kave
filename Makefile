@@ -146,6 +146,8 @@ buf-format: buf-up
 	@docker exec $(BUF_CONTAINER) buf format -w
 
 buf-generate: buf-up
+	@mkdir -p dashboard/src/gen
+	@find dashboard/src/gen -mindepth 1 -delete
 	@docker exec $(BUF_CONTAINER) buf generate
 	@git checkout -- proto/gen/go.mod proto/gen/go.sum 2>/dev/null || true
 

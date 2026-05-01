@@ -35,6 +35,7 @@ import (
 	"github.com/kave-io/kave/server/ops/fx"
 	"github.com/kave-io/kave/server/ops/policy"
 	"github.com/kave-io/kave/server/ops/trace"
+	connectport "github.com/kave-io/kave/server/port/connect"
 	portgrpc "github.com/kave-io/kave/server/port/grpc"
 	"github.com/kave-io/kave/server/ui"
 )
@@ -172,6 +173,7 @@ func main() {
 	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistry(), cfg.Security.AllowAnonymous, vaultResolver)
 	mux := http.NewServeMux()
 	gatewayServer.RegisterRoutes(mux)
+	connectport.Register(mux, controlServer, runtimeServer, auditServer)
 
 	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
 		log.Fatalf("build apply plan: %v", err)

@@ -54,6 +54,21 @@ func TestBuildPlanAndApply(t *testing.T) {
 					"retentionDays": 7,
 				},
 			},
+			{
+				Name:        "permissive",
+				Description: "permissive policy",
+				Mode:        "enforce",
+				Auth: map[string]any{
+					"allowedTypes":      []any{"*"},
+					"allowedConnectors": []any{"*"},
+					"allowedMethods":    []any{"*"},
+				},
+				Trace: map[string]any{
+					"input":         false,
+					"output":        false,
+					"retentionDays": 1,
+				},
+			},
 		},
 		Credentials: []config.CredentialConfig{
 			{
@@ -66,8 +81,24 @@ func TestBuildPlanAndApply(t *testing.T) {
 		},
 		Agents: []config.AgentConfig{
 			{
-				Name:        "bot",
-				Description: "bot agent",
+				Name:        "strict-bot",
+				Description: "strict agent",
+				Env:         "dev",
+				Policy:      "strict",
+				Credentials: []string{"openai-primary"},
+				Status:      "active",
+			},
+			{
+				Name:        "permissive-bot",
+				Description: "permissive agent",
+				Env:         "dev",
+				Policy:      "permissive",
+				Credentials: []string{"openai-primary"},
+				Status:      "active",
+			},
+			{
+				Name:        "readonly-bot",
+				Description: "readonly agent",
 				Env:         "dev",
 				Policy:      "strict",
 				Credentials: []string{"openai-primary"},

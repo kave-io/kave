@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
 import type { Span } from '@/types/api'
-import { useSpans } from '@/lib/queries'
+import { useSpans } from '@/composables/api/useSpans'
 import { useSpanStream } from '@/composables/useSpanStream'
 import { useCurrencyStore } from '@/stores/currency'
 

@@ -27,12 +27,15 @@ export default defineConfig({
   build: {
     outDir: '../server/ui/dist',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 450,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-vue': ['vue', 'vue-router', '@vueuse/core'],
-          'vendor-query': ['@tanstack/vue-query'],
-          'vendor-i18n': ['vue-i18n'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('@iconify') || id.includes('@unhead')) return 'vendor-ui-runtime'
+          if (id.includes('@nuxt/ui')) return 'vendor-ui'
+          if (id.includes('@tanstack/vue-query')) return 'vendor-query'
+          if (id.includes('vue-i18n')) return 'vendor-i18n'
         },
       },
     },

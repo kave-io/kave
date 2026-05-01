@@ -29,6 +29,11 @@ func pageLimit(limit int) int {
 }
 
 func pageOffset(cursor string) int {
+	return PageOffset(cursor)
+}
+
+// PageOffset decodes a pagination cursor into a row offset. Returns 0 for empty/invalid cursors.
+func PageOffset(cursor string) int {
 	if cursor == "" {
 		return 0
 	}
@@ -37,6 +42,11 @@ func pageOffset(cursor string) int {
 		return 0
 	}
 	return offset
+}
+
+// PageNextCursor encodes a row offset as a pagination cursor string.
+func PageNextCursor(offset int) string {
+	return strconv.Itoa(offset)
 }
 
 // Paginate slices a full item list using the page cursor as an offset.

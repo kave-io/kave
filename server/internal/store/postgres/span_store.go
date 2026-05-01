@@ -252,8 +252,9 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 	if limit <= 0 {
 		limit = 100
 	}
-	query += fmt.Sprintf(` ORDER BY started_at DESC LIMIT $%d`, len(args)+1)
-	args = append(args, limit)
+	offset := store.PageOffset(page.Cursor)
+	query += fmt.Sprintf(` ORDER BY started_at DESC LIMIT $%d OFFSET $%d`, len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
 
 	rows, err := p.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -305,7 +306,11 @@ func (p *PostgresSpanStore) QuerySpans(ctx context.Context, filter *runtimemodel
 		setPtrInt32(&row.CacheWriteTokens, cacheWriteTokens)
 		spans = append(spans, row)
 	}
-	return store.PageResult[*runtimemodel.SpanRow]{Items: spans}, rows.Err()
+	result := store.PageResult[*runtimemodel.SpanRow]{Items: spans}
+	if len(spans) == limit {
+		result.NextCursor = store.PageNextCursor(offset + limit)
+	}
+	return result, rows.Err()
 }
 
 // SpendByDimension aggregates cost by the given dimension.
@@ -372,6 +377,7 @@ func setPtrInt32(dst **int, src *int32) {
 var allowedGroupBy = map[string]string{
 	"model":     "CAST(model AS TEXT)",
 	"run_id":    "CAST(run_id AS TEXT)",
+	"agent_id":  "CAST(agent_id AS TEXT)",
 	"connector": "CAST(connector AS TEXT)",
 	"hour":      "DATE_TRUNC('hour', started_at)::TEXT",
 	"day":       "DATE_TRUNC('day', started_at)::TEXT",

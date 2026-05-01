@@ -5,7 +5,7 @@ import PageHeader from '../components/PageHeader.vue'
 import { useLocaleStore, ALL_LOCALES } from '../stores/locale'
 import { useCurrencyStore, ALL_CURRENCIES } from '../stores/currency'
 import { projectId, envId } from '@/stores/workspace'
-import { usePricingBook, useSavePricingBook } from '@/lib/queries'
+import { usePricingBook, useSavePricingBook } from '@/composables/api/useSettings'
 
 const { locale, t } = useI18n()
 const localeStore = useLocaleStore()
