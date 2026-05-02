@@ -3,45 +3,68 @@ package lifecycle
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 	"time"
 
-	runtimev1 "github.com/kave-io/kave/proto/gen/kave/runtime/v1"
+	"github.com/kave-io/kave/cli/internal/output"
 	"github.com/kave-io/kave/cli/internal/runtime"
+	"github.com/kave-io/kave/cli/internal/tty"
+	"github.com/kave-io/kave/cli/internal/watch"
+	"github.com/kave-io/kave/cli/internal/watchui"
 )
 
 type WatchInput struct {
+	Agent   string
+	Run     string
+	Trace   string
+	Status  string
+	Type    string
+	Since   time.Duration
+	Limit   int
+	Compact bool
 }
 
-type WatchOutput struct {
-	Data any `json:"data"`
-}
+func RunWatch(ctx context.Context, in WatchInput) error {
+	if !tty.IsTerminal(os.Stdout) {
+		return fmt.Errorf("kave watch requires an interactive terminal. Use kave events tail, kave span tail, or kave trace export for scriptable output.")
+	}
 
-func RunWatch(ctx context.Context, in WatchInput) (*WatchOutput, error) {
 	rt, ok := runtime.FromContext(ctx)
 	if !ok || rt == nil {
-		return nil, fmt.Errorf("runtime missing")
+		return fmt.Errorf("runtime missing")
 	}
-	t, err := rt.GetTransport()
-	if err != nil {
-		return nil, err
-	}
-	svc, err := t.RuntimeSvc()
-	if err != nil {
-		return nil, err
-	}
-	streamCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	stream, err := svc.TailTraces(streamCtx, &runtimev1.TailTracesRequest{})
-	if err != nil {
-		return nil, err
-	}
-	var frames []any
-	for {
-		ev, err := stream.Recv()
-		if err != nil {
-			break
+	if rt.Output == output.FormatJSON || rt.Output == output.FormatYAML {
+		return &output.CommandError{
+			Code:    "watch.output.unsupported",
+			Message: "kave watch is TUI-only and does not support --output json/yaml. Use kave events tail, kave span tail, or kave trace export for scriptable output.",
+			Exit:    1,
 		}
-		frames = append(frames, ev)
 	}
-	return &WatchOutput{Data: map[string]any{"frames": frames}}, nil
+
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	client, err := watch.NewGRPCClientFromContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	filter := watch.Filter{
+		Agent:   strings.TrimSpace(in.Agent),
+		RunID:   strings.TrimSpace(in.Run),
+		TraceID: strings.TrimSpace(in.Trace),
+		Status:  strings.TrimSpace(in.Status),
+		Type:    strings.TrimSpace(in.Type),
+		Since:   in.Since,
+		Limit:   in.Limit,
+		Compact: in.Compact,
+	}
+	if filter.Limit <= 0 {
+		filter.Limit = 200
+	}
+
+	return watchui.Run(ctx, client, filter, watchui.Options{NoColor: rt.Resolution != nil && rt.Resolution.Options.NoColor})
 }

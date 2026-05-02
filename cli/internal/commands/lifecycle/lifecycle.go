@@ -5,7 +5,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-
 func Register(parent *cobra.Command) {
 	cmd := &cobra.Command{
 		Use:   "lifecycle",
@@ -19,7 +18,6 @@ func Register(parent *cobra.Command) {
 	cmd.AddCommand(newStatusCmd())
 	cmd.AddCommand(newLogsCmd())
 	cmd.AddCommand(newWatchCmd())
-
 
 	parent.AddCommand(cmd)
 	// Top-level compatibility commands (kave status, kave watch, ...).
@@ -123,16 +121,21 @@ func newLogsCmd() *cobra.Command {
 }
 
 func newWatchCmd() *cobra.Command {
+	var in WatchInput
 	cmd := &cobra.Command{
 		Use:   "watch",
-		Short: "Watch",
+		Short: "Live terminal watch cockpit",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			out, err := RunWatch(cmd.Context(), WatchInput{})
-			if err != nil {
-				return err
-			}
-			return output.Render(cmd, out, "Watch")
+			return RunWatch(cmd.Context(), in)
 		},
 	}
+	cmd.Flags().StringVar(&in.Agent, "agent", "", "Filter by agent ID")
+	cmd.Flags().StringVar(&in.Run, "run", "", "Filter by run ID")
+	cmd.Flags().StringVar(&in.Trace, "trace", "", "Filter by trace ID")
+	cmd.Flags().StringVar(&in.Status, "status", "", "Filter by status")
+	cmd.Flags().StringVar(&in.Type, "type", "", "Filter by event type")
+	cmd.Flags().DurationVar(&in.Since, "since", 0, "Show events since duration ago (e.g. 10m, 1h)")
+	cmd.Flags().IntVar(&in.Limit, "limit", 200, "Max timeline rows to retain")
+	cmd.Flags().BoolVar(&in.Compact, "compact", false, "Use compact rows")
 	return cmd
 }
