@@ -1,157 +1,231 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter, useRoute, RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import type { NavigationMenuItem } from '@nuxt/ui'
-import LocaleSelector from '../components/LocaleSelector.vue'
-import CurrencySelector from '../components/CurrencySelector.vue'
+import { KIcon, KBtn, KBadge, KLogo } from '@/components/kv'
 import { RTL_CODES } from '@/stores/locale'
 
+const router = useRouter()
+const route = useRoute()
+const colorMode = useColorMode()
 const { locale, t } = useI18n()
-const open = ref(true)
+void t
 
+const collapsed = ref(false)
 const isRtl = computed(() => RTL_CODES.includes(locale.value))
-const sidebarSide = computed(() => (isRtl.value ? 'right' : 'left'))
-const toggleIcon = computed(() => (isRtl.value ? 'i-lucide-panel-right' : 'i-lucide-panel-left'))
 
-const navItems = computed<NavigationMenuItem[][]>(() => [
-  [
-    { label: t('nav.overview'), icon: 'i-lucide-layout-dashboard', to: '/', exact: true },
-    { label: t('nav.traces'), icon: 'i-lucide-waypoints', to: '/traces' },
-    { label: t('nav.agents'), icon: 'i-lucide-bot', to: '/agents' },
-    { label: t('nav.policies'), icon: 'i-lucide-shield', to: '/policies' },
-    { label: t('nav.runs'), icon: 'i-lucide-activity', to: '/runs' },
-    { label: t('nav.settings'), icon: 'i-lucide-settings', to: '/settings' },
-  ],
-])
+interface NavItem { id: string; label: string; icon: string; to: string }
+interface NavGroup { group: string; items: NavItem[] }
 
-const externalLinks = [
-  { label: 'Docs', icon: 'i-lucide-book-open', url: 'https://docs.kave.io' },
-  { label: 'GitHub', icon: 'i-lucide-github', url: 'https://github.com/kave-io/kave' },
-  { label: 'Discord', icon: 'i-lucide-send', url: 'https://discord.gg/kave' },
+const NAV: NavGroup[] = [
+  { group: 'Observe', items: [
+    { id: 'overview', label: 'Overview', icon: 'layout-dashboard', to: '/'         },
+    { id: 'monitor',  label: 'Monitor',  icon: 'activity',         to: '/monitor'  },
+    { id: 'runs',     label: 'Runs',     icon: 'file-text',        to: '/runs'     },
+    { id: 'traces',   label: 'Traces',   icon: 'waypoints',        to: '/traces'   },
+    { id: 'audit',    label: 'Audit',    icon: 'archive',          to: '/audit'    },
+  ]},
+  { group: 'Control', items: [
+    { id: 'agents',     label: 'Agents',     icon: 'bot',   to: '/agents'     },
+    { id: 'policies',   label: 'Policies',   icon: 'shield', to: '/policies'  },
+    { id: 'connectors', label: 'Connectors', icon: 'plug',  to: '/connectors' },
+  ]},
+  { group: 'Spend', items: [
+    { id: 'budgets', label: 'Budgets', icon: 'wallet', to: '/budgets' },
+  ]},
+  { group: 'System', items: [
+    { id: 'settings', label: 'Settings', icon: 'settings', to: '/settings' },
+  ]},
 ]
+
+const isActive = (to: string) => to === '/' ? route.path === '/' : route.path.startsWith(to)
+
+function toggleTheme() {
+  colorMode.value = colorMode.value === 'dark' ? 'light' : 'dark'
+}
+
+const paletteOpen = ref(false)
+function onKey(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); paletteOpen.value = !paletteOpen.value }
+  if (e.key === 'Escape') paletteOpen.value = false
+}
+onMounted(() => window.addEventListener('keydown', onKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+const palQ = ref('')
+const palItems = computed(() => {
+  const base = NAV.flatMap(g => g.items.map(it => ({ ...it, group: g.group, kind: 'page' as const })))
+  const actions = [
+    { id: 'create-agent',    label: 'Create agent',                icon: 'plus', group: 'Actions', kind: 'action' as const, to: '/agents'     },
+    { id: 'create-policy',   label: 'Create policy',               icon: 'plus', group: 'Actions', kind: 'action' as const, to: '/policies'   },
+    { id: 'issue-token',     label: 'Issue agent token',           icon: 'key',  group: 'Actions', kind: 'action' as const, to: '/agents'     },
+    { id: 'copy-openai',     label: 'Copy OpenAI proxy URL',       icon: 'copy', group: 'Actions', kind: 'action' as const, to: '/connectors' },
+    { id: 'copy-anthropic',  label: 'Copy Anthropic proxy URL',    icon: 'copy', group: 'Actions', kind: 'action' as const, to: '/connectors' },
+  ]
+  const all = [...base, ...actions]
+  const q = palQ.value.toLowerCase()
+  return q ? all.filter(i => i.label.toLowerCase().includes(q)) : all
+})
+const palGroups = computed(() => Array.from(new Set(palItems.value.map(i => i.group))))
+
+function palGo(item: { to: string }) {
+  router.push(item.to)
+  paletteOpen.value = false
+}
 </script>
 
 <template>
-  <div class="flex h-full">
-    <USidebar
-      v-model:open="open"
-      variant="inset"
-      collapsible="icon"
-      :side="sidebarSide"
-      :ui="{ container: 'h-full' }"
+  <div :style="{ display: 'flex', height: '100%', minHeight: 0 }" :dir="isRtl ? 'rtl' : 'ltr'">
+    <aside
+      :style="{
+        width: collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)',
+        flexShrink: 0,
+        background: 'transparent',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '12px 10px',
+        gap: '8px',
+        transition: 'width 180ms',
+      }"
     >
-      <template #header>
-        <div class="flex items-center gap-2 w-full px-1.5 py-1.5">
-          <img src="/icon-128.png" alt="Kave" class="size-6 rounded" />
-          <span class="text-sm font-semibold truncate">Kave</span>
-        </div>
-        <UButton
-          icon="i-lucide-x"
-          color="neutral"
-          variant="ghost"
-          square
-          class="sm:hidden"
-          @click="open = false"
-        />
-      </template>
+      <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 8px;">
+        <KLogo :size="26" />
+        <span v-if="!collapsed" style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em;">Kave</span>
+        <span v-if="!collapsed" style="margin-left: auto; font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em;">v0.7.2</span>
+      </div>
 
-      <template #default="{ state }">
-        <div class="flex flex-col h-full">
-          <UNavigationMenu
-            :items="navItems"
-            :collapsed="state === 'collapsed'"
-            tooltip
-            popover
-            orientation="vertical"
-            :ui="{ link: 'p-1.5 overflow-hidden' }"
-          />
-
-          <div v-if="state === 'expanded'" class="mt-auto border-t border-default p-3 space-y-2">
-            <p class="text-xs font-semibold text-muted uppercase tracking-wide px-1">Resources</p>
-            <div class="flex flex-col gap-1.5">
-              <a
-                v-for="link in externalLinks"
-                :key="link.url"
-                :href="link.url"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm hover:bg-default/60 transition group"
-              >
-                <UIcon :name="link.icon" class="size-4 shrink-0 text-muted group-hover:text-foreground" />
-                <span class="text-muted group-hover:text-foreground">{{ link.label }}</span>
-                <UIcon name="i-lucide-arrow-up-right" class="size-3 ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition" />
-              </a>
-            </div>
-          </div>
-
-          <div v-else class="mt-auto border-t border-default p-2 flex flex-col gap-1.5 items-center">
-            <a
-              v-for="link in externalLinks"
-              :key="link.url"
-              :href="link.url"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="p-2 rounded-lg hover:bg-default/60 transition text-muted hover:text-foreground"
-              :title="link.label"
+      <nav style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 4px;">
+        <div v-for="g in NAV" :key="g.group">
+          <div v-if="!collapsed" class="sh" style="padding: 0 10px 6px; font-size: 10.5px;">{{ g.group }}</div>
+          <div style="display: flex; flex-direction: column; gap: 1px;">
+            <button
+              v-for="it in g.items"
+              :key="it.id"
+              :title="it.label"
+              :style="{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: collapsed ? '8px' : '7px 10px',
+                width: '100%',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                background: isActive(it.to) ? 'var(--surface)' : 'transparent',
+                border: '1px solid ' + (isActive(it.to) ? 'var(--border)' : 'transparent'),
+                color: isActive(it.to) ? 'var(--text)' : 'var(--text-muted)',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: isActive(it.to) ? 500 : 400,
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontFamily: 'inherit',
+                boxShadow: isActive(it.to) ? 'var(--shadow-sm)' : 'none',
+              }"
+              @click="router.push(it.to)"
             >
-              <UIcon :name="link.icon" class="size-4" />
-            </a>
-          </div>
-
-          <!-- Settings Section -->
-          <div class="border-t border-default p-3">
-            <div v-if="state === 'expanded'" class="space-y-3">
-              <p class="text-xs font-semibold text-muted uppercase tracking-wide px-1">Preferences</p>
-              <div class="space-y-2">
-                <div class="flex items-center justify-between px-2.5 py-2 rounded-lg bg-default/40 hover:bg-default/60 transition">
-                  <span class="text-xs text-muted flex items-center gap-2">
-                    <UIcon name="i-lucide-palette" class="size-4" />
-                    Theme
-                  </span>
-                  <UColorModeSelect variant="ghost" size="sm" />
-                </div>
-                <div class="flex items-center justify-between px-2.5 py-2 rounded-lg bg-default/40 hover:bg-default/60 transition">
-                  <span class="text-xs text-muted flex items-center gap-2">
-                    <UIcon name="i-lucide-globe" class="size-4" />
-                    Language
-                  </span>
-                  <LocaleSelector />
-                </div>
-                <div class="flex items-center justify-between px-2.5 py-2 rounded-lg bg-default/40 hover:bg-default/60 transition">
-                  <span class="text-xs text-muted flex items-center gap-2">
-                    <UIcon name="i-lucide-dollar-sign" class="size-4" />
-                    Currency
-                  </span>
-                  <CurrencySelector />
-                </div>
-              </div>
-            </div>
-            <div v-else class="flex flex-col gap-2 items-center">
-              <UColorModeButton variant="ghost" />
-            </div>
+              <KIcon :name="it.icon" :size="15" :style="{ color: isActive(it.to) ? 'var(--accent)' : 'currentColor' }" />
+              <span v-if="!collapsed">{{ it.label }}</span>
+            </button>
           </div>
         </div>
-      </template>
-    </USidebar>
+      </nav>
 
-    <div
-      class="flex-1 flex flex-col overflow-hidden peer-data-[variant=inset]:m-4 lg:peer-data-[variant=inset]:not-peer-data-[collapsible=offcanvas]:ms-0 peer-data-[variant=inset]:rounded-xl peer-data-[variant=inset]:shadow-sm peer-data-[variant=inset]:ring peer-data-[variant=inset]:ring-default bg-default"
+      <div v-if="!collapsed" style="padding: 10px; border-top: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 6px;">
+        <a href="https://docs.kave.io" target="_blank" rel="noopener" style="display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 4px; font-size: 12px; color: var(--text-dim); text-decoration: none;">
+          <KIcon name="book" :size="13" />Docs<KIcon name="arrow-up-right" :size="11" :style="{ marginLeft: 'auto' }" />
+        </a>
+        <a href="https://github.com/kave-io/kave" target="_blank" rel="noopener" style="display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 4px; font-size: 12px; color: var(--text-dim); text-decoration: none;">
+          <KIcon name="github" :size="13" />GitHub<KIcon name="arrow-up-right" :size="11" :style="{ marginLeft: 'auto' }" />
+        </a>
+      </div>
+    </aside>
+
+    <main
+      :style="{
+        flex: 1,
+        minWidth: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        margin: '8px 10px 10px 0',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        overflow: 'hidden',
+        boxShadow: 'var(--shadow-sm)',
+      }"
     >
       <header
-        class="h-(--ui-header-height) shrink-0 flex items-center border-b border-default px-4 lg:px-6"
+        :style="{
+          height: 'var(--header-h)',
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '0 14px',
+          borderBottom: '1px solid var(--border-soft)',
+          background: 'var(--surface-2)',
+        }"
       >
-        <UButton
-          :icon="toggleIcon"
-          color="neutral"
-          variant="ghost"
-          aria-label="Toggle sidebar"
-          @click="open = !open"
-        />
+        <KBtn variant="ghost" size="sm" icon="panel-left" aria-label="Toggle sidebar" @click="collapsed = !collapsed" />
+
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); padding: 4px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 5px;">
+          <KIcon name="box" :size="13" :style="{ color: 'var(--text-dim)' }" />
+          <span class="mono">default</span>
+          <KIcon name="chevron-right" :size="11" :style="{ color: 'var(--text-faint)' }" />
+          <span class="mono" style="color: var(--text);">dev</span>
+        </div>
+
+        <select class="input select" defaultValue="1h" :style="{ height: '26px', padding: '0 22px 0 8px', fontSize: '12px', width: 'auto', background: 'transparent', border: '1px solid var(--border)' }">
+          <option value="15m">last 15m</option>
+          <option value="1h">last 1h</option>
+          <option value="24h">last 24h</option>
+          <option value="7d">last 7d</option>
+        </select>
+
+        <button
+          :style="{ display: 'flex', alignItems: 'center', gap: '8px', height: '28px', padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-faint)', fontSize: '12px', cursor: 'pointer', minWidth: '220px', marginLeft: '8px', fontFamily: 'inherit' }"
+          @click="paletteOpen = true"
+        >
+          <KIcon name="search" :size="13" />
+          <span style="flex: 1; text-align: left;">Search runs, traces, agents…</span>
+          <span class="kbd">⌘K</span>
+        </button>
+
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+          <KBadge tone="success" dot="live">Daemon · 18080</KBadge>
+          <KBtn variant="ghost" size="sm" :icon="colorMode === 'dark' ? 'sun' : 'moon'" aria-label="Toggle theme" @click="toggleTheme" />
+        </div>
       </header>
 
-      <div class="flex-1 overflow-auto scrollbar-hide">
+      <div style="flex: 1; overflow: auto; min-height: 0; position: relative;">
         <RouterView />
       </div>
-    </div>
+    </main>
+
+    <!-- Command palette -->
+    <template v-if="paletteOpen">
+      <div class="drawer-overlay" :style="{ zIndex: 80 }" @click="paletteOpen = false" />
+      <div role="dialog" :style="{ position: 'fixed', top: '20%', left: '50%', transform: 'translateX(-50%)', width: '540px', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: '12px', boxShadow: 'var(--shadow-lg)', zIndex: 81, overflow: 'hidden' }">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border-soft);">
+          <KIcon name="search" :size="16" :style="{ color: 'var(--text-dim)' }" />
+          <input v-model="palQ" autofocus placeholder="Search pages, runs, agents, actions…" :style="{ flex: 1, border: 0, background: 'transparent', fontSize: '14px', color: 'var(--text)', outline: 'none', fontFamily: 'inherit' }" />
+          <span class="kbd">esc</span>
+        </div>
+        <div style="max-height: 360px; overflow: auto; padding: 6px 0;">
+          <div v-if="palItems.length === 0" style="padding: 24px; text-align: center; color: var(--text-faint); font-size: 13px;">No results</div>
+          <div v-for="g in palGroups" :key="g">
+            <div class="sh" style="padding: 8px 14px 4px;">{{ g }}</div>
+            <button
+              v-for="i in palItems.filter(p => p.group === g)"
+              :key="i.id"
+              :style="{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '8px 14px', border: 0, background: 'transparent', cursor: 'pointer', fontSize: '13px', color: 'var(--text)', textAlign: 'left', fontFamily: 'inherit' }"
+              @click="palGo(i)"
+            >
+              <KIcon :name="i.icon" :size="14" :style="{ color: 'var(--text-dim)' }" />
+              <span>{{ i.label }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 </template>

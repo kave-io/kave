@@ -1,117 +1,124 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import PageHeader from '../components/PageHeader.vue'
-import type { Span } from '@/types/api'
-import { useSpans } from '@/composables/api/useSpans'
-import { useSpanStream } from '@/composables/useSpanStream'
-import { useCurrencyStore } from '@/stores/currency'
+import { TRACES, RUNS, mockSpans, fmtMs, fmtMoney, type Span } from '@/data/mock'
+import { KBtn, KCard, KStatusDot, KCopyBtn, KEmptyState, KKv } from '@/components/kv'
 
-const { t } = useI18n()
-const currencyStore = useCurrencyStore()
+const currency = 'USD'
 
-// Show total context (input + cache hits) → output.
-// Cache hits are marked with ⚡ to indicate they were cheap.
-function formatTokens(s: Span): string {
-  if (s.input_tokens == null) return '—'
-  const totalIn = (s.input_tokens ?? 0) + (s.cache_read_tokens ?? 0) + (s.cache_write_tokens ?? 0)
-  const cacheHit = (s.cache_read_tokens ?? 0) > 0
-  return `${totalIn}${cacheHit ? t('pages.traces.cache_hit') : ''}→${s.output_tokens ?? 0}`
+const traceId = ref(TRACES[0]!.id)
+const trace = computed(() => TRACES.find(t => t.id === traceId.value)!)
+const run = computed(() => (RUNS.find(r => r.traceId === traceId.value) || RUNS[0])!)
+const spans = computed(() => mockSpans(run.value))
+const totalDur = computed(() => run.value.duration || 4200)
+const selSpan = ref<Span | null>(spans.value[1] ?? null)
+
+function selectTrace(id: string) {
+  traceId.value = id
+  selSpan.value = null
 }
-
-const limit = ref(50)
-
-const { data: historicalSpans, isLoading, error } = useSpans({ limit: limit.value })
-const { spans: liveSpans, isLive } = useSpanStream()
-
-// Merge live (newest first) + historical, deduplicated by id
-const rows = computed(() => {
-  const live = liveSpans.value
-  const hist = historicalSpans.value ?? []
-  const liveIds = new Set(live.map(s => s.id))
-  const merged = [...live, ...hist.filter(s => !liveIds.has(s.id))]
-
-  return merged.map(s => ({
-    id: s.id.slice(0, 8),
-    run_id: s.run_id.slice(0, 8),
-    model: s.model ?? '—',
-    duration: s.duration_ms != null ? `${s.duration_ms}ms` : '—',
-    tokens: formatTokens(s),
-    cost: s.cost ? currencyStore.format(s.cost) : '—',
-    cached: (s.cache_read_tokens ?? 0) > 0,
-    status: s.error ? 'error' : 'ok',
-    started: new Date(s.started_at).toLocaleTimeString(),
-    _isNew: liveIds.has(s.id),
-    _error: s.error,
-  }))
-})
-
-const columns = computed(() => [
-  { accessorKey: 'started', header: t('pages.traces.table_time') },
-  { accessorKey: 'run_id', header: t('pages.traces.table_run') },
-  { accessorKey: 'model', header: t('pages.traces.table_model') },
-  { accessorKey: 'duration', header: t('pages.traces.table_duration') },
-  { accessorKey: 'tokens', header: t('pages.traces.table_tokens') },
-  { accessorKey: 'cost', header: t('pages.traces.table_cost') },
-  { accessorKey: 'status', header: t('pages.traces.table_status') },
-])
 </script>
 
 <template>
-  <div class="space-y-6 p-4 lg:p-6">
-    <PageHeader :title="t('pages.traces.title')" :subtitle="t('pages.traces.subtitle')" icon="i-lucide-waypoints">
-      <!-- LIVE indicator -->
-      <div class="flex items-center gap-2">
-        <span v-if="isLive" class="flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-500">
-          <span class="relative flex h-1.5 w-1.5">
-            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-            <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-green-500" />
-          </span>
-          {{ t('pages.traces.live_indicator') }}
-        </span>
-        <span v-else class="flex items-center gap-1.5 rounded-full bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted">
-          <span class="h-1.5 w-1.5 rounded-full bg-muted" />
-          {{ t('pages.traces.connecting_indicator') }}
-        </span>
+  <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; height: 100%;">
+    <div class="page-h">
+      <div>
+        <h1>Traces</h1>
+        <p>Waterfall view of every span. Find the slow span, the expensive call, the failing tool.</p>
       </div>
-    </PageHeader>
+    </div>
 
-    <UCard class="rounded-xl">
-      <template #header>
-        <p class="text-xs text-muted">{{ rows.length }} {{ t('pages.traces.count_loaded') }}</p>
-      </template>
-
-      <div v-if="isLoading && rows.length === 0" class="grid h-32 place-items-center">
-        <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
-      </div>
-
-      <div v-else-if="error" class="grid h-32 place-items-center text-sm text-red-500">
-        {{ t('pages.traces.error_loading') }} {{ error.message }}
-      </div>
-
-      <div v-else-if="rows.length === 0" class="grid h-40 place-items-center text-center">
-        <div class="space-y-2">
-          <UIcon name="i-lucide-activity" class="size-8 text-muted mx-auto" />
-          <p class="text-sm font-medium">{{ t('pages.traces.waiting_traces') }}</p>
-          <p class="text-xs text-muted max-w-xs">
-            {{ t('pages.traces.waiting_hint') }}
-          </p>
-          <code class="mt-2 block text-xs text-muted bg-muted/20 rounded px-2 py-1">
-            {{ t('pages.traces.example_url') }}
-          </code>
+    <div class="pane3" style="grid-template-columns: 280px minmax(0,1fr) 340px;">
+      <div class="card pane3-rail" style="overflow: auto;">
+        <div class="filter-bar"><div class="sh">Recent traces</div></div>
+        <div>
+          <button
+            v-for="t in TRACES"
+            :key="t.id"
+            :style="{
+              display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', border: 0,
+              background: traceId === t.id ? 'var(--secondary-tint)' : 'transparent',
+              borderBottom: '1px solid var(--border-soft)', cursor: 'pointer',
+              borderLeft: traceId === t.id ? '2px solid var(--secondary)' : '2px solid transparent',
+              fontFamily: 'inherit',
+            }"
+            @click="selectTrace(t.id)"
+          >
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span class="mono" style="font-size: 12px;">{{ t.id.slice(0, 14) }}…</span>
+              <KStatusDot :status="t.status" />
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">{{ t.agent }} · {{ t.spans }} spans</div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); margin-top: 3px; font-family: var(--font-mono);">
+              <span>{{ fmtMs(t.duration) }}</span>
+              <span>{{ fmtMoney(t.spend, currency) }}</span>
+            </div>
+          </button>
         </div>
       </div>
 
-      <UTable v-else :data="rows" :columns="columns">
-        <template #status-cell="{ row }">
-          <UBadge :color="row.original.status === 'error' ? 'error' : 'success'" variant="soft" size="xs">
-            {{ row.original.status === 'error' ? t('pages.traces.status_error') : t('pages.traces.status_ok') }}
-          </UBadge>
-        </template>
-        <template #model-cell="{ row }">
-          <span class="font-mono text-xs">{{ row.original.model }}</span>
-        </template>
-      </UTable>
-    </UCard>
+      <div class="card" style="overflow: hidden; display: flex; flex-direction: column;">
+        <div class="card-h">
+          <div>
+            <h3>Waterfall</h3>
+            <div class="sub mono" style="font-size: 12px;">{{ trace.id }} · {{ fmtMs(trace.duration) }} total</div>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <KCopyBtn :value="trace.id" label="trace id" />
+            <KBtn size="sm" variant="ghost" icon="share">Export</KBtn>
+          </div>
+        </div>
+        <div style="flex: 1; overflow: auto;">
+          <div style="padding: 4px 0;">
+            <div class="wf-row" style="background: var(--surface-2); cursor: default; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);">
+              <span>Span</span><span>Timeline</span><span class="num">Duration</span><span class="num">Tokens</span><span class="num">Cost</span>
+            </div>
+            <div
+              v-for="s in spans"
+              :key="s.id"
+              :class="['wf-row', selSpan?.id === s.id ? 'selected' : '']"
+              @click="selSpan = s"
+            >
+              <div class="wf-name" :style="{ paddingLeft: (s.depth * 14) + 'px' }">
+                <span v-if="s.depth > 0" style="color: var(--text-faint);">└</span>
+                <KStatusDot :status="s.status === 'ok' ? 'completed' : 'error'" />
+                <span class="label">{{ s.name }}</span>
+              </div>
+              <div class="wf-track">
+                <div :class="['wf-bar', s.kind]" :style="{ left: (s.start / totalDur * 100) + '%', width: Math.max(s.dur / totalDur * 100, 1) + '%' }" />
+              </div>
+              <span class="num mono" style="font-size: 11px;">{{ fmtMs(s.dur) }}</span>
+              <span class="num mono" style="font-size: 11px; color: var(--text-dim);">{{ s.inputTokens ? `${s.inputTokens}→${s.outputTokens || 0}` : '—' }}</span>
+              <span class="num mono" style="font-size: 11px;">{{ s.cost != null ? fmtMoney(s.cost, currency) : '—' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card pane3-detail" style="overflow: auto;">
+        <div class="card-h">
+          <div><h3>Span detail</h3><div class="sub">{{ selSpan?.name || '—' }}</div></div>
+        </div>
+        <div style="padding: 14px;">
+          <KEmptyState v-if="!selSpan" icon="waypoints" title="Pick a span">
+            Click any span in the waterfall to see identity, timing, payload, and cost.
+          </KEmptyState>
+          <div v-else>
+            <KKv k="span id" mono>{{ selSpan.id }}</KKv>
+            <KKv k="parent" mono>{{ selSpan.parent || '—' }}</KKv>
+            <KKv k="kind">{{ selSpan.kind }}</KKv>
+            <KKv k="status">{{ selSpan.status }}</KKv>
+            <KKv k="start" mono>+{{ selSpan.start }}ms</KKv>
+            <KKv k="duration" mono>{{ fmtMs(selSpan.dur) }}</KKv>
+            <KKv v-if="selSpan.model" k="model" mono>{{ selSpan.provider }}/{{ selSpan.model }}</KKv>
+            <KKv v-if="selSpan.method" k="method" mono>{{ selSpan.method }}</KKv>
+            <KKv v-if="selSpan.inputTokens != null" k="tokens" mono>{{ selSpan.inputTokens }} → {{ selSpan.outputTokens || 0 }}</KKv>
+            <KKv v-if="selSpan.cost != null" k="cost" mono>{{ fmtMoney(selSpan.cost, currency) }}</KKv>
+            <div v-if="selSpan.error" style="margin-top: 12px; padding: 10px; background: var(--danger-tint); border: 1px solid rgba(179,38,30,0.25); border-radius: 6px; color: var(--danger); font-family: var(--font-mono); font-size: 12px;">
+              {{ selSpan.error }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

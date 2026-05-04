@@ -5,10 +5,14 @@
   },
   "nav": {
     "overview": "Overview",
+    "monitor": "Monitor",
+    "runs": "Runs",
     "traces": "Traces",
+    "audit": "Audit",
     "agents": "Agents",
     "policies": "Policies",
-    "runs": "Runs",
+    "connectors": "Connectors",
+    "budgets": "Budgets",
     "settings": "Settings"
   },
   "workspace": {
@@ -128,12 +132,30 @@
       "no_actions": "No actions recorded.",
       "cache_hit": "⚡"
     },
+    "monitor": {
+      "title": "Monitor",
+      "subtitle": "Watch live agent activity in real-time."
+    },
+    "audit": {
+      "title": "Audit Log",
+      "subtitle": "Track all changes to your workspace."
+    },
+    "budgets": {
+      "title": "Budgets",
+      "subtitle": "Manage spending limits and monitor utilization."
+    },
+    "connectors": {
+      "title": "Connectors",
+      "subtitle": "Integrate with external services and APIs."
+    },
     "settings": {
       "title": "Settings",
       "subtitle": "Workspace, integrations, and preferences.",
       "workspace": "Workspace",
       "workspace_hint": "Multi-tenant workspace isolation.",
       "workspace_id": "Workspace ID",
+      "project_id": "Project ID",
+      "env_id": "Environment ID",
       "proxy_urls": "Framework URLs",
       "proxy_hint": "Route Claude Code LLM calls through Kave to trace, validate, and cost-control.",
       "export": "Export",
