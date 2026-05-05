@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package kave.runtime.v1;
 
+import "kave/common/v1/common.proto";
 import "kave/runtime/v1/action.proto";
 import "kave/runtime/v1/cost.proto";
 import "kave/runtime/v1/fx.proto";
@@ -45,6 +46,10 @@ service RuntimeService {
   // Cost operations
   rpc GetPriceBook(GetPriceBookRequest) returns (PriceBook);
   rpc GetSpendReport(GetSpendReportRequest) returns (SpendReport);
+
+  // Aggregate read models
+  rpc GetDashboardOverview(GetDashboardOverviewRequest) returns (DashboardOverview);
+  rpc GetTraceGraph(GetTraceGraphRequest) returns (TraceGraph);
 }
 
 // --- Run ---
@@ -152,17 +157,17 @@ message QuerySpansResponse {
 message WatchEventsRequest {
   string env_id = 1;
   string project_id = 2;
-  string kind = 3;  // optional: filter by event kind
+  string kind = 3; // optional: filter by event kind
 }
 
 message RuntimeEvent {
   string kind = 1;
   int64 at = 2;
-  bytes data = 3;  // JSON-encoded event data
+  bytes data = 3; // JSON-encoded event data
 }
 
 message WatchLogsRequest {
-  string level = 1;  // optional: "debug", "info", "warn", "error"
+  string level = 1; // optional: "debug", "info", "warn", "error"
 }
 
 message LogLine {
@@ -179,9 +184,9 @@ message TailTracesRequest {
 }
 
 message TraceEvent {
-  string kind = 1;  // "Run", "Span"
+  string kind = 1; // "Run", "Span"
   int64 at = 2;
-  bytes data = 3;  // JSON-encoded run or span
+  bytes data = 3; // JSON-encoded run or span
 }
 
 message StreamSpansRequest {
@@ -199,7 +204,7 @@ message SpanEvent {
 
 message ExportTraceRequest {
   string trace_id = 1;
-  string format = 2;  // "jsonl", "mermaid", "dot", "otlp", "parquet"
+  string format = 2; // "jsonl", "mermaid", "dot", "otlp", "parquet"
 }
 
 message ExportTraceResponse {
@@ -208,8 +213,8 @@ message ExportTraceResponse {
 }
 
 message IngestTracesRequest {
-  bytes data = 1;  // OTLP ExportTraceServiceRequest (protobuf or JSON)
-  string format = 2;  // "protobuf" or "json"
+  bytes data = 1; // OTLP ExportTraceServiceRequest (protobuf or JSON)
+  string format = 2; // "protobuf" or "json"
 }
 
 message IngestTracesResponse {
@@ -222,4 +227,72 @@ message GetPriceBookRequest {}
 
 message GetSpendReportRequest {
   SpendFilter filter = 1;
+}
+
+// --- Aggregate Read Models ---
+
+message GetDashboardOverviewRequest {
+  string project_id = 1;
+  string env_id = 2;
+  optional int64 from_ms = 3;
+  optional int64 to_ms = 4;
+  int32 recent_limit = 5;
+}
+
+message DashboardOverview {
+  int32 total_runs = 1;
+  int32 active_runs = 2;
+  int32 blocked_runs = 3;
+  int32 failed_runs = 4;
+  int64 avg_latency_ms = 5;
+  int64 total_input_tokens = 6;
+  int64 total_output_tokens = 7;
+  SpendReport spend = 8;
+  repeated RunRecord recent_runs = 9;
+  repeated RunRecord recent_attention_runs = 10;
+  repeated DashboardAgentSpend top_agents = 11;
+}
+
+message DashboardAgentSpend {
+  string agent_id = 1;
+  string agent_name = 2;
+  kave.common.v1.Amount spend = 3;
+  int32 run_count = 4;
+}
+
+message GetTraceGraphRequest {
+  string run_id = 1;
+  string trace_id = 2;
+  int32 limit = 3;
+}
+
+message TraceGraph {
+  RunRecord run = 1;
+  repeated SpanRow spans = 2;
+  repeated TraceGraphNode nodes = 3;
+  repeated TraceGraphEdge edges = 4;
+  int64 total_duration_ms = 5;
+  kave.common.v1.Amount total_cost = 6;
+  int64 total_input_tokens = 7;
+  int64 total_output_tokens = 8;
+}
+
+message TraceGraphNode {
+  string span_id = 1;
+  string parent_span_id = 2;
+  string name = 3;
+  string connector = 4;
+  string model = 5;
+  bool has_error = 6;
+  int32 depth = 7;
+  int64 offset_ms = 8;
+  int64 duration_ms = 9;
+  kave.common.v1.Amount cost = 10;
+  int64 input_tokens = 11;
+  int64 output_tokens = 12;
+}
+
+message TraceGraphEdge {
+  string parent_span_id = 1;
+  string child_span_id = 2;
 }

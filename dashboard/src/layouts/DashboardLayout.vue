@@ -4,12 +4,14 @@ import { useRouter, useRoute, RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { KIcon, KBtn, KBadge, KLogo } from '@/components/kv'
 import { RTL_CODES } from '@/stores/locale'
+import { useDaemonStatus } from '@/composables/api/useControl'
 
 const router = useRouter()
 const route = useRoute()
 const colorMode = useColorMode()
 const { locale, t } = useI18n()
 void t
+const daemonStatus = useDaemonStatus()
 
 const collapsed = ref(false)
 const isRtl = computed(() => RTL_CODES.includes(locale.value))
@@ -191,7 +193,9 @@ function palGo(item: { to: string }) {
         </button>
 
         <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
-          <KBadge tone="success" dot="live">Daemon · 18080</KBadge>
+          <KBadge :tone="daemonStatus.isError.value ? 'danger' : 'success'" :dot="daemonStatus.isError.value ? null : 'live'">
+            Daemon · {{ daemonStatus.isError.value ? 'Offline' : (daemonStatus.data.value?.version || 'Live') }}
+          </KBadge>
           <KBtn variant="ghost" size="sm" :icon="colorMode === 'dark' ? 'sun' : 'moon'" aria-label="Toggle theme" @click="toggleTheme" />
         </div>
       </header>

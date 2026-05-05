@@ -1,36 +1,44 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { AGENTS, fmtMoney } from '@/data/mock'
-import { KIcon, KBtn, KBadge, KCard, KSparkline, KLiveStream } from '@/components/kv'
+import { useDashboardOverview } from '@/composables/api/useOverview'
+import { envId, projectId } from '@/stores/workspace'
+import { asNumber, fmtMoney } from '@/lib/format'
+import { KIcon, KBtn, KBadge, KCard, KSparkline, KLiveStream, KEmptyState } from '@/components/kv'
 
 const router = useRouter()
 const currency = 'USD'
 
-const stats = [
-  { label: 'Active runs',     value: '7',     delta: '+3 last hour', up: true,  spark: [3,5,4,6,5,7,9,7,6,8,7,7]   },
-  { label: 'Spend (24h)',     value: fmtMoney(12.84, currency), delta: '+18%', up: true, spark: [1,2,2,3,4,4,6,8,9,8,10,12] },
-  { label: 'Blocked actions', value: '3',     delta: 'budget cap',   up: false, spark: [0,0,1,0,1,0,2,1,0,1,3,3]   },
-  { label: 'Avg latency p50', value: '842ms', delta: '−7%',          up: true,  spark: [9,9,8,9,8,8,7,8,8,7,7,8]   },
-  { label: 'Errors (24h)',    value: '14',    delta: '0.4% of runs', up: false, spark: [2,3,1,2,4,2,3,5,2,1,3,4]   },
-  { label: 'Tokens (24h)',    value: '2.4M',  delta: '+22%',         up: true,  spark: [2,3,3,4,5,5,7,8,9,11,12,14] },
-]
+const overviewQuery = useDashboardOverview({ projectId, envId, recentLimit: 12 })
+const overview = computed(() => overviewQuery.data.value)
 
-const recentBlocks = [
-  { agent: 'scraper-agent', reason: 'budget cap reached',                    policy: 'pol_strict_v1',  when: '4m ago'  },
-  { agent: 'invoice-agent', reason: 'method github.repos.write not allowed', policy: 'pol_finance_v1', when: '12m ago' },
-  { agent: 'support-bot',   reason: 'cost > $0.10 per call',                 policy: 'pol_support_v2', when: '38m ago' },
-]
+const stats = computed(() => {
+  const data = overview.value
+  return [
+    { label: 'Runs', value: String(data?.total_runs ?? 0), delta: 'aggregate RPC', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.total_runs ?? 0] },
+    { label: 'Active runs', value: String(data?.active_runs ?? 0), delta: data?.active_runs ? 'in progress' : 'none active', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.active_runs ?? 0] },
+    { label: 'Spend', value: fmtMoney(data?.spend.total ?? '0', currency), delta: 'reported by daemon', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,asNumber(data?.spend.total)] },
+    { label: 'Blocked runs', value: String(data?.blocked_runs ?? 0), delta: data?.blocked_runs ? 'needs review' : 'none', up: (data?.blocked_runs ?? 0) === 0, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.blocked_runs ?? 0] },
+    { label: 'Errors', value: String(data?.failed_runs ?? 0), delta: data?.failed_runs ? 'failed runs' : 'none', up: (data?.failed_runs ?? 0) === 0, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.failed_runs ?? 0] },
+    { label: 'Tokens', value: `${(((data?.total_input_tokens ?? 0) + (data?.total_output_tokens ?? 0)) / 1000).toFixed(1)}k`, delta: 'input + output', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,(data?.total_input_tokens ?? 0) + (data?.total_output_tokens ?? 0)] },
+  ]
+})
 
-const spendByProvider = [
-  { name: 'openai',    cost: 7.42, share: 0.58 },
-  { name: 'anthropic', cost: 3.18, share: 0.25 },
-  { name: 'gemini',    cost: 1.52, share: 0.12 },
-  { name: 'groq',      cost: 0.72, share: 0.05 },
-]
+const recentBlocks = computed(() => (overview.value?.recent_attention_runs ?? [])
+  .map(r => ({
+    agent: r.agent_id || 'unknown agent',
+    reason: r.error_message || r.status,
+    policy: r.policy_id || 'no policy',
+    when: new Date(r.updated_at || r.started_at).toISOString(),
+  })))
 
-const topAgents = [...AGENTS].sort((a, b) => b.spent - a.spent).slice(0, 4)
+const spendByProvider = computed(() => {
+  const entries = Object.entries(overview.value?.spend.by_connector ?? {}).map(([name, total]) => ({ name, cost: asNumber(total) }))
+  const max = entries.reduce((acc, item) => Math.max(acc, item.cost), 0)
+  return entries.map(item => ({ ...item, share: max > 0 ? item.cost / max : 0 })).slice(0, 6)
+})
 
-function pctClass(pct: number) { return pct > 0.9 ? 'danger' : pct > 0.7 ? 'warn' : '' }
+const topAgents = computed(() => overview.value?.top_agents ?? [])
 </script>
 
 <template>
@@ -82,6 +90,9 @@ function pctClass(pct: number) { return pct > 0.9 ? 'danger' : pct > 0.7 ? 'warn
             <div style="font-size: 11px; color: var(--text-faint); margin-top: 4px; font-family: var(--font-mono);">{{ b.policy }} · {{ b.when }}</div>
           </div>
         </div>
+        <KEmptyState v-if="recentBlocks.length === 0" icon="shield-check" title="No blocked or failed runs">
+          When policy or budget blocks happen, they will appear here.
+        </KEmptyState>
       </KCard>
     </section>
 
@@ -98,30 +109,28 @@ function pctClass(pct: number) { return pct > 0.9 ? 'danger' : pct > 0.7 ? 'warn
             <span style="text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;">{{ fmtMoney(p.cost, currency) }}</span>
           </div>
         </div>
+        <KEmptyState v-if="spendByProvider.length === 0" icon="wallet" title="No spend recorded">
+          Cost data will appear after proxied LLM calls are metered.
+        </KEmptyState>
       </KCard>
 
       <KCard title="Top agents by spend" subtitle="This month" flush>
         <table class="tbl">
-          <thead><tr><th>Agent</th><th>Policy</th><th class="num">Spend</th><th class="num">Budget</th></tr></thead>
+          <thead><tr><th>Agent</th><th class="num">Runs</th><th class="num">Spend</th></tr></thead>
           <tbody>
-            <tr v-for="a in topAgents" :key="a.id" @click="router.push('/agents')">
+            <tr v-for="a in topAgents" :key="a.agent_id" @click="router.push('/agents')">
               <td>
                 <div style="display: flex; align-items: center; gap: 8px;">
                   <KIcon name="bot" :size="14" :style="{ color: 'var(--text-dim)' }" />
-                  <span style="font-weight: 500;">{{ a.name }}</span>
+                  <span style="font-weight: 500;">{{ a.agent_name || a.agent_id }}</span>
                 </div>
               </td>
-              <td class="mono" style="font-size: 12px; color: var(--text-dim);">{{ a.policy }}</td>
-              <td class="num">{{ fmtMoney(a.spent, currency) }}</td>
-              <td class="num" style="min-width: 140px;">
-                <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
-                  <div class="prog" style="width: 60px;">
-                    <div :class="['fill', pctClass(a.spent / a.budget)]" :style="{ width: Math.min(a.spent / a.budget * 100, 100) + '%' }" />
-                  </div>
-                  <span style="font-size: 12px; color: var(--text-dim); width: 36px; text-align: right;">{{ Math.round(a.spent / a.budget * 100) }}%</span>
-                </div>
-              </td>
+              <td class="num mono" style="font-size: 12px;">{{ a.run_count }}</td>
+              <td class="num">{{ fmtMoney(a.spend, currency) }}</td>
             </tr>
+            <tr v-if="topAgents.length === 0"><td colspan="3">
+              <KEmptyState icon="bot" title="No agents yet">Create an agent or apply config resources to populate this table.</KEmptyState>
+            </td></tr>
           </tbody>
         </table>
       </KCard>

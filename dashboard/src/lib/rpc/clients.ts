@@ -1,22 +1,37 @@
 import { create } from '@bufbuild/protobuf'
+import { EmptySchema } from '@bufbuild/protobuf/wkt'
 import { createClient } from '@connectrpc/connect'
 import { ControlPlaneService } from '@/gen/kave/control/v1/control_pb.js'
 import {
   CreateAgentRequestSchema,
   CreatePolicyRequestSchema,
+  CreateTokenRequestSchema,
+  ListCredentialsRequestSchema,
+  ListEnvironmentsRequestSchema,
+  ListPoliciesRequestSchema,
+  ListProjectsRequestSchema,
+  ListTokensRequestSchema,
   GetAgentRequestSchema,
   GetPolicyRequestSchema,
   ListAgentsRequestSchema,
   UpdateAgentRequestSchema,
 } from '@/gen/kave/control/v1/control_pb.js'
 import { AgentStatus } from '@/gen/kave/control/v1/agent_pb.js'
+import { DaemonService } from '@/gen/kave/control/v1/daemon_pb.js'
+import { AuditService } from '@/gen/kave/audit/v1/audit_pb.js'
+import { QueryAuditsRequestSchema } from '@/gen/kave/audit/v1/audit_pb.js'
 import { RuntimeService } from '@/gen/kave/runtime/v1/runtime_pb.js'
 import {
   GetPriceBookRequestSchema,
+  GetDashboardOverviewRequestSchema,
   GetRunRequestSchema,
   GetSpendReportRequestSchema,
+  GetTraceGraphRequestSchema,
   ListRunsRequestSchema,
   QuerySpansRequestSchema,
+  StreamSpansRequestSchema,
+  WatchEventsRequestSchema,
+  WatchRunsRequestSchema,
 } from '@/gen/kave/runtime/v1/runtime_pb.js'
 import { RunStatus } from '@/gen/kave/runtime/v1/run_pb.js'
 import type {
@@ -28,15 +43,24 @@ import type {
   CreateAgentRequest,
   CreatePolicyRequest,
   PriceBook,
+  AgentToken,
+  ConnectorCredential,
+  DaemonStatus,
+  AuditEntry,
+  LiveEvent,
+  DashboardOverview,
+  TraceGraph,
 } from '@/types/api'
 import { transport } from './transport'
 
 const control = createClient(ControlPlaneService, transport)
 const runtime = createClient(RuntimeService, transport)
+const daemon = createClient(DaemonService, transport)
+const audit = createClient(AuditService, transport)
 
 function nanosToString(amount: unknown): string | undefined {
   if (!amount || typeof amount !== 'object') return undefined
-  const value = (amount as { amount?: unknown }).amount
+  const value = (amount as { decimal?: unknown; amount?: unknown }).decimal ?? (amount as { amount?: unknown }).amount
   return typeof value === 'string' ? value : undefined
 }
 
@@ -156,6 +180,72 @@ function mapSpan(s: any): Span {
   }
 }
 
+function mapToken(t: any): AgentToken {
+  return {
+    id: t.id,
+    agent_id: t.agentId,
+    name: t.name,
+    token_prefix: t.tokenPrefix,
+    status: t.revokedAtMs ? 'revoked' : 'active',
+    created_at: Number(t.createdAtMs),
+    last_used_at: toMillis(t.lastUsedAtMs),
+    expires_at: toMillis(t.expiresAtMs),
+  }
+}
+
+function mapCredential(c: any): ConnectorCredential {
+  return {
+    id: c.id,
+    env_id: c.envId,
+    connector_type: c.connectorType,
+    label: c.label,
+    status: String(c.status ?? ''),
+    created_at: Number(c.createdAtMs),
+    last_used_at: toMillis(c.lastUsedAtMs),
+  }
+}
+
+function mapAuditEntry(e: any): AuditEntry {
+  return {
+    id: e.id,
+    ts: Number(e.createdAtMs),
+    actor: e.actorId || 'system',
+    action: e.event,
+    resource: e.resourceId,
+    resource_type: e.resourceType,
+    result: e.event.includes('blocked') || e.event.includes('denied') ? 'blocked' : 'ok',
+  }
+}
+
+const textDecoder = new TextDecoder()
+
+function runtimeEventToLiveEvent(ev: any): LiveEvent {
+  let payload: any = {}
+  try {
+    payload = ev.data?.length ? JSON.parse(textDecoder.decode(ev.data)) : {}
+  } catch {
+    payload = {}
+  }
+  const run = payload
+  return {
+    id: `${ev.kind}:${ev.at}:${run.id ?? run.Id ?? ''}`,
+    ts: Number(ev.at),
+    kind: ev.kind,
+    tone: ev.kind.includes('failed') || ev.kind.includes('denied') || ev.kind.includes('blocked') ? 'danger' : ev.kind.includes('completed') ? 'success' : 'info',
+    agent: run.agentId || run.agent_id || 'unknown-agent',
+    agentId: run.agentId || run.agent_id || '',
+    runId: run.id || run.Id || run.runId || run.run_id || '',
+    traceId: run.id || run.Id || run.runId || run.run_id || '',
+    provider: run.connector || '',
+    model: run.model || '',
+    method: run.name || ev.kind,
+    duration: run.endedAtMs && run.startedAtMs ? Number(run.endedAtMs) - Number(run.startedAtMs) : null,
+    cost: Number(nanosToString(run.spent) ?? 0),
+    inputTokens: run.inputTokens ?? 0,
+    outputTokens: run.outputTokens ?? 0,
+  }
+}
+
 export const agentsClient = {
   async list(envId: string): Promise<Agent[]> {
     const resp = await control.listAgents(create(ListAgentsRequestSchema, { envId, limit: 1000 }))
@@ -192,6 +282,10 @@ export const agentsClient = {
 }
 
 export const policiesClient = {
+  async list(envId: string): Promise<Policy[]> {
+    const resp = await control.listPolicies(create(ListPoliciesRequestSchema, { envId, limit: 1000 }))
+    return resp.policies.map(mapPolicy)
+  },
   async get(id: string): Promise<Policy> {
     const resp = await control.getPolicy(create(GetPolicyRequestSchema, { id }))
     return mapPolicy(resp)
@@ -205,6 +299,37 @@ export const policiesClient = {
       }),
     )
     return mapPolicy(resp)
+  },
+}
+
+export const tokensClient = {
+  async list(agentId: string): Promise<AgentToken[]> {
+    const resp = await control.listTokens(create(ListTokensRequestSchema, { agentId, limit: 1000 }))
+    return resp.tokens.map(mapToken)
+  },
+  async create(agentId: string, name: string): Promise<{ token: AgentToken; raw_token: string }> {
+    const resp = await control.createToken(create(CreateTokenRequestSchema, { agentId, name }))
+    return { token: mapToken(resp.token), raw_token: resp.rawToken }
+  },
+}
+
+export const credentialsClient = {
+  async list(envId: string): Promise<ConnectorCredential[]> {
+    const resp = await control.listCredentials(
+      create(ListCredentialsRequestSchema, { filter: { envId }, limit: 1000 }),
+    )
+    return resp.credentials.map(mapCredential)
+  },
+}
+
+export const workspaceClient = {
+  async listProjects() {
+    const resp = await control.listProjects(create(ListProjectsRequestSchema, { orgId: 'default', limit: 100 }))
+    return resp.projects
+  },
+  async listEnvironments(projectId: string) {
+    const resp = await control.listEnvironments(create(ListEnvironmentsRequestSchema, { projectId, limit: 100 }))
+    return resp.environments
   },
 }
 
@@ -232,6 +357,64 @@ export const runsClient = {
     const resp = await runtime.getRun(create(GetRunRequestSchema, { id }))
     return mapRun(resp)
   },
+  async watch(params: { envId: string; agentId?: string }, signal?: AbortSignal): Promise<AsyncIterable<Run>> {
+    const stream = runtime.watchRuns(create(WatchRunsRequestSchema, { envId: params.envId, agentId: params.agentId }), { signal })
+    async function* mapped() {
+      for await (const run of stream) {
+        yield mapRun(run)
+      }
+    }
+    return mapped()
+  },
+}
+
+function mapSpendReport(resp: any): SpendReport {
+  return {
+    total: nanosToString(resp.total) ?? '0',
+    by_agent: Object.fromEntries(
+      Object.entries(resp.byAgent ?? {}).map(([k, v]) => [k, nanosToString(v) ?? '0']),
+    ),
+    by_connector: Object.fromEntries(
+      Object.entries(resp.byConnector ?? {}).map(([k, v]) => [k, nanosToString(v) ?? '0']),
+    ),
+    by_model: Object.fromEntries(
+      Object.entries(resp.byModel ?? {}).map(([k, v]) => [k, nanosToString(v) ?? '0']),
+    ),
+    period_start: Number(resp.periodStartMs ?? 0),
+    period_end: Number(resp.periodEndMs ?? 0),
+  }
+}
+
+export const overviewClient = {
+  async get(params: { projectId?: string; envId?: string; fromMs?: number; toMs?: number; recentLimit?: number }): Promise<DashboardOverview> {
+    const resp = await runtime.getDashboardOverview(
+      create(GetDashboardOverviewRequestSchema, {
+        projectId: params.projectId ?? '',
+        envId: params.envId ?? '',
+        fromMs: params.fromMs == null ? undefined : BigInt(params.fromMs),
+        toMs: params.toMs == null ? undefined : BigInt(params.toMs),
+        recentLimit: params.recentLimit ?? 12,
+      }),
+    )
+    return {
+      total_runs: resp.totalRuns,
+      active_runs: resp.activeRuns,
+      blocked_runs: resp.blockedRuns,
+      failed_runs: resp.failedRuns,
+      avg_latency_ms: Number(resp.avgLatencyMs),
+      total_input_tokens: Number(resp.totalInputTokens),
+      total_output_tokens: Number(resp.totalOutputTokens),
+      spend: mapSpendReport(resp.spend ?? {}),
+      recent_runs: resp.recentRuns.map(mapRun),
+      recent_attention_runs: resp.recentAttentionRuns.map(mapRun),
+      top_agents: resp.topAgents.map(a => ({
+        agent_id: a.agentId,
+        agent_name: a.agentName,
+        spend: nanosToString(a.spend) ?? '0',
+        run_count: a.runCount,
+      })),
+    }
+  },
 }
 
 export const spansClient = {
@@ -253,6 +436,75 @@ export const spansClient = {
     )
     return resp.spans.map(mapSpan)
   },
+  async stream(params: { projectId?: string; envId?: string; runId?: string }, signal?: AbortSignal): Promise<AsyncIterable<Span>> {
+    const stream = runtime.streamSpans(
+      create(StreamSpansRequestSchema, {
+        projectId: params.projectId ?? '',
+        envId: params.envId ?? '',
+        runId: params.runId ?? '',
+      }),
+      { signal },
+    )
+    async function* mapped() {
+      for await (const event of stream) {
+        if (event.span) yield mapSpan(event.span)
+      }
+    }
+    return mapped()
+  },
+}
+
+export const traceClient = {
+  async graph(params: { runId?: string; traceId?: string; limit?: number }): Promise<TraceGraph> {
+    const resp = await runtime.getTraceGraph(
+      create(GetTraceGraphRequestSchema, {
+        runId: params.runId ?? '',
+        traceId: params.traceId ?? '',
+        limit: params.limit ?? 1000,
+      }),
+    )
+    return {
+      run: resp.run ? mapRun(resp.run) : undefined,
+      spans: resp.spans.map(mapSpan),
+      nodes: resp.nodes.map(n => ({
+        span_id: n.spanId,
+        parent_span_id: n.parentSpanId,
+        name: n.name,
+        connector: n.connector,
+        model: n.model,
+        has_error: n.hasError,
+        depth: n.depth,
+        offset_ms: Number(n.offsetMs),
+        duration_ms: Number(n.durationMs),
+        cost: nanosToString(n.cost) ?? '0',
+        input_tokens: Number(n.inputTokens),
+        output_tokens: Number(n.outputTokens),
+      })),
+      total_duration_ms: Number(resp.totalDurationMs),
+      total_cost: nanosToString(resp.totalCost) ?? '0',
+      total_input_tokens: Number(resp.totalInputTokens),
+      total_output_tokens: Number(resp.totalOutputTokens),
+    }
+  },
+}
+
+export const eventsClient = {
+  async watch(params: { projectId?: string; envId?: string; kind?: string }, signal?: AbortSignal): Promise<AsyncIterable<LiveEvent>> {
+    const stream = runtime.watchEvents(
+      create(WatchEventsRequestSchema, {
+        projectId: params.projectId ?? '',
+        envId: params.envId ?? '',
+        kind: params.kind ?? '',
+      }),
+      { signal },
+    )
+    async function* mapped() {
+      for await (const event of stream) {
+        yield runtimeEventToLiveEvent(event)
+      }
+    }
+    return mapped()
+  },
 }
 
 export const costClient = {
@@ -270,20 +522,7 @@ export const costClient = {
         },
       }),
     )
-    return {
-      total: nanosToString(resp.total) ?? '0',
-      by_agent: Object.fromEntries(
-        Object.entries(resp.byAgent).map(([k, v]) => [k, nanosToString(v) ?? '0']),
-      ),
-      by_connector: Object.fromEntries(
-        Object.entries(resp.byConnector).map(([k, v]) => [k, nanosToString(v) ?? '0']),
-      ),
-      by_model: Object.fromEntries(
-        Object.entries(resp.byModel).map(([k, v]) => [k, nanosToString(v) ?? '0']),
-      ),
-      period_start: Number(resp.periodStartMs),
-      period_end: Number(resp.periodEndMs),
-    }
+    return mapSpendReport(resp)
   },
 }
 
@@ -305,14 +544,43 @@ export const settingsClient = {
     }
   },
   async savePricing(body: PriceBook): Promise<PriceBook> {
-    const res = await fetch('/api/v1/settings/pricing', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-      throw new Error(`Failed to save pricing (${res.status})`)
+    void body
+    throw new Error('Editing the price book is not exposed by the v1 RPC contract yet.')
+  },
+}
+
+export const daemonClient = {
+  async status(): Promise<DaemonStatus> {
+    const resp = await daemon.status(create(EmptySchema, {}))
+    return {
+      pid: resp.pid,
+      version: resp.version,
+      uptime: resp.uptime,
+      started_at: Number(resp.startedAt),
+      status: resp.status,
     }
-    return (await res.json()) as PriceBook
+  },
+  async doctor() {
+    const resp = await daemon.doctor(create(EmptySchema, {}))
+    return resp.checks
+  },
+  async configPaths() {
+    return daemon.configPaths(create(EmptySchema, {}))
+  },
+}
+
+export const auditClient = {
+  async list(params: { orgId?: string; projectId?: string; envId?: string; limit?: number } = {}): Promise<AuditEntry[]> {
+    const resp = await audit.queryAudits(
+      create(QueryAuditsRequestSchema, {
+        filter: {
+          orgId: params.orgId ?? 'default',
+          projectId: params.projectId ?? '',
+          envId: params.envId ?? '',
+        },
+        limit: params.limit ?? 100,
+      }),
+    )
+    return resp.entries.map(mapAuditEntry)
   },
 }

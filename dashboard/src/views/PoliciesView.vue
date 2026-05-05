@@ -1,16 +1,70 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { POLICIES, AGENTS, fmtRel, fmtMoney, type Policy } from '@/data/mock'
+import { ref, computed, watchEffect } from 'vue'
+import { usePolicies } from '@/composables/api/usePolicies'
+import { useAgents } from '@/composables/api/useAgents'
+import { envId } from '@/stores/workspace'
+import { asNumber, fmtMoney, fmtRel } from '@/lib/format'
+import type { Policy } from '@/types/api'
 import { KIcon, KBtn, KBadge, KCard, KStatusBadge, KKv } from '@/components/kv'
 
 const currency = 'USD'
 
-const selected = ref<Policy>(POLICIES[0]!)
+type PolicyRow = Policy & {
+  connectors: string[]
+  agents: number
+  budget: number | null
+  behavior: string
+  updated: number
+}
+
+const policiesQuery = usePolicies(envId)
+const agentsQuery = useAgents(envId)
+
+const POLICIES = computed<PolicyRow[]>(() => (policiesQuery.data.value ?? []).map(p => ({
+  ...p,
+  connectors: p.allowed_connectors,
+  agents: (agentsQuery.data.value ?? []).filter(a => a.policy_id === p.id).length,
+  budget: p.budget_cap ? asNumber(p.budget_cap) : null,
+  behavior: p.budget_behavior || 'block',
+  updated: p.updated_at,
+})))
+
+const emptyPolicy: PolicyRow = {
+  id: '',
+  project_id: '',
+  env_id: '',
+  name: 'No policies',
+  description: '',
+  allowed_types: [],
+  allowed_connectors: [],
+  allowed_methods: [],
+  budget_period: '',
+  budget_behavior: '',
+  trace_input: false,
+  trace_output: false,
+  retention_days: 0,
+  mode: '',
+  status: '',
+  config: {},
+  created_at: 0,
+  updated_at: 0,
+  connectors: [],
+  agents: 0,
+  budget: null,
+  behavior: 'block',
+  updated: 0,
+}
+const selected = ref<PolicyRow>(emptyPolicy)
 const tab = ref<'summary' | 'rules' | 'budget' | 'tracing' | 'test' | 'raw'>('summary')
+
+watchEffect(() => {
+  if (selected.value.id === '' && POLICIES.value.length > 0) selected.value = POLICIES.value[0]!
+  if (selected.value.id !== '' && !POLICIES.value.some(p => p.id === selected.value.id)) selected.value = POLICIES.value[0] ?? emptyPolicy
+})
 
 const llmConnectors = computed(() => selected.value.connectors.filter(c => ['openai','anthropic','gemini'].includes(c)))
 const toolConnectors = computed(() => selected.value.connectors.filter(c => !['openai','anthropic','gemini'].includes(c)))
-const attachedAgents = computed(() => AGENTS.filter(a => a.policy === selected.value.id))
+const attachedAgents = computed(() => (agentsQuery.data.value ?? []).filter(a => a.policy_id === selected.value.id))
 
 // simulator state
 const simConn = ref('openai')
@@ -19,7 +73,7 @@ const simModel = ref('gpt-4.1-mini')
 const simResult = ref<{ allowed: boolean; reason: string; cost: number } | null>(null)
 
 function runSim() {
-  const allowed = selected.value.connectors.includes(simConn.value) && simMethod.value !== 'repos.write'
+  const allowed = (selected.value.connectors.includes('*') || selected.value.connectors.includes(simConn.value)) && simMethod.value !== 'repos.write'
   simResult.value = {
     allowed,
     reason: allowed

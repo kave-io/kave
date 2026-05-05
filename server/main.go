@@ -17,7 +17,6 @@ import (
 	controlmodel "github.com/kave-io/kave/core/model/control"
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/store"
-	"net"
 	appaudit "github.com/kave-io/kave/server/app/audit"
 	appcontrol "github.com/kave-io/kave/server/app/control"
 	appfx "github.com/kave-io/kave/server/app/fx"
@@ -25,8 +24,8 @@ import (
 	"github.com/kave-io/kave/server/internal/config"
 	"github.com/kave-io/kave/server/internal/daemon"
 	"github.com/kave-io/kave/server/internal/gateway"
-	"github.com/kave-io/kave/server/internal/logsink"
 	appcasbin "github.com/kave-io/kave/server/internal/infra/casbin"
+	"github.com/kave-io/kave/server/internal/logsink"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
 	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
@@ -38,6 +37,7 @@ import (
 	connectport "github.com/kave-io/kave/server/port/connect"
 	portgrpc "github.com/kave-io/kave/server/port/grpc"
 	"github.com/kave-io/kave/server/ui"
+	"net"
 )
 
 var buildVersion = "dev"
@@ -173,7 +173,7 @@ func main() {
 	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistry(), cfg.Security.AllowAnonymous, vaultResolver)
 	mux := http.NewServeMux()
 	gatewayServer.RegisterRoutes(mux)
-	connectport.Register(mux, controlServer, runtimeServer, auditServer)
+	connectport.Register(mux, controlServer, runtimeServer, auditServer, appcontrol.NewDaemonService(daemonState))
 
 	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
 		log.Fatalf("build apply plan: %v", err)

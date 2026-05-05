@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { AGENTS, PROVIDERS, fmtMs, fmtMoney, type LiveEvent } from '@/data/mock'
+import { useAgents } from '@/composables/api/useAgents'
+import { envId } from '@/stores/workspace'
+import { fmtMs, fmtMoney } from '@/lib/format'
+import type { LiveEvent } from '@/types/api'
 import { KIcon, KBtn, KBadge, KCard, KEmptyState, KLiveStream, KKv, KCopyBtn } from '@/components/kv'
 
 const router = useRouter()
+const agentsQuery = useAgents(envId)
 
 const paused = ref(false)
 const filters = ref<{ agent: string; provider: string; errorsOnly: boolean; blockedOnly: boolean }>({ agent: '', provider: '', errorsOnly: false, blockedOnly: false })
 const selected = ref<LiveEvent | null>(null)
 
-const agentOpts = computed(() => [{ v: '', l: 'All' }, ...AGENTS.map(a => ({ v: a.name, l: a.name }))])
-const providerOpts = computed(() => [{ v: '', l: 'All' }, ...PROVIDERS.map(p => ({ v: p, l: p }))])
+const providerNames = ['openai', 'anthropic', 'gemini', 'ollama', 'groq']
+const agentOpts = computed(() => [{ v: '', l: 'All' }, ...(agentsQuery.data.value ?? []).map(a => ({ v: a.id, l: a.name }))])
+const providerOpts = computed(() => [{ v: '', l: 'All' }, ...providerNames.map(p => ({ v: p, l: p }))])
 const kindOpts = [{ v: '', l: 'All' }, { v: 'errorsOnly', l: 'Errors only' }, { v: 'blockedOnly', l: 'Blocked only' }]
 const kindValue = computed(() => filters.value.errorsOnly ? 'errorsOnly' : filters.value.blockedOnly ? 'blockedOnly' : '')
 

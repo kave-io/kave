@@ -3,10 +3,12 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 
 	"github.com/kave-io/kave/core/bus"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
+	"github.com/kave-io/kave/core/pkg/money"
 	"github.com/kave-io/kave/core/store"
 	runtimev1 "github.com/kave-io/kave/proto/gen/kave/runtime/v1"
 	"google.golang.org/grpc"
@@ -393,6 +395,237 @@ func (s *Server) GetSpendReport(ctx context.Context, req *runtimev1.GetSpendRepo
 		return nil, err
 	}
 	return spendReportToProto(report), nil
+}
+
+// ── Aggregate Read Models ─────────────────────────────────────────────────
+
+func (s *Server) GetDashboardOverview(ctx context.Context, req *runtimev1.GetDashboardOverviewRequest) (*runtimev1.DashboardOverview, error) {
+	recentLimit := int(req.RecentLimit)
+	if recentLimit <= 0 {
+		recentLimit = 12
+	}
+	if recentLimit > 100 {
+		recentLimit = 100
+	}
+
+	runFilter := &runtimemodel.RunFilter{
+		ProjectID: req.ProjectId,
+		EnvID:     req.EnvId,
+		FromMs:    req.FromMs,
+		ToMs:      req.ToMs,
+	}
+	runsPage, err := s.appStore.ListRuns(ctx, runFilter, store.Page{Limit: 1000})
+	if err != nil {
+		return nil, err
+	}
+
+	spend, err := s.appStore.GetSpendReport(ctx, &runtimemodel.SpendFilter{
+		ProjectID: req.ProjectId,
+		EnvID:     req.EnvId,
+		FromMs:    req.FromMs,
+		ToMs:      req.ToMs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	spansPage, err := s.spanStore.QuerySpans(ctx, &runtimemodel.SpanFilter{
+		ProjectID: req.ProjectId,
+		EnvID:     req.EnvId,
+		FromMs:    req.FromMs,
+		ToMs:      req.ToMs,
+	}, store.Page{Limit: 10000})
+	if err != nil {
+		return nil, err
+	}
+
+	overview := &runtimev1.DashboardOverview{
+		Spend: spendReportToProto(spend),
+	}
+	agentRuns := map[string]int32{}
+	agentSpend := map[string]money.Amount{}
+
+	var latencyCount int64
+	for _, run := range runsPage.Items {
+		overview.TotalRuns++
+		agentRuns[run.AgentID]++
+		if run.Spent != 0 {
+			agentSpend[run.AgentID] += run.Spent
+		}
+		switch run.Status {
+		case "active":
+			overview.ActiveRuns++
+		case "blocked":
+			overview.BlockedRuns++
+		case "failed":
+			overview.FailedRuns++
+		}
+		if run.EndedAt != nil && run.StartedAt > 0 && *run.EndedAt >= run.StartedAt {
+			overview.AvgLatencyMs += *run.EndedAt - run.StartedAt
+			latencyCount++
+		}
+		if len(overview.RecentRuns) < recentLimit {
+			overview.RecentRuns = append(overview.RecentRuns, runToProto(run))
+		}
+		if (run.Status == "blocked" || run.Status == "failed") && len(overview.RecentAttentionRuns) < recentLimit {
+			overview.RecentAttentionRuns = append(overview.RecentAttentionRuns, runToProto(run))
+		}
+	}
+	if latencyCount > 0 {
+		overview.AvgLatencyMs /= latencyCount
+	}
+
+	for _, span := range spansPage.Items {
+		if span.InputTokens != nil {
+			overview.TotalInputTokens += int64(*span.InputTokens)
+		}
+		if span.OutputTokens != nil {
+			overview.TotalOutputTokens += int64(*span.OutputTokens)
+		}
+		if span.Cost != nil {
+			agentSpend[span.AgentID] += *span.Cost
+		}
+	}
+
+	overview.TopAgents = s.dashboardTopAgents(ctx, req.EnvId, agentRuns, agentSpend, recentLimit)
+	return overview, nil
+}
+
+func (s *Server) GetTraceGraph(ctx context.Context, req *runtimev1.GetTraceGraphRequest) (*runtimev1.TraceGraph, error) {
+	limit := int(req.Limit)
+	if limit <= 0 {
+		limit = 1000
+	}
+	if limit > 10000 {
+		limit = 10000
+	}
+
+	filter := &runtimemodel.SpanFilter{RunID: req.RunId, TraceID: req.TraceId}
+	if filter.RunID == "" && filter.TraceID == "" {
+		return nil, status.Error(codes.InvalidArgument, "run_id or trace_id is required")
+	}
+	spansPage, err := s.spanStore.QuerySpans(ctx, filter, store.Page{Limit: limit})
+	if err != nil {
+		return nil, err
+	}
+
+	runID := req.RunId
+	if runID == "" && len(spansPage.Items) > 0 {
+		runID = spansPage.Items[0].RunID
+	}
+	run, err := s.appStore.GetRunByID(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if run == nil {
+		return nil, status.Errorf(codes.NotFound, "run %q not found", runID)
+	}
+
+	graph := &runtimev1.TraceGraph{
+		Run: runToProto(run),
+	}
+	if run.EndedAt != nil && run.StartedAt > 0 && *run.EndedAt >= run.StartedAt {
+		graph.TotalDurationMs = *run.EndedAt - run.StartedAt
+	}
+	graph.Spans = make([]*runtimev1.SpanRow, 0, len(spansPage.Items))
+	graph.Nodes = make([]*runtimev1.TraceGraphNode, 0, len(spansPage.Items))
+
+	base := run.StartedAt
+	if base == 0 && len(spansPage.Items) > 0 {
+		base = spansPage.Items[0].StartedAt
+	}
+	depthByID := spanDepths(spansPage.Items)
+
+	var totalCost money.Amount
+	for _, span := range spansPage.Items {
+		graph.Spans = append(graph.Spans, spanToProto(span))
+		node := &runtimev1.TraceGraphNode{
+			SpanId:     span.ID,
+			Name:       span.Name,
+			Connector:  span.Connector,
+			HasError:   span.Error != nil && *span.Error != "",
+			Depth:      int32(depthByID[span.ID]),
+			OffsetMs:   span.StartedAt - base,
+			DurationMs: span.DurationMs,
+		}
+		if span.ParentID != nil {
+			node.ParentSpanId = *span.ParentID
+			graph.Edges = append(graph.Edges, &runtimev1.TraceGraphEdge{ParentSpanId: *span.ParentID, ChildSpanId: span.ID})
+		}
+		if span.Model != nil {
+			node.Model = *span.Model
+		}
+		if span.Cost != nil {
+			node.Cost = amountToProto(*span.Cost)
+			totalCost += *span.Cost
+		}
+		if span.InputTokens != nil {
+			node.InputTokens = int64(*span.InputTokens)
+			graph.TotalInputTokens += int64(*span.InputTokens)
+		}
+		if span.OutputTokens != nil {
+			node.OutputTokens = int64(*span.OutputTokens)
+			graph.TotalOutputTokens += int64(*span.OutputTokens)
+		}
+		if end := span.StartedAt + span.DurationMs - base; end > graph.TotalDurationMs {
+			graph.TotalDurationMs = end
+		}
+		graph.Nodes = append(graph.Nodes, node)
+	}
+	graph.TotalCost = amountToProto(totalCost)
+	return graph, nil
+}
+
+func (s *Server) dashboardTopAgents(ctx context.Context, envID string, runCounts map[string]int32, spend map[string]money.Amount, limit int) []*runtimev1.DashboardAgentSpend {
+	agents, _ := s.appStore.ListAgents(ctx, envID, store.Page{Limit: 10000})
+	names := make(map[string]string, len(agents.Items))
+	for _, agent := range agents.Items {
+		names[agent.ID] = agent.Name
+		if _, ok := spend[agent.ID]; !ok {
+			spend[agent.ID] = 0
+		}
+	}
+
+	rows := make([]*runtimev1.DashboardAgentSpend, 0, len(spend))
+	for agentID, amount := range spend {
+		rows = append(rows, &runtimev1.DashboardAgentSpend{
+			AgentId:   agentID,
+			AgentName: names[agentID],
+			Spend:     amountToProto(amount),
+			RunCount:  runCounts[agentID],
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		return spend[rows[i].AgentId] > spend[rows[j].AgentId]
+	})
+	if len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows
+}
+
+func spanDepths(spans []*runtimemodel.SpanRow) map[string]int {
+	byID := make(map[string]*runtimemodel.SpanRow, len(spans))
+	for _, span := range spans {
+		byID[span.ID] = span
+	}
+	depths := make(map[string]int, len(spans))
+	var depthOf func(*runtimemodel.SpanRow) int
+	depthOf = func(span *runtimemodel.SpanRow) int {
+		if span == nil || span.ParentID == nil || *span.ParentID == "" {
+			return 0
+		}
+		if d, ok := depths[span.ID]; ok {
+			return d
+		}
+		d := depthOf(byID[*span.ParentID]) + 1
+		depths[span.ID] = d
+		return d
+	}
+	for _, span := range spans {
+		depths[span.ID] = depthOf(span)
+	}
+	return depths
 }
 
 // ── Streaming Operations ───────────────────────────────────────────────────

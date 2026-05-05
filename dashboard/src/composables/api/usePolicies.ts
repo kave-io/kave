@@ -3,11 +3,22 @@ import type { Ref } from 'vue'
 import type { CreatePolicyRequest } from '@/types/api'
 import { policiesClient } from '@/lib/rpc/clients'
 
+function unrefString(v: string | Ref<string>) {
+  return typeof v === 'string' ? v : v.value
+}
+
+export function usePolicies(envId: string | Ref<string>) {
+  return useQuery({
+    queryKey: ['policies', envId],
+    queryFn: () => policiesClient.list(unrefString(envId)),
+  })
+}
+
 export function usePolicy(id: string | Ref<string>) {
   return useQuery({
     queryKey: ['policy', id],
-    queryFn: () => policiesClient.get(typeof id === 'string' ? id : id.value),
-    enabled: !!(typeof id === 'string' ? id : id.value),
+    queryFn: () => policiesClient.get(unrefString(id)),
+    enabled: () => !!unrefString(id),
   })
 }
 

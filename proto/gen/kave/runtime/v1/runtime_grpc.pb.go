@@ -19,27 +19,29 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RuntimeService_CreateRun_FullMethodName      = "/kave.runtime.v1.RuntimeService/CreateRun"
-	RuntimeService_GetRun_FullMethodName         = "/kave.runtime.v1.RuntimeService/GetRun"
-	RuntimeService_ListRuns_FullMethodName       = "/kave.runtime.v1.RuntimeService/ListRuns"
-	RuntimeService_UpdateRun_FullMethodName      = "/kave.runtime.v1.RuntimeService/UpdateRun"
-	RuntimeService_CancelRun_FullMethodName      = "/kave.runtime.v1.RuntimeService/CancelRun"
-	RuntimeService_WatchRuns_FullMethodName      = "/kave.runtime.v1.RuntimeService/WatchRuns"
-	RuntimeService_CreateAction_FullMethodName   = "/kave.runtime.v1.RuntimeService/CreateAction"
-	RuntimeService_GetAction_FullMethodName      = "/kave.runtime.v1.RuntimeService/GetAction"
-	RuntimeService_ListActions_FullMethodName    = "/kave.runtime.v1.RuntimeService/ListActions"
-	RuntimeService_OpenSpan_FullMethodName       = "/kave.runtime.v1.RuntimeService/OpenSpan"
-	RuntimeService_CloseSpan_FullMethodName      = "/kave.runtime.v1.RuntimeService/CloseSpan"
-	RuntimeService_GetSpan_FullMethodName        = "/kave.runtime.v1.RuntimeService/GetSpan"
-	RuntimeService_QuerySpans_FullMethodName     = "/kave.runtime.v1.RuntimeService/QuerySpans"
-	RuntimeService_WatchEvents_FullMethodName    = "/kave.runtime.v1.RuntimeService/WatchEvents"
-	RuntimeService_WatchLogs_FullMethodName      = "/kave.runtime.v1.RuntimeService/WatchLogs"
-	RuntimeService_TailTraces_FullMethodName     = "/kave.runtime.v1.RuntimeService/TailTraces"
-	RuntimeService_StreamSpans_FullMethodName    = "/kave.runtime.v1.RuntimeService/StreamSpans"
-	RuntimeService_ExportTrace_FullMethodName    = "/kave.runtime.v1.RuntimeService/ExportTrace"
-	RuntimeService_IngestTraces_FullMethodName   = "/kave.runtime.v1.RuntimeService/IngestTraces"
-	RuntimeService_GetPriceBook_FullMethodName   = "/kave.runtime.v1.RuntimeService/GetPriceBook"
-	RuntimeService_GetSpendReport_FullMethodName = "/kave.runtime.v1.RuntimeService/GetSpendReport"
+	RuntimeService_CreateRun_FullMethodName            = "/kave.runtime.v1.RuntimeService/CreateRun"
+	RuntimeService_GetRun_FullMethodName               = "/kave.runtime.v1.RuntimeService/GetRun"
+	RuntimeService_ListRuns_FullMethodName             = "/kave.runtime.v1.RuntimeService/ListRuns"
+	RuntimeService_UpdateRun_FullMethodName            = "/kave.runtime.v1.RuntimeService/UpdateRun"
+	RuntimeService_CancelRun_FullMethodName            = "/kave.runtime.v1.RuntimeService/CancelRun"
+	RuntimeService_WatchRuns_FullMethodName            = "/kave.runtime.v1.RuntimeService/WatchRuns"
+	RuntimeService_CreateAction_FullMethodName         = "/kave.runtime.v1.RuntimeService/CreateAction"
+	RuntimeService_GetAction_FullMethodName            = "/kave.runtime.v1.RuntimeService/GetAction"
+	RuntimeService_ListActions_FullMethodName          = "/kave.runtime.v1.RuntimeService/ListActions"
+	RuntimeService_OpenSpan_FullMethodName             = "/kave.runtime.v1.RuntimeService/OpenSpan"
+	RuntimeService_CloseSpan_FullMethodName            = "/kave.runtime.v1.RuntimeService/CloseSpan"
+	RuntimeService_GetSpan_FullMethodName              = "/kave.runtime.v1.RuntimeService/GetSpan"
+	RuntimeService_QuerySpans_FullMethodName           = "/kave.runtime.v1.RuntimeService/QuerySpans"
+	RuntimeService_WatchEvents_FullMethodName          = "/kave.runtime.v1.RuntimeService/WatchEvents"
+	RuntimeService_WatchLogs_FullMethodName            = "/kave.runtime.v1.RuntimeService/WatchLogs"
+	RuntimeService_TailTraces_FullMethodName           = "/kave.runtime.v1.RuntimeService/TailTraces"
+	RuntimeService_StreamSpans_FullMethodName          = "/kave.runtime.v1.RuntimeService/StreamSpans"
+	RuntimeService_ExportTrace_FullMethodName          = "/kave.runtime.v1.RuntimeService/ExportTrace"
+	RuntimeService_IngestTraces_FullMethodName         = "/kave.runtime.v1.RuntimeService/IngestTraces"
+	RuntimeService_GetPriceBook_FullMethodName         = "/kave.runtime.v1.RuntimeService/GetPriceBook"
+	RuntimeService_GetSpendReport_FullMethodName       = "/kave.runtime.v1.RuntimeService/GetSpendReport"
+	RuntimeService_GetDashboardOverview_FullMethodName = "/kave.runtime.v1.RuntimeService/GetDashboardOverview"
+	RuntimeService_GetTraceGraph_FullMethodName        = "/kave.runtime.v1.RuntimeService/GetTraceGraph"
 )
 
 // RuntimeServiceClient is the client API for RuntimeService service.
@@ -76,6 +78,9 @@ type RuntimeServiceClient interface {
 	// Cost operations
 	GetPriceBook(ctx context.Context, in *GetPriceBookRequest, opts ...grpc.CallOption) (*PriceBook, error)
 	GetSpendReport(ctx context.Context, in *GetSpendReportRequest, opts ...grpc.CallOption) (*SpendReport, error)
+	// Aggregate read models
+	GetDashboardOverview(ctx context.Context, in *GetDashboardOverviewRequest, opts ...grpc.CallOption) (*DashboardOverview, error)
+	GetTraceGraph(ctx context.Context, in *GetTraceGraphRequest, opts ...grpc.CallOption) (*TraceGraph, error)
 }
 
 type runtimeServiceClient struct {
@@ -341,6 +346,26 @@ func (c *runtimeServiceClient) GetSpendReport(ctx context.Context, in *GetSpendR
 	return out, nil
 }
 
+func (c *runtimeServiceClient) GetDashboardOverview(ctx context.Context, in *GetDashboardOverviewRequest, opts ...grpc.CallOption) (*DashboardOverview, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DashboardOverview)
+	err := c.cc.Invoke(ctx, RuntimeService_GetDashboardOverview_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *runtimeServiceClient) GetTraceGraph(ctx context.Context, in *GetTraceGraphRequest, opts ...grpc.CallOption) (*TraceGraph, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TraceGraph)
+	err := c.cc.Invoke(ctx, RuntimeService_GetTraceGraph_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RuntimeServiceServer is the server API for RuntimeService service.
 // All implementations must embed UnimplementedRuntimeServiceServer
 // for forward compatibility.
@@ -375,6 +400,9 @@ type RuntimeServiceServer interface {
 	// Cost operations
 	GetPriceBook(context.Context, *GetPriceBookRequest) (*PriceBook, error)
 	GetSpendReport(context.Context, *GetSpendReportRequest) (*SpendReport, error)
+	// Aggregate read models
+	GetDashboardOverview(context.Context, *GetDashboardOverviewRequest) (*DashboardOverview, error)
+	GetTraceGraph(context.Context, *GetTraceGraphRequest) (*TraceGraph, error)
 	mustEmbedUnimplementedRuntimeServiceServer()
 }
 
@@ -447,6 +475,12 @@ func (UnimplementedRuntimeServiceServer) GetPriceBook(context.Context, *GetPrice
 }
 func (UnimplementedRuntimeServiceServer) GetSpendReport(context.Context, *GetSpendReportRequest) (*SpendReport, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSpendReport not implemented")
+}
+func (UnimplementedRuntimeServiceServer) GetDashboardOverview(context.Context, *GetDashboardOverviewRequest) (*DashboardOverview, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDashboardOverview not implemented")
+}
+func (UnimplementedRuntimeServiceServer) GetTraceGraph(context.Context, *GetTraceGraphRequest) (*TraceGraph, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTraceGraph not implemented")
 }
 func (UnimplementedRuntimeServiceServer) mustEmbedUnimplementedRuntimeServiceServer() {}
 func (UnimplementedRuntimeServiceServer) testEmbeddedByValue()                        {}
@@ -812,6 +846,42 @@ func _RuntimeService_GetSpendReport_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RuntimeService_GetDashboardOverview_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDashboardOverviewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).GetDashboardOverview(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_GetDashboardOverview_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).GetDashboardOverview(ctx, req.(*GetDashboardOverviewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RuntimeService_GetTraceGraph_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTraceGraphRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RuntimeServiceServer).GetTraceGraph(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RuntimeService_GetTraceGraph_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RuntimeServiceServer).GetTraceGraph(ctx, req.(*GetTraceGraphRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RuntimeService_ServiceDesc is the grpc.ServiceDesc for RuntimeService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -882,6 +952,14 @@ var RuntimeService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSpendReport",
 			Handler:    _RuntimeService_GetSpendReport_Handler,
+		},
+		{
+			MethodName: "GetDashboardOverview",
+			Handler:    _RuntimeService_GetDashboardOverview_Handler,
+		},
+		{
+			MethodName: "GetTraceGraph",
+			Handler:    _RuntimeService_GetTraceGraph_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

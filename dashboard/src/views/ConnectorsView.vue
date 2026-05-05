@@ -1,7 +1,25 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { CONNECTORS, type Connector } from '@/data/mock'
-import { KIcon, KBtn, KBadge, KStatusBadge, KCopyBtn, KEmptyState, KLiveStream } from '@/components/kv'
+import { useCredentials } from '@/composables/api/useControl'
+import { envId } from '@/stores/workspace'
+import { KBtn, KBadge, KStatusBadge, KCopyBtn, KEmptyState, KLiveStream } from '@/components/kv'
+
+interface Connector { id: string; name: string; desc: string; methods: number; status: string }
+interface ConnectorGroup { kind: string; items: Connector[] }
+
+const CONNECTORS: ConnectorGroup[] = [
+  { kind: 'LLM Providers', items: [
+    { id: 'openai', name: 'OpenAI', desc: 'Chat, embeddings, audio, images. Proxied at /v1/openai.', methods: 18, status: 'available' },
+    { id: 'anthropic', name: 'Anthropic', desc: 'Claude family. Proxied at /v1/anthropic.', methods: 6, status: 'available' },
+    { id: 'gemini', name: 'Google Gemini', desc: 'Gemini API routing.', methods: 8, status: 'available' },
+    { id: 'ollama', name: 'Ollama', desc: 'Local model server routing.', methods: 4, status: 'available' },
+  ] },
+  { kind: 'Frameworks', items: [
+    { id: 'claude-code', name: 'Claude Code', desc: 'Anthropic CLI routed through Kave framework endpoints.', methods: 6, status: 'available' },
+  ] },
+]
+const credentialsQuery = useCredentials(envId)
+function credentialCount(id: string) { return (credentialsQuery.data.value ?? []).filter(c => c.connector_type === id).length }
 
 const selected = ref<Connector | null>(null)
 const tab = ref<'setup' | 'methods' | 'credentials' | 'traffic' | 'raw'>('setup')
@@ -59,8 +77,8 @@ const snippet = computed(() => selected.value
           <div class="desc">{{ c.desc }}</div>
           <div style="display: flex; gap: 12px; font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); border-top: 1px solid var(--border-soft); padding-top: 8px;">
             <span>{{ c.methods }} methods</span>
-            <span>{{ c.credentials }} cred</span>
-            <span style="margin-left: auto;">{{ c.traffic24h }} req/24h</span>
+            <span>{{ credentialCount(c.id) }} cred</span>
+            <span style="margin-left: auto;">live data</span>
           </div>
         </div>
       </div>
@@ -100,16 +118,7 @@ const snippet = computed(() => selected.value
           </table>
 
           <div v-else-if="tab === 'credentials'" style="padding: 16px;">
-            <table v-if="selected.credentials > 0" class="tbl">
-              <tbody>
-                <tr>
-                  <td class="mono" style="font-size: 12px;">cred_{{ selected.id }}_main</td>
-                  <td>•••• kEy42b8</td>
-                  <td>3d ago</td>
-                  <td><KStatusBadge status="active" /></td>
-                </tr>
-              </tbody>
-            </table>
+            <table v-if="credentialCount(selected.id) > 0" class="tbl"><tbody><tr v-for="cred in (credentialsQuery.data.value ?? []).filter(c => c.connector_type === selected!.id)" :key="cred.id"><td class="mono" style="font-size: 12px;">{{ cred.id }}</td><td>{{ cred.label }}</td><td>{{ cred.status }}</td><td><KStatusBadge :status="cred.status" /></td></tr></tbody></table>
             <KEmptyState v-else icon="key" title="No credentials">
               This connector requires credentials before agents can call it.
               <template #action>

@@ -1,61 +1,120 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { RUNS, mockSpans, fmtMs, fmtRel, fmtMoney, shortId, type Run, type RunStatus } from '@/data/mock'
+import { useRuns } from '@/composables/api/useRuns'
+import { useRunSpans } from '@/composables/api/useSpans'
+import { envId, projectId } from '@/stores/workspace'
+import { asNumber, fmtMoney, fmtMs, fmtRel } from '@/lib/format'
+import type { Run } from '@/types/api'
 import { KIcon, KBtn, KBadge, KCard, KStatusDot, KStatusBadge, KCopyBtn, KKv, KMini } from '@/components/kv'
 
 const currency = 'USD'
 
+type RunStatus = 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled' | 'timed_out'
+interface RunRow {
+  id: string
+  name: string
+  agent: string
+  agentId: string
+  policy: string
+  status: RunStatus
+  started: number
+  duration: number | null
+  spend: number
+  inputTokens: number
+  outputTokens: number
+  spans: number
+  provider: string
+  model: string
+  error: string | null
+  traceId: string
+  raw: Run
+}
+
+interface SpanRow {
+  id: string
+  parent: string | null
+  name: string
+  kind: string
+  start: number
+  dur: number
+  status: 'ok' | 'error'
+  depth: number
+  model?: string
+  provider?: string
+  inputTokens?: number
+  outputTokens?: number
+  cost?: number
+  error?: string
+}
+
 const search = ref('')
 const statusFilter = ref<RunStatus | 'all'>('all')
-const selected = ref<Run | null>(null)
+const selected = ref<RunRow | null>(null)
 const tab = ref<'timeline' | 'spans' | 'cost' | 'policy' | 'i/o' | 'raw'>('timeline')
+const runsQuery = useRuns({ projectId, envId, limit: 500 })
 
-const filtered = computed(() => RUNS.filter(r => {
+function rowStatus(status: string): RunStatus {
+  if (status === 'active') return 'running'
+  if (['completed', 'failed', 'blocked', 'cancelled', 'timed_out'].includes(status)) return status as RunStatus
+  return 'running'
+}
+
+const rows = computed<RunRow[]>(() => (runsQuery.data.value ?? []).map(r => ({
+  id: r.id,
+  name: r.name || r.id,
+  agent: r.agent_id || 'unknown-agent',
+  agentId: r.agent_id,
+  policy: r.policy_id || '-',
+  status: rowStatus(r.status),
+  started: r.started_at,
+  duration: r.ended_at ? Math.max(0, r.ended_at - r.started_at) : null,
+  spend: asNumber(r.spent),
+  inputTokens: 0,
+  outputTokens: 0,
+  spans: 0,
+  provider: 'daemon',
+  model: '-',
+  error: r.error_message ?? null,
+  traceId: r.id,
+  raw: r,
+})))
+
+const filtered = computed(() => rows.value.filter(r => {
   if (statusFilter.value !== 'all' && r.status !== statusFilter.value) return false
   if (search.value && !(r.name + r.agent + r.id).toLowerCase().includes(search.value.toLowerCase())) return false
   return true
 }))
 
-const STATUSES: (RunStatus | 'all')[] = ['all', 'running', 'completed', 'failed', 'blocked']
+const STATUSES: (RunStatus | 'all')[] = ['all', 'running', 'completed', 'failed', 'blocked', 'cancelled', 'timed_out']
 
-const spans = computed(() => selected.value ? mockSpans(selected.value) : [])
-const totalDur = computed(() => selected.value?.duration || 4200)
+const selectedRunId = computed(() => selected.value?.id ?? '')
+const spanQuery = useRunSpans(selectedRunId, 500)
+const firstSpanStart = computed(() => Math.min(...(spanQuery.data.value ?? []).map(s => s.started_at), selected.value?.started ?? Date.now()))
+const spans = computed<SpanRow[]>(() => (spanQuery.data.value ?? []).map(s => ({
+  id: s.id,
+  parent: s.parent_id ?? null,
+  name: s.name,
+  kind: s.error ? 'error' : s.model ? 'llm' : 'tool',
+  start: Math.max(0, s.started_at - firstSpanStart.value),
+  dur: s.duration_ms,
+  status: s.error ? 'error' : 'ok',
+  depth: s.parent_id ? 1 : 0,
+  model: s.model,
+  provider: s.model ? 'llm' : s.action_id,
+  inputTokens: s.input_tokens,
+  outputTokens: s.output_tokens,
+  cost: asNumber(s.cost),
+  error: s.error,
+})))
+const totalDur = computed(() => selected.value?.duration || Math.max(...spans.value.map(s => s.start + s.dur), 1))
 
 const llmSpans = computed(() => spans.value.filter(s => s.kind === 'llm'))
 const totalCost = computed(() => llmSpans.value.reduce((a, s) => a + (s.cost || 0), 0))
 const totalIn = computed(() => llmSpans.value.reduce((a, s) => a + (s.inputTokens || 0), 0))
 const totalOut = computed(() => llmSpans.value.reduce((a, s) => a + (s.outputTokens || 0), 0))
 
-const inputJson = computed(() => selected.value ? `{
-  "messages": [
-    { "role": "system", "content": "You are a helpful coding assistant." },
-    { "role": "user", "content": "Summarize the open PRs in kave-io/kave and group them by area." }
-  ],
-  "model": "${selected.value.model}",
-  "tools": [{ "type": "function", "function": { "name": "github_search" } }]
-}` : '')
-
-const outputJson = computed(() => {
-  const r = selected.value; if (!r) return ''
-  return r.status === 'failed'
-    ? `{
-  "error": {
-    "type": "connection_error",
-    "message": "upstream timeout after 30s"
-  }
-}`
-    : `{
-  "id": "chatcmpl-${shortId()}",
-  "choices": [{
-    "message": {
-      "role": "assistant",
-      "content": "Open PRs in kave-io/kave (12 total):\\n\\n**Dashboard (5)**\\n- #421 Live monitor empty state\\n- #418 Trace waterfall keyboard nav\\n…"
-    },
-    "finish_reason": "stop"
-  }],
-  "usage": { "prompt_tokens": ${r.inputTokens}, "completion_tokens": ${r.outputTokens} }
-}`
-})
+const inputJson = computed(() => selected.value ? JSON.stringify(selected.value.raw.metadata ?? {}, null, 2) : '')
+const outputJson = computed(() => selected.value ? JSON.stringify({ status: selected.value.raw.status, error: selected.value.raw.error_message ?? null }, null, 2) : '')
 </script>
 
 <template>

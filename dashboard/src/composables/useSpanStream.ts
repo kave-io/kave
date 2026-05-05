@@ -1,5 +1,7 @@
-import { ref, onUnmounted, type Ref } from 'vue'
+import { onUnmounted, ref, type Ref } from 'vue'
 import type { Span } from '@/types/api'
+import { spansClient } from '@/lib/rpc/clients'
+import { envId, projectId } from '@/stores/workspace'
 
 const MAX_LIVE_SPANS = 200
 
@@ -11,42 +13,38 @@ export interface UseSpanStreamOptions {
 export interface UseSpanStreamResult {
   spans: Ref<Span[]>
   isLive: Ref<boolean>
+  error: Ref<string | null>
 }
 
 export function useSpanStream(options: UseSpanStreamOptions = {}): UseSpanStreamResult {
   const spans = ref<Span[]>([])
   const isLive = ref(false)
+  const error = ref<string | null>(null)
+  const controller = new AbortController()
 
-  const url = new URL('/api/v1/spans/stream', window.location.origin)
-  if (options.runId) url.searchParams.set('run_id', options.runId)
-  if (options.actionId) url.searchParams.set('action_id', options.actionId)
-
-  const es = new EventSource(url.toString())
-
-  es.onopen = () => {
-    isLive.value = true
-  }
-
-  es.onmessage = (e: MessageEvent) => {
+  void (async () => {
     try {
-      const span = JSON.parse(e.data) as Span
-      spans.value.unshift(span)
-      if (spans.value.length > MAX_LIVE_SPANS) {
-        spans.value.length = MAX_LIVE_SPANS
+      const stream = await spansClient.stream(
+        { projectId: projectId.value, envId: envId.value, runId: options.runId },
+        controller.signal,
+      )
+      isLive.value = true
+      for await (const span of stream) {
+        if (options.actionId && span.action_id !== options.actionId) continue
+        spans.value.unshift(span)
+        if (spans.value.length > MAX_LIVE_SPANS) spans.value.length = MAX_LIVE_SPANS
       }
-    } catch {
-      // ignore malformed events
+    } catch (err) {
+      if (!controller.signal.aborted) error.value = err instanceof Error ? err.message : 'Span stream disconnected'
+    } finally {
+      isLive.value = false
     }
-  }
-
-  es.onerror = () => {
-    isLive.value = false
-  }
+  })()
 
   onUnmounted(() => {
-    es.close()
+    controller.abort()
     isLive.value = false
   })
 
-  return { spans, isLive }
+  return { spans, isLive, error }
 }

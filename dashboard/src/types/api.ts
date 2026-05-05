@@ -134,3 +134,108 @@ export interface CreatePolicyRequest {
   allowed_methods?: string[]
   config?: Record<string, unknown>
 }
+
+export interface AgentToken {
+  id: string
+  agent_id: string
+  name: string
+  token_prefix: string
+  status: string
+  created_at: number
+  last_used_at?: number
+  expires_at?: number
+}
+
+export interface ConnectorCredential {
+  id: string
+  env_id: string
+  connector_type: string
+  label: string
+  status: string
+  created_at: number
+  last_used_at?: number
+}
+
+export interface DaemonStatus {
+  pid: string
+  version: string
+  uptime: string
+  started_at: number
+  status: Record<string, string>
+}
+
+export interface AuditEntry {
+  id: string
+  ts: number
+  actor: string
+  action: string
+  resource: string
+  resource_type: string
+  result: 'ok' | 'blocked'
+}
+
+export type EventTone = 'success' | 'info' | 'danger' | 'warning' | 'neutral'
+
+export interface LiveEvent {
+  id: string
+  ts: number
+  kind: string
+  tone: EventTone
+  agent: string
+  agentId: string
+  runId: string
+  traceId: string
+  provider: string
+  model: string
+  method: string
+  duration: number | null
+  cost: number | null
+  inputTokens: number
+  outputTokens: number
+}
+
+export interface DashboardAgentSpend {
+  agent_id: string
+  agent_name: string
+  spend: string
+  run_count: number
+}
+
+export interface DashboardOverview {
+  total_runs: number
+  active_runs: number
+  blocked_runs: number
+  failed_runs: number
+  avg_latency_ms: number
+  total_input_tokens: number
+  total_output_tokens: number
+  spend: SpendReport
+  recent_runs: Run[]
+  recent_attention_runs: Run[]
+  top_agents: DashboardAgentSpend[]
+}
+
+export interface TraceGraphNode {
+  span_id: string
+  parent_span_id: string
+  name: string
+  connector: string
+  model: string
+  has_error: boolean
+  depth: number
+  offset_ms: number
+  duration_ms: number
+  cost: string
+  input_tokens: number
+  output_tokens: number
+}
+
+export interface TraceGraph {
+  run?: Run
+  spans: Span[]
+  nodes: TraceGraphNode[]
+  total_duration_ms: number
+  total_cost: string
+  total_input_tokens: number
+  total_output_tokens: number
+}
