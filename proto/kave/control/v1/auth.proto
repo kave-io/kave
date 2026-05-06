@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package kave.control.v1;
+
+import "google/protobuf/empty.proto";
+import "kave/control/v1/org.proto";
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/control/v1;control";
+
+// AuthService exposes user authentication, session, and token management.
+service AuthService {
+  // Authentication
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  rpc Login(LoginRequest) returns (AuthResponse);
+  rpc Logout(LogoutRequest) returns (google.protobuf.Empty);
+  rpc Whoami(google.protobuf.Empty) returns (User);
+  rpc ChangePassword(ChangePasswordRequest) returns (google.protobuf.Empty);
+
+  // Session management
+  rpc ListSessions(google.protobuf.Empty) returns (ListSessionsResponse);
+  rpc RevokeSession(RevokeSessionRequest) returns (google.protobuf.Empty);
+
+  // API token management
+  rpc CreateAPIToken(CreateAPITokenRequest) returns (CreateAPITokenResponse);
+  rpc ListAPITokens(google.protobuf.Empty) returns (ListAPITokensResponse);
+  rpc RevokeAPIToken(RevokeAPITokenRequest) returns (google.protobuf.Empty);
+
+  // Agent token management
+  rpc CreateAgentToken(CreateAgentTokenRequest) returns (CreateAgentTokenResponse);
+  rpc ListAgentTokens(google.protobuf.Empty) returns (ListAgentTokensResponse);
+  rpc RevokeAgentToken(RevokeAgentTokenRequest) returns (google.protobuf.Empty);
+}
+
+// --- Auth Requests/Responses ---
+
+message RegisterRequest {
+  string email = 1;
+  string name = 2;
+  string password = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LogoutRequest {
+  string session_id = 1;
+}
+
+message ChangePasswordRequest {
+  string old_password = 1;
+  string new_password = 2;
+}
+
+message AuthResponse {
+  string token = 1;        // session or API token
+  User user = 2;
+}
+
+// --- Session Management ---
+
+message RevokeSessionRequest {
+  string session_id = 1;
+}
+
+message ListSessionsResponse {
+  repeated Session sessions = 1;
+}
+
+message Session {
+  string id = 1;
+  string user_id = 2;
+  int64 created_at = 3;
+  int64 expires_at = 4;
+}
+
+// --- API Token Management ---
+
+message CreateAPITokenRequest {
+  string name = 1;
+}
+
+message CreateAPITokenResponse {
+  APIToken token = 1;
+  string raw_token = 2;  // shown only once
+}
+
+message ListAPITokensResponse {
+  repeated APIToken tokens = 1;
+}
+
+message APIToken {
+  string id = 1;
+  string name = 2;
+  int64 created_at = 3;
+  int64 last_used_at = 4;
+  int64 expires_at = 5;
+}
+
+message RevokeAPITokenRequest {
+  string token_id = 1;
+}
+
+// --- Agent Token Management ---
+
+message CreateAgentTokenRequest {
+  string agent_id = 1;
+  string name = 2;
+}
+
+message CreateAgentTokenResponse {
+  AgentTokenInfo token = 1;
+  string raw_token = 2;  // shown only once
+}
+
+message ListAgentTokensResponse {
+  repeated AgentTokenInfo tokens = 1;
+}
+
+message AgentTokenInfo {
+  string id = 1;
+  string agent_id = 2;
+  string name = 3;
+  int64 created_at = 4;
+  int64 last_used_at = 5;
+  int64 expires_at = 6;
+}
+
+message RevokeAgentTokenRequest {
+  string token_id = 1;
+}
+

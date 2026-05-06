@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package kave.runtime.v1;
+
+import "kave/common/v1/common.proto";
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/runtime/v1;runtime";
+
+// FXService provides currency conversion and rate management.
+service FXService {
+  rpc ListCurrencies(ListCurrenciesRequest) returns (ListCurrenciesResponse);
+  rpc ListRates(ListRatesRequest) returns (ListRatesResponse);
+  rpc Convert(ConvertRequest) returns (ConvertResponse);
+  rpc Refresh(RefreshRequest) returns (RefreshResponse);
+}
+
+// ListCurrenciesRequest lists all supported currencies.
+message ListCurrenciesRequest {}
+
+// ListCurrenciesResponse returns the list of supported currencies.
+message ListCurrenciesResponse {
+  repeated Currency currencies = 1;
+}
+
+// Currency metadata.
+message Currency {
+  string code = 1;        // ISO 4217 code (e.g., "USD", "EUR", "TMN")
+  string name = 2;        // Human-readable name
+  string symbol = 3;      // Currency symbol (e.g., "$", "€")
+  int64 fetched_at_ms = 4; // UnixMilli when metadata was last refreshed
+}
+
+// ListRatesRequest lists exchange rates.
+message ListRatesRequest {
+  string base = 1;              // Base currency code (defaults to "USD")
+  repeated string quotes = 2;   // Quote currencies (defaults to ["EUR", "IRR", "TMN"])
+}
+
+// ListRatesResponse returns a list of exchange rates.
+message ListRatesResponse {
+  repeated RateSnapshot rates = 1;
+}
+
+// RateSnapshot captures a single FX rate at a moment in time.
+message RateSnapshot {
+  string base = 1;              // Base currency code (e.g., "USD")
+  string quote = 2;             // Quote currency code (e.g., "TMN")
+  int64 rate_micro = 3;         // Rate × 1e6 (integer); 1 USD = 60_000.5 TMN → 60_000_500_000
+  int64 captured_at_unix_ms = 4; // UnixMilli when the rate was captured
+  string source = 5;            // "frankfurter" | "operator" | "request"
+}
+
+// ConvertRequest converts an amount from one currency to another.
+message ConvertRequest {
+  kave.common.v1.Amount amount = 1;        // Amount with currency context (has currency field)
+  string to_currency = 2;                  // Target currency code
+  optional RateSnapshot snapshot = 3;      // Optional: caller-supplied rate snapshot
+}
+
+// ConvertResponse returns the converted amount and the rate used.
+message ConvertResponse {
+  kave.common.v1.Amount input = 1;         // Original amount with currency
+  kave.common.v1.Amount output = 2;        // Converted amount with currency
+  RateSnapshot snapshot = 3;               // The rate snapshot used for conversion
+}
+
+// RefreshRequest triggers an on-demand refresh of exchange rates.
+message RefreshRequest {}
+
+// RefreshResponse returns the result of a refresh operation.
+message RefreshResponse {
+  string status = 1;              // "ok" or error status
+  int64 refreshed_at_ms = 2;      // UnixMilli when the refresh completed
+  optional string error_message = 3; // Error details if status is not "ok"
+}

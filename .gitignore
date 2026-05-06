@@ -84,7 +84,7 @@ kave-data/
 *.duckdb.wal
 server/tmp/
 gen-docs
-kave
+/kave
 
 # Generated dashboard RPC clients are committed with the dashboard app.
 !dashboard/src/gen/

@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package kave.control.v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/control/v1;control";
+
+// DaemonService exposes daemon lifecycle and configuration operations.
+service DaemonService {
+  rpc Status(google.protobuf.Empty) returns (DaemonStatusResponse);
+  rpc Doctor(google.protobuf.Empty) returns (DoctorReportResponse);
+  rpc ConfigView(google.protobuf.Empty) returns (ConfigViewResponse);
+  rpc ConfigDiff(google.protobuf.Empty) returns (ConfigDiffResponse);
+  rpc ConfigPaths(google.protobuf.Empty) returns (ConfigPathsResponse);
+  rpc BuildPlan(google.protobuf.Empty) returns (ApplyPlanResponse);
+  rpc Apply(ApplyRequest) returns (ApplyReportResponse);
+  rpc ConfigReload(google.protobuf.Empty) returns (ConfigReloadReportResponse);
+  rpc AdminStore(google.protobuf.Empty) returns (AdminStoreReportResponse);
+}
+
+// --- Status and Health ---
+
+message DaemonStatusResponse {
+  string pid = 1;
+  string version = 2;
+  int64 started_at = 3;
+  string uptime = 4;
+  map<string, string> status = 5;  // arbitrary key-value status
+}
+
+message DoctorReportResponse {
+  repeated DoctorCheck checks = 1;
+}
+
+message DoctorCheck {
+  string name = 1;
+  string status = 2;  // ok, warning, error
+  string message = 3;
+  string detail = 4;
+}
+
+// --- Configuration ---
+
+message ConfigViewResponse {
+  string raw = 1;  // YAML or JSON representation of config file
+}
+
+message ConfigDiffResponse {
+  string diff = 1;  // unified diff format
+}
+
+message ConfigPathsResponse {
+  string config_dir = 1;
+  string config_file = 2;
+  string data_dir = 3;
+  string log_file = 4;
+  string pid_file = 5;
+}
+
+// --- Apply / Plan ---
+
+message ApplyRequest {
+  bool prune = 1;  // whether to delete resources no longer in config
+}
+
+message ApplyPlanResponse {
+  repeated PlannedChange changes = 1;
+}
+
+message PlannedChange {
+  string resource_type = 1;  // e.g. "org", "project", "environment"
+  string resource_id = 2;
+  string action = 3;         // "create", "update", "delete"
+  string summary = 4;
+}
+
+message ApplyReportResponse {
+  int32 created = 1;
+  int32 updated = 2;
+  int32 deleted = 3;
+  string summary = 4;
+  repeated ApplyError errors = 5;
+}
+
+message ApplyError {
+  string resource_id = 1;
+  string message = 2;
+}
+
+// --- Reload ---
+
+message ConfigReloadReportResponse {
+  bool success = 1;
+  string message = 2;
+  int32 resources_loaded = 3;
+}
+
+// --- Admin ---
+
+message AdminStoreReportResponse {
+  string database_url = 1;
+  int64 tables_count = 2;
+  string total_size = 3;
+  map<string, StoreTableInfo> tables = 4;
+}
+
+message StoreTableInfo {
+  int64 row_count = 1;
+  string approx_size = 2;
+}
