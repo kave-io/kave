@@ -144,3 +144,4 @@ export enum TrustMode {
  */
 export const TrustModeSchema: GenEnum<TrustMode> = /*@__PURE__*/
   enumDesc(file_kave_control_v1_environment, 1);
+

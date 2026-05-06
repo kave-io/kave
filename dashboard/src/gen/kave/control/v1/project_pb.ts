@@ -65,3 +65,4 @@ export type Project = Message<"kave.control.v1.Project"> & {
  */
 export const ProjectSchema: GenMessage<Project> = /*@__PURE__*/
   messageDesc(file_kave_control_v1_project, 0);
+

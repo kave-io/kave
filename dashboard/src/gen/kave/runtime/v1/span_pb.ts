@@ -570,14 +570,14 @@ export enum SpanKind {
   UNSPECIFIED = 0,
 
   /**
-   * intercepted action Kave executed
+   * intercepted action Kave could block
    *
    * @generated from enum value: SPAN_KIND_ACTION = 1;
    */
   ACTION = 1,
 
   /**
-   * action reported by the agent after the fact
+   * action Kave learned about outside a blockable boundary
    *
    * @generated from enum value: SPAN_KIND_OBSERVED_ACTION = 2;
    */
@@ -635,3 +635,4 @@ export enum SpanSource {
  */
 export const SpanSourceSchema: GenEnum<SpanSource> = /*@__PURE__*/
   enumDesc(file_kave_runtime_v1_span, 1);
+

@@ -546,3 +546,4 @@ export type SpendReport = Message<"kave.runtime.v1.SpendReport"> & {
  */
 export const SpendReportSchema: GenMessage<SpendReport> = /*@__PURE__*/
   messageDesc(file_kave_runtime_v1_cost, 5);
+

@@ -180,3 +180,4 @@ export enum AgentStatus {
  */
 export const AgentStatusSchema: GenEnum<AgentStatus> = /*@__PURE__*/
   enumDesc(file_kave_control_v1_agent, 0);
+

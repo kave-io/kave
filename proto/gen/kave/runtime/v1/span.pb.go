@@ -27,8 +27,8 @@ type SpanKind int32
 
 const (
 	SpanKind_SPAN_KIND_UNSPECIFIED     SpanKind = 0
-	SpanKind_SPAN_KIND_ACTION          SpanKind = 1 // intercepted action Kave executed
-	SpanKind_SPAN_KIND_OBSERVED_ACTION SpanKind = 2 // action reported by the agent after the fact
+	SpanKind_SPAN_KIND_ACTION          SpanKind = 1 // intercepted action Kave could block
+	SpanKind_SPAN_KIND_OBSERVED_ACTION SpanKind = 2 // action Kave learned about outside a blockable boundary
 	SpanKind_SPAN_KIND_IMPORT          SpanKind = 3 // span imported from an external trace source
 )
 

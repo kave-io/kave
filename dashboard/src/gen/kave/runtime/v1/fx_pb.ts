@@ -346,3 +346,4 @@ export const FXService: GenService<{
   },
 }> = /*@__PURE__*/
   serviceDesc(file_kave_runtime_v1_fx, 0);
+

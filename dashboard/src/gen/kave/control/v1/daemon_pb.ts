@@ -471,3 +471,4 @@ export const DaemonService: GenService<{
   },
 }> = /*@__PURE__*/
   serviceDesc(file_kave_control_v1_daemon, 0);
+

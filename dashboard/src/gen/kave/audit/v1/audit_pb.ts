@@ -387,3 +387,4 @@ export const AuditService: GenService<{
   },
 }> = /*@__PURE__*/
   serviceDesc(file_kave_audit_v1_audit, 0);
+

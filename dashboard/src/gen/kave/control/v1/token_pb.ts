@@ -195,3 +195,4 @@ export type AgentTokenUpdate = Message<"kave.control.v1.AgentTokenUpdate"> & {
  */
 export const AgentTokenUpdateSchema: GenMessage<AgentTokenUpdate> = /*@__PURE__*/
   messageDesc(file_kave_control_v1_token, 1);
+

@@ -372,3 +372,4 @@ export enum CredentialStatus {
  */
 export const CredentialStatusSchema: GenEnum<CredentialStatus> = /*@__PURE__*/
   enumDesc(file_kave_control_v1_credential, 1);
+

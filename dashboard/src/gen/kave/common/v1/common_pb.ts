@@ -39,3 +39,4 @@ export type Amount = Message<"kave.common.v1.Amount"> & {
  */
 export const AmountSchema: GenMessage<Amount> = /*@__PURE__*/
   messageDesc(file_kave_common_v1_common, 0);
+

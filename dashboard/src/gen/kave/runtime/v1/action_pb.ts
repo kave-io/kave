@@ -351,7 +351,7 @@ export enum ActionSource {
   INTERCEPTED = 1,
 
   /**
-   * agent-reported after the fact; audit only
+   * learned outside a blockable boundary; audit only
    *
    * @generated from enum value: ACTION_SOURCE_OBSERVED = 2;
    */
@@ -363,3 +363,4 @@ export enum ActionSource {
  */
 export const ActionSourceSchema: GenEnum<ActionSource> = /*@__PURE__*/
   enumDesc(file_kave_runtime_v1_action, 2);
+

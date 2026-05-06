@@ -149,7 +149,7 @@ type ActionSource int32
 const (
 	ActionSource_ACTION_SOURCE_UNSPECIFIED ActionSource = 0
 	ActionSource_ACTION_SOURCE_INTERCEPTED ActionSource = 1 // Kave is in the causal path; can block
-	ActionSource_ACTION_SOURCE_OBSERVED    ActionSource = 2 // agent-reported after the fact; audit only
+	ActionSource_ACTION_SOURCE_OBSERVED    ActionSource = 2 // learned outside a blockable boundary; audit only
 )
 
 // Enum value maps for ActionSource.

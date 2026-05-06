@@ -130,3 +130,4 @@ export type DeleteBudgetRequest = Message<"kave.control.v1.DeleteBudgetRequest">
  */
 export const DeleteBudgetRequestSchema: GenMessage<DeleteBudgetRequest> = /*@__PURE__*/
   messageDesc(file_kave_control_v1_budget, 3);
+
