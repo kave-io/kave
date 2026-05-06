@@ -93,6 +93,7 @@ type RunStore interface {
 type ActionStore interface {
 	CreateAction(ctx context.Context, a *runtimemodel.ActionRecord) error
 	GetAction(ctx context.Context, id string) (*runtimemodel.ActionRecord, error)
+	UpdateAction(ctx context.Context, id string, update *runtimemodel.ActionUpdate) error
 	ListActionsByRun(ctx context.Context, runID string, page Page) (PageResult[*runtimemodel.ActionRecord], error)
 }
 

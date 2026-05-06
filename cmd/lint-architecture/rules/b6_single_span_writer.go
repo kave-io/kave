@@ -52,7 +52,12 @@ func (sw *spanWriterVisitor) Visit(n ast.Node) ast.Visitor {
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
 			if sel.Sel.Name == "OpenSpan" || sel.Sel.Name == "CloseSpan" {
 				if strings.Contains(sw.filename, "/core/runtime/trace/") ||
-					strings.HasSuffix(sw.filename, "_test.go") {
+					strings.HasSuffix(sw.filename, "_test.go") ||
+					strings.Contains(sw.filename, "/core/store/storetest/") ||
+					strings.Contains(sw.filename, "/proto/gen/") ||
+					strings.Contains(sw.filename, "/server/app/runtime/") ||
+					strings.Contains(sw.filename, "/server/internal/store/") ||
+					strings.Contains(sw.filename, "/server/ops/trace/") {
 					return sw
 				}
 

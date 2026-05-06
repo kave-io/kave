@@ -62,7 +62,7 @@ const palItems = computed(() => {
     { id: 'create-policy',   label: 'Create policy',               icon: 'plus', group: 'Actions', kind: 'action' as const, to: '/policies'   },
     { id: 'issue-token',     label: 'Issue agent token',           icon: 'key',  group: 'Actions', kind: 'action' as const, to: '/agents'     },
     { id: 'copy-openai',     label: 'Copy OpenAI proxy URL',       icon: 'copy', group: 'Actions', kind: 'action' as const, to: '/connectors' },
-    { id: 'copy-anthropic',  label: 'Copy Anthropic proxy URL',    icon: 'copy', group: 'Actions', kind: 'action' as const, to: '/connectors' },
+    { id: 'copy-github',     label: 'Copy GitHub tool URL',        icon: 'copy', group: 'Actions', kind: 'action' as const, to: '/connectors' },
   ]
   const all = [...base, ...actions]
   const q = palQ.value.toLowerCase()

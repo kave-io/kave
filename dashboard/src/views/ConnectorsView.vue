@@ -9,13 +9,10 @@ interface ConnectorGroup { kind: string; items: Connector[] }
 
 const CONNECTORS: ConnectorGroup[] = [
   { kind: 'LLM Providers', items: [
-    { id: 'openai', name: 'OpenAI', desc: 'Chat, embeddings, audio, images. Proxied at /v1/openai.', methods: 18, status: 'available' },
-    { id: 'anthropic', name: 'Anthropic', desc: 'Claude family. Proxied at /v1/anthropic.', methods: 6, status: 'available' },
-    { id: 'gemini', name: 'Google Gemini', desc: 'Gemini API routing.', methods: 8, status: 'available' },
-    { id: 'ollama', name: 'Ollama', desc: 'Local model server routing.', methods: 4, status: 'available' },
+    { id: 'openai', name: 'OpenAI Compatible', desc: 'Responses and Chat Completions routed through Kave.', methods: 4, status: 'available' },
   ] },
-  { kind: 'Frameworks', items: [
-    { id: 'claude-code', name: 'Claude Code', desc: 'Anthropic CLI routed through Kave framework endpoints.', methods: 6, status: 'available' },
+  { kind: 'Tools', items: [
+    { id: 'github', name: 'GitHub', desc: 'REST API tool calls routed through Kave.', methods: 2, status: 'available' },
   ] },
 ]
 const credentialsQuery = useCredentials(envId)
@@ -30,9 +27,7 @@ const visibleGroups = computed(() => CONNECTORS.filter(g => tabFilter.value === 
 
 const SNIPPETS: Record<string, string> = {
   openai: `export OPENAI_BASE_URL=http://127.0.0.1:18080/v1/openai\nexport OPENAI_API_KEY=<kave-agent-token>`,
-  anthropic: `export ANTHROPIC_BASE_URL=http://127.0.0.1:18080/v1/anthropic\nexport ANTHROPIC_API_KEY=<kave-agent-token>`,
-  'claude-code': `export ANTHROPIC_BASE_URL=http://127.0.0.1:18080/frameworks/claude-code/anthropic\nexport ANTHROPIC_API_KEY=<kave-agent-token>`,
-  ollama: `export OLLAMA_HOST=http://127.0.0.1:18080/frameworks/claude-code/ollama`,
+  github: `export KAVE_GITHUB_BASE_URL=http://127.0.0.1:18080/v1/tools/github\nexport KAVE_AGENT_TOKEN=<kave-agent-token>`,
 }
 const snippet = computed(() => selected.value
   ? (SNIPPETS[selected.value.id] || `# Setup snippets coming soon for ${selected.value.name}.`)
@@ -78,7 +73,7 @@ const snippet = computed(() => selected.value
           <div style="display: flex; gap: 12px; font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); border-top: 1px solid var(--border-soft); padding-top: 8px;">
             <span>{{ c.methods }} methods</span>
             <span>{{ credentialCount(c.id) }} cred</span>
-            <span style="margin-left: auto;">live data</span>
+            <span style="margin-left: auto;">registry</span>
           </div>
         </div>
       </div>
@@ -109,7 +104,7 @@ const snippet = computed(() => selected.value
           <table v-else-if="tab === 'methods'" class="tbl" style="margin: 0;">
             <thead><tr><th>Method</th><th>Verb</th><th>Allowed by default</th></tr></thead>
             <tbody>
-              <tr v-for="m in ['chat.completions','embeddings','models.list','audio.transcriptions']" :key="m">
+              <tr v-for="m in (selected.id === 'github' ? ['rest.read','rest.write'] : ['responses','responses.streaming','chat.completions','chat.completions.streaming'])" :key="m">
                 <td class="mono" style="font-size: 12px;">{{ m }}</td>
                 <td class="mono" style="font-size: 12px;">POST</td>
                 <td><KBadge tone="success">allow</KBadge></td>

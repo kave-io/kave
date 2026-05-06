@@ -49,6 +49,13 @@ func (i *Interceptor) Before(ctx context.Context, action *coreruntime.Action) (*
 		if action.EnvID == "" {
 			action.EnvID = id.EnvID
 		}
+		if !scopeAllows(id.Connectors, action.Connector) || !scopeAllows(id.Methods, action.Method) {
+			return nil, &ErrUnauthorizedError{
+				Subject: id.Subject(),
+				Object:  action.Connector + "." + action.Method,
+				Reason:  "agent token scope denied " + action.Connector + "." + action.Method,
+			}
+		}
 	default:
 		if !i.anonAllowed {
 			return nil, ErrUnauthenticated
@@ -56,6 +63,18 @@ func (i *Interceptor) Before(ctx context.Context, action *coreruntime.Action) (*
 	}
 
 	return action, nil
+}
+
+func scopeAllows(scope []string, target string) bool {
+	if len(scope) == 0 {
+		return true
+	}
+	for _, value := range scope {
+		if value == "*" || value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (i *Interceptor) After(context.Context, *coreruntime.Action, *pipeline.Result) error {

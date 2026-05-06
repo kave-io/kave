@@ -64,7 +64,8 @@ type Outcome struct {
 	Reason  string
 }
 
-// Action is an execution Kave controls. It is in the causal path and can be blocked.
+// Action is an intercepted execution. Kave is in the causal path and can block it,
+// but the agent/provider/tool still performs the actual work.
 // Used in patterns 1 (HTTP proxy) and 3 (protocol bridge).
 type Action struct {
 	Invocation
@@ -82,7 +83,7 @@ type Action struct {
 	ParentID string
 }
 
-// ObservedAction is an execution the agent reported to Kave after the fact.
+// ObservedAction is an execution Kave learned about outside a blockable boundary.
 // Kave cannot block it — auth violations are recorded, not enforced.
 // Used in pattern 2 (SDK report-in).
 type ObservedAction struct {

@@ -6,11 +6,8 @@ import CurrencySelector from '@/components/CurrencySelector.vue'
 const colorMode = useColorMode()
 
 const PROXIES = [
-  { k: 'OpenAI',      v: 'http://127.0.0.1:18080/v1/openai' },
-  { k: 'Anthropic',   v: 'http://127.0.0.1:18080/v1/anthropic' },
-  { k: 'Gemini',      v: 'http://127.0.0.1:18080/v1/gemini' },
-  { k: 'Ollama',      v: 'http://127.0.0.1:18080/frameworks/claude-code/ollama' },
-  { k: 'Claude Code', v: 'http://127.0.0.1:18080/frameworks/claude-code/anthropic' },
+  { k: 'OpenAI Compatible', v: 'http://127.0.0.1:18080/v1/openai' },
+  { k: 'GitHub Tool',       v: 'http://127.0.0.1:18080/v1/tools/github' },
 ]
 </script>
 

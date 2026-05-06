@@ -61,37 +61,14 @@ func TestGatewayRoutes(t *testing.T) {
 			upstreamBody:   []byte(`{"model":"gpt-4o","usage":{"prompt_tokens":10,"completion_tokens":20}}`),
 		},
 		{
-			name:           "raw_anthropic",
-			path:           "/v1/anthropic/messages",
-			body:           []byte(`{"model":"claude-3-5-sonnet","messages":[]}`),
-			expectPath:     "/v1/messages",
+			name:           "github_tool_read",
+			path:           "/v1/tools/github/repos/kave-io/kave",
+			expectPath:     "/repos/kave-io/kave",
 			expectStatus:   http.StatusOK,
 			pipeline:       pipeline.New(),
 			expectUpstream: true,
 			upstreamStatus: http.StatusOK,
-			upstreamBody:   []byte(`{"model":"claude-3-5-sonnet","usage":{"input_tokens":7,"output_tokens":11}}`),
-		},
-		{
-			name:           "raw_google",
-			path:           "/v1/google/v1beta/models/gemini-1.5-flash:generateContent",
-			body:           []byte(`{"contents":[]}`),
-			expectPath:     "/v1beta/models/gemini-1.5-flash:generateContent",
-			expectStatus:   http.StatusOK,
-			pipeline:       pipeline.New(),
-			expectUpstream: true,
-			upstreamStatus: http.StatusOK,
-			upstreamBody:   []byte(`{"modelVersion":"gemini-1.5-flash","usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":8}}`),
-		},
-		{
-			name:           "framework_claude_code",
-			path:           "/frameworks/claude-code/openai/v1/chat/completions",
-			body:           []byte(`{"model":"gpt-4o","messages":[]}`),
-			expectPath:     "/v1/chat/completions",
-			expectStatus:   http.StatusOK,
-			pipeline:       pipeline.New(),
-			expectUpstream: true,
-			upstreamStatus: http.StatusOK,
-			upstreamBody:   []byte(`{"model":"gpt-4o","usage":{"prompt_tokens":10,"completion_tokens":20}}`),
+			upstreamBody:   []byte(`{"full_name":"kave-io/kave"}`),
 		},
 		{
 			name:           "policy_blocked",
@@ -104,7 +81,7 @@ func TestGatewayRoutes(t *testing.T) {
 		},
 		{
 			name:           "budget_blocked",
-			path:           "/frameworks/claude-code/openai/v1/chat/completions",
+			path:           "/v1/openai/chat/completions",
 			body:           []byte(`{"model":"gpt-4o","messages":[]}`),
 			expectStatus:   http.StatusPaymentRequired,
 			expectCode:     "gateway.budget_exceeded",
@@ -138,17 +115,9 @@ func TestGatewayRoutes(t *testing.T) {
 						t.Fatalf("got upstream path %q want %q", r.URL.Path, tt.expectPath)
 					}
 					switch tt.name {
-					case "raw_openai", "framework_claude_code", "upstream_error":
+					case "raw_openai", "upstream_error", "github_tool_read":
 						if got := r.Header.Get("Authorization"); got != "Bearer real-key" {
 							t.Fatalf("got authorization %q", got)
-						}
-					case "raw_anthropic":
-						if got := r.Header.Get("X-API-Key"); got != "real-key" {
-							t.Fatalf("got x-api-key %q", got)
-						}
-					case "raw_google":
-						if got := r.URL.Query().Get("key"); got != "real-key" {
-							t.Fatalf("got key query %q", got)
 						}
 					}
 					w.WriteHeader(tt.upstreamStatus)

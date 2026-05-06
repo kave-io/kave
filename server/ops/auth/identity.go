@@ -99,7 +99,11 @@ func legacyIdentity(ctx context.Context, app store.AppStore, token, authorizatio
 			Kind:             authctx.KindAgent,
 			OrgID:            tok.OrgID,
 			AgentID:          tok.AgentID,
+			ProjectID:        tok.ProjectID,
 			TokenID:          tok.ID,
+			Connectors:       append([]string(nil), tok.Connectors...),
+			Methods:          append([]string(nil), tok.Methods...),
+			Scopes:           append([]string(nil), tok.Scopes...),
 			RawAuthorization: authorization,
 			Legacy:           true,
 		}, nil
@@ -141,7 +145,11 @@ func legacyAgentIdentity(ctx context.Context, app store.AppStore, token, authori
 			Kind:             authctx.KindAgent,
 			OrgID:            tok.OrgID,
 			AgentID:          tok.AgentID,
+			ProjectID:        tok.ProjectID,
 			TokenID:          tok.ID,
+			Connectors:       append([]string(nil), tok.Connectors...),
+			Methods:          append([]string(nil), tok.Methods...),
+			Scopes:           append([]string(nil), tok.Scopes...),
 			RawAuthorization: authorization,
 			Legacy:           true,
 		}, nil

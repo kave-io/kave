@@ -181,6 +181,9 @@ func (ActionStore) CreateAction(context.Context, *runtimemodel.ActionRecord) err
 func (ActionStore) GetAction(context.Context, string) (*runtimemodel.ActionRecord, error) {
 	return nil, store.ErrNotFound
 }
+func (ActionStore) UpdateAction(context.Context, string, *runtimemodel.ActionUpdate) error {
+	return nil
+}
 func (ActionStore) ListActionsByRun(context.Context, string, store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
 	return emptyPageResult[*runtimemodel.ActionRecord](), nil
 }

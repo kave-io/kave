@@ -4,8 +4,7 @@
 
 GET /health : healthz endpoint
 POST /v1/openai/* : LLM gateway proxy
-POST /v1/anthropic/* : LLM gateway proxy
-POST /v1/google/* : LLM gateway proxy
+* /v1/tools/github/* : GitHub tool gateway proxy
 * /frameworks/* : framework adapter routes
 GET /api/v1/fx/currencies : pre-migration FX HTTP route (will be deleted in B2 cleanup)
 GET /api/v1/fx/rates : pre-migration FX HTTP route (will be deleted in B2 cleanup)

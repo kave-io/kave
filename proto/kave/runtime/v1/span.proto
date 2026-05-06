@@ -10,8 +10,8 @@ option go_package = "github.com/kave-io/kave/proto/gen/kave/runtime/v1;runtime";
 // SpanKind classifies what sort of execution a span represents.
 enum SpanKind {
   SPAN_KIND_UNSPECIFIED = 0;
-  SPAN_KIND_ACTION = 1; // intercepted action Kave executed
-  SPAN_KIND_OBSERVED_ACTION = 2; // action reported by the agent after the fact
+  SPAN_KIND_ACTION = 1; // intercepted action Kave could block
+  SPAN_KIND_OBSERVED_ACTION = 2; // action Kave learned about outside a blockable boundary
   SPAN_KIND_IMPORT = 3; // span imported from an external trace source
 }
 

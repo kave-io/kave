@@ -26,6 +26,8 @@ type Identity struct {
 	SessionID        string
 	TokenID          string
 	Scopes           []string
+	Connectors       []string
+	Methods          []string
 	RawAuthorization string
 	ConnectorName    string // for KindGuest: the LLM connector name (e.g., "ollama")
 	BindScope        string // for KindGuest: "loopback" or "public"
@@ -57,11 +59,11 @@ func (i Identity) Subject() string {
 // NewGuest creates a synthetic guest identity.
 func NewGuest(envID, orgID, connector, bindScope string) Identity {
 	return Identity{
-		Kind:         KindGuest,
-		EnvID:        envID,
-		OrgID:        orgID,
+		Kind:          KindGuest,
+		EnvID:         envID,
+		OrgID:         orgID,
 		ConnectorName: connector,
-		BindScope:    bindScope,
+		BindScope:     bindScope,
 	}
 }
 

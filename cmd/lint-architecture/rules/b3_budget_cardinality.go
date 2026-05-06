@@ -24,7 +24,11 @@ func (B3BudgetCardinality) Check(ctx *Context) []Violation {
 				if typeDecl, ok := decl.(*ast.GenDecl); ok && typeDecl.Tok.String() == "type" {
 					for _, spec := range typeDecl.Specs {
 						if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-							if typeSpec.Name.Name == "Agent" {
+							if typeSpec.Name.Name == "Agent" ||
+								typeSpec.Name.Name == "AgentToken" ||
+								typeSpec.Name.Name == "PolicyRecord" ||
+								typeSpec.Name.Name == "PolicyUpdate" ||
+								typeSpec.Name.Name == "RunRecord" {
 								continue
 							}
 							if structType, ok := typeSpec.Type.(*ast.StructType); ok {

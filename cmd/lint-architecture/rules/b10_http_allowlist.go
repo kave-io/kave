@@ -81,8 +81,7 @@ func matchesHTTPAllowlist(route string, allowlist []Allow) bool {
 	allowedPatterns := []string{
 		"/health",
 		"/v1/openai/",
-		"/v1/anthropic/",
-		"/v1/google/",
+		"/v1/tools/github/",
 		"/frameworks/",
 	}
 	for _, pattern := range allowedPatterns {

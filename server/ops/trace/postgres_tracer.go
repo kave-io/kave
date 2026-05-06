@@ -10,6 +10,7 @@ import (
 	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/pkg/timex"
 	"github.com/kave-io/kave/core/runtime"
+	coretrace "github.com/kave-io/kave/core/runtime/trace"
 	coreStore "github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/ops/cost"
 )
@@ -73,8 +74,8 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 		ActionID:   action.ID,
 		ParentID:   stringPtr(action.ParentID),
 		Name:       action.Connector + "." + action.Method,
-		Kind:       string(action.Type),
-		Source:     string(runtime.ActionSourceIntercepted),
+		Kind:       string(coretrace.SpanKindAction),
+		Source:     string(coretrace.SourceIntercept),
 		Connector:  action.Connector,
 		StartedAt:  startedAtMS,
 		EndedAt:    &endedAtMS,
@@ -121,10 +122,31 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 				}
 			}
 		}
+		if result.Usage != nil {
+			if result.Usage.RequestCount > 0 {
+				row.RequestCount = &result.Usage.RequestCount
+			}
+			if result.Usage.ComputeMs > 0 {
+				row.ComputeMs = &result.Usage.ComputeMs
+			}
+			if result.Usage.StorageBytes > 0 {
+				row.StorageBytes = &result.Usage.StorageBytes
+			}
+			if result.Usage.BandwidthBytes > 0 {
+				row.BandwidthBytes = &result.Usage.BandwidthBytes
+			}
+		}
 	}
 
 	if err := spanStore.OpenSpan(ctx, row); err != nil {
 		return err
+	}
+	if result != nil {
+		for _, observed := range result.ObservedSpans {
+			if err := t.writeObservedSpan(ctx, spanStore, action, observed, spanID, rootSpanID, endedAtMS); err != nil {
+				return err
+			}
+		}
 	}
 	if t.bus != nil {
 		raw, err := json.Marshal(row)
@@ -148,8 +170,56 @@ func (t *Tracer) Name() string { return "tracer" }
 
 var _ pipeline.Stage = (*Tracer)(nil)
 
+func (t *Tracer) writeObservedSpan(ctx context.Context, spanStore coreStore.SpanStore, action *runtime.Action, observed runtime.ObservedSpan, parentID, rootSpanID string, at int64) error {
+	spanID, err := ids.SpanID()
+	if err != nil {
+		return err
+	}
+	name := observed.Name
+	if name == "" {
+		name = observed.Connector + "." + observed.Method
+	}
+	attrs, _ := json.Marshal(observed.Attrs)
+	startedAt := at
+	endedAt := at
+	row := &runtimemodel.SpanRow{
+		ID:         spanID,
+		ProjectID:  action.ProjectID,
+		EnvID:      action.EnvID,
+		AgentID:    action.AgentID,
+		RunID:      action.RunID,
+		ActionID:   action.ID,
+		ParentID:   stringPtr(parentID),
+		Name:       name,
+		Kind:       string(coretrace.SpanKindObservedAction),
+		Source:     string(coretrace.SourceIntercept),
+		Connector:  observed.Connector,
+		StartedAt:  startedAt,
+		EndedAt:    &endedAt,
+		DurationMs: 0,
+		Input:      observed.Input,
+		Output:     observed.Output,
+		Attrs:      bytesPtr(attrs),
+		Error:      observed.Error,
+		TraceID:    action.TraceID,
+		RootSpanID: rootSpanID,
+		CreatedAt:  endedAt,
+	}
+	if observed.Model != "" {
+		row.Model = &observed.Model
+	}
+	return spanStore.OpenSpan(ctx, row)
+}
+
 func stringPtr(v string) *string {
 	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+func bytesPtr(v []byte) *[]byte {
+	if len(v) == 0 {
 		return nil
 	}
 	return &v

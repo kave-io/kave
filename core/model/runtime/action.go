@@ -46,3 +46,15 @@ type ActionRecord struct {
 
 	CreatedAt int64 // UnixMilli
 }
+
+// ActionUpdate holds terminal/action lifecycle fields updated after pipeline
+// execution. Nil fields are preserved.
+type ActionUpdate struct {
+	Output        *[]byte
+	Error         *string
+	StartedAt     *int64
+	EndedAt       *int64
+	Status        *string
+	Metadata      map[string]any
+	ProviderReqID *string
+}

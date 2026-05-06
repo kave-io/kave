@@ -31,7 +31,7 @@ enum ActionStatus {
 enum ActionSource {
   ACTION_SOURCE_UNSPECIFIED = 0;
   ACTION_SOURCE_INTERCEPTED = 1; // Kave is in the causal path; can block
-  ACTION_SOURCE_OBSERVED = 2; // agent-reported after the fact; audit only
+  ACTION_SOURCE_OBSERVED = 2; // learned outside a blockable boundary; audit only
 }
 
 // ActionRecord is the persisted representation of an intercepted or observed action.

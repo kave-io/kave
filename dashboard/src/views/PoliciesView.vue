@@ -62,8 +62,8 @@ watchEffect(() => {
   if (selected.value.id !== '' && !POLICIES.value.some(p => p.id === selected.value.id)) selected.value = POLICIES.value[0] ?? emptyPolicy
 })
 
-const llmConnectors = computed(() => selected.value.connectors.filter(c => ['openai','anthropic','gemini'].includes(c)))
-const toolConnectors = computed(() => selected.value.connectors.filter(c => !['openai','anthropic','gemini'].includes(c)))
+const llmConnectors = computed(() => selected.value.connectors.filter(c => ['openai'].includes(c)))
+const toolConnectors = computed(() => selected.value.connectors.filter(c => !['openai'].includes(c)))
 const attachedAgents = computed(() => (agentsQuery.data.value ?? []).filter(a => a.policy_id === selected.value.id))
 
 // simulator state
@@ -198,7 +198,7 @@ function runSim() {
               <label style="display: flex; flex-direction: column; gap: 4px;">
                 <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim);">Connector</span>
                 <select v-model="simConn" class="input select">
-                  <option v-for="c in ['openai','anthropic','github','postgres','gmail','stripe']" :key="c">{{ c }}</option>
+                  <option v-for="c in ['openai','github']" :key="c">{{ c }}</option>
                 </select>
               </label>
               <label style="display: flex; flex-direction: column; gap: 4px;">

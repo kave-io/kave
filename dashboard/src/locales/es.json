@@ -56,8 +56,8 @@
       "connecting_indicator": "conectando",
       "count_loaded": "trazas cargadas",
       "waiting_traces": "Esperando rastros",
-      "waiting_hint": "Dirija cualquier llamada LLM de Claude Code a la pasarela de framework.",
-      "example_url": "OPENAI_BASE_URL=http://localhost:8080/frameworks/claude-code/openai",
+      "waiting_hint": "Dirija cualquier llamada compatible con OpenAI a la pasarela.",
+      "example_url": "OPENAI_BASE_URL=http://localhost:8080/v1/openai",
       "error_loading": "Error al cargar tramos:",
       "table_time": "Hora",
       "table_run": "Ejecución",
@@ -134,16 +134,14 @@
       "workspace": "Espacio de Trabajo",
       "workspace_hint": "Aislamiento multiinquilino del espacio de trabajo.",
       "workspace_id": "ID del Espacio de Trabajo",
-      "proxy_urls": "URLs de Framework",
-      "proxy_hint": "Enrute llamadas LLM de Claude Code a través de Kave para rastrear, validar y controlar costos.",
+      "proxy_urls": "URLs de conectores",
+      "proxy_hint": "Enrute llamadas compatibles con OpenAI y herramientas de GitHub a través de Kave para rastrear, validar y controlar costos.",
       "export": "Exportar",
       "preferences": "Preferencias",
       "languages": "Idiomas",
       "currencies": "Monedas",
       "proxy_openai": "OpenAI",
-      "proxy_anthropic": "Anthropic",
-      "proxy_gemini": "Google Gemini",
-      "proxy_ollama": "Ollama"
+      "proxy_github": "GitHub"
     }
   },
   "common": {

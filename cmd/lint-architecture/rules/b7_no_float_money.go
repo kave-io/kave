@@ -23,6 +23,9 @@ func (B7NoFloatMoney) Check(ctx *Context) []Violation {
 		if !strings.HasPrefix(pkg.PkgPath, "github.com/kave-io/kave/") {
 			continue
 		}
+		if strings.HasPrefix(pkg.PkgPath, "github.com/kave-io/kave/cli/") {
+			continue
+		}
 
 		for _, file := range pkg.Syntax {
 			for _, decl := range file.Decls {

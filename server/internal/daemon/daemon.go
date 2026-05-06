@@ -49,18 +49,18 @@ func New(opts config.LoadOpts, res *config.LoadResult, app store.AppStore, span 
 		res = &config.LoadResult{Config: &config.Config{}, Origin: map[string]config.Source{}}
 	}
 	return &State{
-		PID:           os.Getpid(),
-		StartedAt:     time.Now().UTC(),
-		Version:       version,
-		SchemaVersion: "1",
-		loadOpts:      opts,
-		res:           res,
+		PID:            os.Getpid(),
+		StartedAt:      time.Now().UTC(),
+		Version:        version,
+		SchemaVersion:  "1",
+		loadOpts:       opts,
+		res:            res,
 		resourceSource: map[string]config.Source{},
-		app:           app,
-		span:          span,
-		fx:            fxSvc,
-		cost:          costSvc,
-		bus:           b,
+		app:            app,
+		span:           span,
+		fx:             fxSvc,
+		cost:           costSvc,
+		bus:            b,
 	}
 }
 
@@ -244,12 +244,8 @@ func collectStats(ctx context.Context, s any) (map[string]any, error) {
 
 func registeredConnectors() map[string]string {
 	return map[string]string{
-		"autogen":       "ready",
-		"claude-code":   "ready",
-		"crewai":        "ready",
-		"langchain":     "ready",
-		"openai-agents": "ready",
-		"openclaw":      "ready",
+		"openai": "ready",
+		"github": "ready",
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/kave-io/kave/core/model/control"
@@ -896,6 +897,49 @@ func (s *SQLiteAppStore) GetAction(ctx context.Context, id string) (*runtimemode
 		FROM actions WHERE id = ?`, id))
 }
 
+func (s *SQLiteAppStore) UpdateAction(ctx context.Context, id string, update *runtimemodel.ActionUpdate) error {
+	if update == nil {
+		return nil
+	}
+	set := make([]string, 0, 8)
+	args := make([]any, 0, 9)
+	if update.Output != nil {
+		set = append(set, "output = ?")
+		args = append(args, *update.Output)
+	}
+	if update.Error != nil {
+		set = append(set, "error = ?")
+		args = append(args, *update.Error)
+	}
+	if update.StartedAt != nil {
+		set = append(set, "started_at = ?")
+		args = append(args, *update.StartedAt)
+	}
+	if update.EndedAt != nil {
+		set = append(set, "ended_at = ?")
+		args = append(args, *update.EndedAt)
+	}
+	if update.Status != nil {
+		set = append(set, "status = ?")
+		args = append(args, *update.Status)
+	}
+	if update.Metadata != nil {
+		metaJSON, _ := json.Marshal(update.Metadata)
+		set = append(set, "metadata = ?")
+		args = append(args, string(metaJSON))
+	}
+	if update.ProviderReqID != nil {
+		set = append(set, "provider_req_id = ?")
+		args = append(args, *update.ProviderReqID)
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	args = append(args, id)
+	_, err := s.db.ExecContext(ctx, "UPDATE actions SET "+strings.Join(set, ", ")+" WHERE id = ?", args...)
+	return err
+}
+
 func (s *SQLiteAppStore) ListActionsByRun(ctx context.Context, runID string, page store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, run_id, agent_id, project_id, env_id, parent_id,
@@ -1266,6 +1310,17 @@ func (s *SQLiteAppStore) GetCredential(ctx context.Context, id string) (*control
 }
 
 func (s *SQLiteAppStore) StoreCredential(ctx context.Context, c *control.ConnectorCredential) error {
+	sourceType := c.SourceType
+	if sourceType == "" && c.Source != "" {
+		sourceType = string(c.Source)
+	}
+	secretRef := c.SecretRef
+	if secretRef == "" && (sourceType == string(control.CredentialSourceEnv) || c.Source == control.CredentialSourceEnv) {
+		secretRef = c.EnvVar
+	}
+	if secretRef == "" && (sourceType == string(control.CredentialSourceVault) || c.Source == control.CredentialSourceVault) {
+		secretRef = c.VaultRef
+	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO credentials (
 			id, project_id, env_id, connector_type, account_id, label, description,
@@ -1278,8 +1333,8 @@ func (s *SQLiteAppStore) StoreCredential(ctx context.Context, c *control.Connect
 			encrypted_blob = excluded.encrypted_blob, key_hash = excluded.key_hash,
 			status = excluded.status, updated_at = excluded.updated_at`,
 		c.ID, c.ProjectID, c.EnvID, c.ConnectorType, c.AccountID, c.Label, c.Description,
-		c.SourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID,
-		c.SecretRef, c.SecretVersion, c.Status, c.Version,
+		sourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID,
+		secretRef, c.SecretVersion, c.Status, c.Version,
 		c.ExpiresAt, c.RotatedAt, c.RotatedBy, c.CreatedBy, c.CreatedAt, c.UpdatedAt)
 	return err
 }
@@ -1369,6 +1424,7 @@ func (s *SQLiteAppStore) scanCredential(row *sql.Row) (*control.ConnectorCredent
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	hydrateCredentialSource(&c)
 	return &c, err
 }
 
@@ -1382,7 +1438,23 @@ func (s *SQLiteAppStore) scanCredentialRow(rows *sql.Rows) (*control.ConnectorCr
 		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.RevokedAt, &c.RevokedBy, &c.RevokeReason); err != nil {
 		return nil, err
 	}
+	hydrateCredentialSource(&c)
 	return &c, nil
+}
+
+func hydrateCredentialSource(c *control.ConnectorCredential) {
+	if c == nil {
+		return
+	}
+	if c.Source == "" && c.SourceType != "" {
+		c.Source = control.CredentialSource(c.SourceType)
+	}
+	switch c.Source {
+	case control.CredentialSourceEnv:
+		c.EnvVar = c.SecretRef
+	case control.CredentialSourceVault:
+		c.VaultRef = c.SecretRef
+	}
 }
 
 // ── Transaction ───────────────────────────────────────────────────────────────
@@ -1661,6 +1733,9 @@ func (t *txAppStore) ListRuns(_ context.Context, _ *runtimemodel.RunFilter, _ st
 	return store.PageResult[*runtimemodel.RunRecord]{}, nil
 }
 func (t *txAppStore) CreateAction(_ context.Context, _ *runtimemodel.ActionRecord) error { return nil }
+func (t *txAppStore) UpdateAction(_ context.Context, _ string, _ *runtimemodel.ActionUpdate) error {
+	return nil
+}
 func (t *txAppStore) ListActionsByRun(_ context.Context, _ string, _ store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
 	return store.PageResult[*runtimemodel.ActionRecord]{}, nil
 }

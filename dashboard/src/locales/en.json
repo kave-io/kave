@@ -60,8 +60,8 @@
       "connecting_indicator": "connecting",
       "count_loaded": "traces loaded",
       "waiting_traces": "Waiting for traces",
-      "waiting_hint": "Point any Claude Code LLM call at the framework gateway.",
-      "example_url": "OPENAI_BASE_URL=http://localhost:8080/frameworks/claude-code/openai",
+      "waiting_hint": "Point any OpenAI-compatible call at the gateway.",
+      "example_url": "OPENAI_BASE_URL=http://localhost:8080/v1/openai",
       "error_loading": "Failed to load spans:",
       "table_time": "Time",
       "table_run": "Run",
@@ -156,16 +156,14 @@
       "workspace_id": "Workspace ID",
       "project_id": "Project ID",
       "env_id": "Environment ID",
-      "proxy_urls": "Framework URLs",
-      "proxy_hint": "Route Claude Code LLM calls through Kave to trace, validate, and cost-control.",
+      "proxy_urls": "Connector URLs",
+      "proxy_hint": "Route OpenAI-compatible and GitHub tool calls through Kave to trace, validate, and cost-control.",
       "export": "Export",
       "preferences": "Preferences",
       "languages": "Languages",
       "currencies": "Currencies",
       "proxy_openai": "OpenAI",
-      "proxy_anthropic": "Anthropic",
-      "proxy_gemini": "Google Gemini",
-      "proxy_ollama": "Ollama"
+      "proxy_github": "GitHub"
     }
   },
   "common": {

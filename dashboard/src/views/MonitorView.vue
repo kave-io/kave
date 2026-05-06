@@ -14,7 +14,7 @@ const paused = ref(false)
 const filters = ref<{ agent: string; provider: string; errorsOnly: boolean; blockedOnly: boolean }>({ agent: '', provider: '', errorsOnly: false, blockedOnly: false })
 const selected = ref<LiveEvent | null>(null)
 
-const providerNames = ['openai', 'anthropic', 'gemini', 'ollama', 'groq']
+const providerNames = ['openai', 'github']
 const agentOpts = computed(() => [{ v: '', l: 'All' }, ...(agentsQuery.data.value ?? []).map(a => ({ v: a.id, l: a.name }))])
 const providerOpts = computed(() => [{ v: '', l: 'All' }, ...providerNames.map(p => ({ v: p, l: p }))])
 const kindOpts = [{ v: '', l: 'All' }, { v: 'errorsOnly', l: 'Errors only' }, { v: 'blockedOnly', l: 'Blocked only' }]

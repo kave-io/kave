@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	controlmodel "github.com/kave-io/kave/core/model/control"
 	"github.com/kave-io/kave/core/connectors/runtime"
+	controlmodel "github.com/kave-io/kave/core/model/control"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
 	"github.com/kave-io/kave/core/pipeline"
 	"github.com/kave-io/kave/core/pkg/ids"
@@ -23,8 +23,7 @@ import (
 
 func (g *FrameworkGateway) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/openai/", g.handleRaw("openai"))
-	mux.HandleFunc("/v1/anthropic/", g.handleRaw("anthropic"))
-	mux.HandleFunc("/v1/google/", g.handleRaw("google"))
+	mux.HandleFunc("/v1/tools/github/", g.handleTool("github"))
 	mux.HandleFunc("/frameworks/", g.handleFramework)
 }
 
@@ -48,6 +47,133 @@ func (g *FrameworkGateway) handleFramework(w http.ResponseWriter, r *http.Reques
 	g.handleProxy(w, r, parts[0])
 }
 
+func (g *FrameworkGateway) handleTool(toolName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/v1/tools/"+toolName+"/") {
+			writeError(w, http.StatusBadRequest, "gateway.bad_request", "invalid tool route", nil)
+			return
+		}
+		g.handleToolProxy(w, r, toolName)
+	}
+}
+
+func (g *FrameworkGateway) handleToolProxy(w http.ResponseWriter, r *http.Request, toolName string) {
+	ctx := r.Context()
+	tw := &trackingResponseWriter{ResponseWriter: w}
+
+	identity, ok := authctx.From(ctx)
+	if !ok {
+		identity, _ = serverauth.ParseIdentity(ctx, r.Header.Get("Authorization"), g.app, nil, true)
+	}
+	if identity.IsInvalid() || identity.IsAnonymous() || identity.IsGuest() {
+		writeError(tw, http.StatusUnauthorized, "gateway.unauthorized", "invalid authorization", nil)
+		return
+	}
+	ctx = authctx.With(ctx, identity)
+	if identity.AgentID == "" {
+		writeError(tw, http.StatusUnauthorized, "gateway.unauthorized", "authenticated identity is not bound to an agent", nil)
+		return
+	}
+
+	agent, err := g.app.GetAgentByID(ctx, identity.AgentID)
+	if err != nil || agent == nil {
+		writeError(tw, http.StatusUnauthorized, "gateway.agent_not_found", "agent not found", nil)
+		return
+	}
+
+	tool, err := g.registry.ResolveTool(toolName)
+	if err != nil {
+		writeError(tw, http.StatusBadRequest, "gateway.provider_not_supported", err.Error(), nil)
+		return
+	}
+
+	var body []byte
+	if r.Body != nil {
+		body, _ = io.ReadAll(r.Body)
+	}
+	call, err := tool.ParseToolRequest(&runtime.Request{
+		Method:   r.Method,
+		Path:     r.URL.Path,
+		RawQuery: r.URL.RawQuery,
+		Header:   runtime.CloneHeader(r.Header),
+		Body:     body,
+	})
+	if err != nil {
+		writeError(tw, http.StatusBadRequest, "gateway.bad_request", err.Error(), nil)
+		return
+	}
+
+	now := int64(timex.Now())
+	run := &runtimemodel.RunRecord{
+		ID:        ids.New("run"),
+		ProjectID: agent.ProjectID,
+		EnvID:     agent.EnvID,
+		AgentID:   agent.ID,
+		Name:      toolName + "." + call.Action.InvocationTarget.Method,
+		Status:    string(coreruntime.RunActive),
+		Metadata:  map[string]any{},
+		StartedAt: now,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := g.app.CreateRun(ctx, run); err != nil {
+		writeError(tw, http.StatusInternalServerError, "gateway.create_run_failed", "create run failed", nil)
+		return
+	}
+
+	call.Action.InvocationRef.RunID = run.ID
+	call.Action.InvocationRef.AgentID = agent.ID
+	call.Action.InvocationRef.ProjectID = agent.ProjectID
+	call.Action.InvocationRef.EnvID = agent.EnvID
+
+	if err := g.app.CreateAction(ctx, &runtimemodel.ActionRecord{
+		ID:         call.Action.InvocationRef.ID,
+		RunID:      run.ID,
+		AgentID:    agent.ID,
+		ProjectID:  agent.ProjectID,
+		EnvID:      agent.EnvID,
+		ActionType: string(call.Action.InvocationTarget.Type),
+		Connector:  call.Action.InvocationTarget.Connector,
+		Method:     call.Action.InvocationTarget.Method,
+		Input:      call.Action.InvocationData.Input,
+		Status:     string(coreruntime.StatusRunning),
+		Source:     string(coreruntime.ActionSourceIntercepted),
+		Metadata:   map[string]any{},
+		Attempt:    1,
+		CreatedAt:  now,
+	}); err != nil {
+		writeError(tw, http.StatusInternalServerError, "gateway.create_action_failed", "create action failed", nil)
+		return
+	}
+
+	handler := func(ctx context.Context, action *coreruntime.Action) (*pipeline.Result, error) {
+		credential, credErr := g.resolveCredential(ctx, agent.EnvID, toolName)
+		if errors.Is(credErr, credresolve.ErrPassthrough) {
+			credential = identity.RawAuthorization
+		} else if credErr != nil && tool.RequiresAuth() {
+			return nil, fmt.Errorf("%w: missing connector credential", serverauth.ErrUnauthenticated)
+		}
+		prepared, err := tool.PrepareToolRequest(call, credential)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := g.transport.Do(ctx, prepared)
+		if err != nil {
+			return nil, fmt.Errorf("%w: transport: %v", ErrUpstream, err)
+		}
+		defer resp.Body.Close()
+		return g.handleToolBuffered(tw, resp, tool)
+	}
+
+	result, err := g.pipeline.Execute(ctx, call.Action, handler)
+	g.finishAction(ctx, call.Action, result, err)
+	g.finishRun(ctx, run.ID, err)
+	if err != nil && result == nil && !tw.WroteHeader() {
+		status, code, message, details := mapError(err)
+		writeError(tw, status, code, message, details)
+	}
+}
+
 func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, framework string) {
 	ctx := r.Context()
 	tw := &trackingResponseWriter{ResponseWriter: w}
@@ -60,6 +186,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		writeError(tw, http.StatusUnauthorized, "gateway.unauthorized", "invalid authorization", nil)
 		return
 	}
+	ctx = authctx.With(ctx, identity)
 
 	// Three-axis auth boundary decision
 	var agentID string
@@ -200,6 +327,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		Status:     string(coreruntime.StatusRunning),
 		Source:     string(coreruntime.ActionSourceIntercepted),
 		Metadata:   map[string]any{},
+		Attempt:    1,
 		CreatedAt:  now,
 	}); err != nil {
 		writeError(tw, http.StatusInternalServerError, "gateway.create_action_failed", "create action failed", nil)
@@ -212,12 +340,13 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		return
 	}
 
-	credential, credErr := g.resolveCredential(ctx, agent.EnvID, call.Provider)
-	if errors.Is(credErr, credresolve.ErrPassthrough) {
-		credential = identity.RawAuthorization
-	}
-
 	handler := func(ctx context.Context, action *coreruntime.Action) (*pipeline.Result, error) {
+		credential, credErr := g.resolveCredential(ctx, agent.EnvID, call.Provider)
+		if errors.Is(credErr, credresolve.ErrPassthrough) {
+			credential = identity.RawAuthorization
+		} else if credErr != nil && provider.RequiresAuth() {
+			return nil, fmt.Errorf("%w: missing connector credential", serverauth.ErrUnauthenticated)
+		}
 		prepared, err := provider.PrepareRequest(call, credential)
 		if err != nil {
 			return nil, err
@@ -237,6 +366,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 	}
 
 	result, err := g.pipeline.Execute(ctx, call.Action, handler)
+	g.finishAction(ctx, call.Action, result, err)
 	g.finishRun(ctx, run.ID, err)
 	if err != nil && result == nil && !tw.WroteHeader() {
 		status, code, message, details := mapError(err)
@@ -257,6 +387,28 @@ func (g *FrameworkGateway) handleBuffered(w http.ResponseWriter, resp *http.Resp
 	if err != nil {
 		return nil, err
 	}
+	result.ProviderRequestID = providerRequestID(resp.Header)
+
+	copyHeaders(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	_, _ = w.Write(body)
+	return result, nil
+}
+
+func (g *FrameworkGateway) handleToolBuffered(w http.ResponseWriter, resp *http.Response, tool runtime.ToolConnector) (*pipeline.Result, error) {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: read upstream response: %v", ErrUpstream, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("%w: upstream status %d", ErrUpstream, resp.StatusCode)
+	}
+
+	result, err := tool.ParseToolResponse(body, resp.Header.Get("Content-Type"))
+	if err != nil {
+		return nil, err
+	}
+	result.ProviderRequestID = providerRequestID(resp.Header)
 
 	copyHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
@@ -295,5 +447,10 @@ func (g *FrameworkGateway) handleStream(w http.ResponseWriter, resp *http.Respon
 		}
 	}
 
-	return provider.ParseResponse(buf.Bytes(), resp.Header.Get("Content-Type"))
+	result, err := provider.ParseResponse(buf.Bytes(), resp.Header.Get("Content-Type"))
+	if err != nil {
+		return nil, err
+	}
+	result.ProviderRequestID = providerRequestID(resp.Header)
+	return result, nil
 }

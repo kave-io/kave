@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,6 +16,8 @@ import (
 	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/kave-io/kave/core/store"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
+	serverbudget "github.com/kave-io/kave/server/ops/budget"
+	serverpolicy "github.com/kave-io/kave/server/ops/policy"
 	"golang.org/x/time/rate"
 )
 
@@ -84,7 +87,7 @@ func copyHeaders(dst, src http.Header) {
 }
 
 // parseProviderFromPath extracts the provider name from the request path.
-// For raw paths (/v1/openai/, /v1/anthropic/, /v1/google/) it returns the segment.
+// For raw paths (/v1/openai/) it returns the provider segment.
 // For framework paths (/frameworks/<name>/<provider>/...) it returns the provider.
 func (g *FrameworkGateway) parseProviderFromPath(path, framework string) string {
 	if framework == "raw" {
@@ -133,6 +136,9 @@ func (g *FrameworkGateway) finishRun(ctx context.Context, runID string, runErr e
 	var message *string
 	if runErr != nil {
 		status = string(coreruntime.RunFailed)
+		if errors.Is(runErr, serverpolicy.ErrPolicyBlocked) || errors.Is(runErr, serverbudget.ErrBudgetExceeded) {
+			status = string(coreruntime.RunBlocked)
+		}
 		text := runErr.Error()
 		message = &text
 	}
@@ -141,6 +147,59 @@ func (g *FrameworkGateway) finishRun(ctx context.Context, runID string, runErr e
 		ErrorMessage: message,
 		EndedAt:      &endedAt,
 	})
+}
+
+func (g *FrameworkGateway) finishAction(ctx context.Context, action *coreruntime.Action, result *pipeline.Result, actionErr error) {
+	if action == nil || action.ID == "" {
+		return
+	}
+	endedAt := int64(timex.Now())
+	status := string(coreruntime.StatusCompleted)
+	if action.Status == coreruntime.StatusBlocked || errors.Is(actionErr, serverpolicy.ErrPolicyBlocked) || errors.Is(actionErr, serverbudget.ErrBudgetExceeded) {
+		status = string(coreruntime.StatusBlocked)
+	} else if actionErr != nil {
+		status = string(coreruntime.StatusFailed)
+	}
+
+	var output *[]byte
+	var providerReqID *string
+	if result != nil {
+		if len(result.Body) > 0 {
+			output = &result.Body
+		}
+		if result.ProviderRequestID != "" {
+			providerReqID = &result.ProviderRequestID
+		}
+	}
+	var errText *string
+	if actionErr != nil {
+		text := actionErr.Error()
+		errText = &text
+	}
+	_ = g.app.UpdateAction(ctx, action.ID, &runtimemodel.ActionUpdate{
+		Output:        output,
+		Error:         errText,
+		StartedAt:     ptrInt64(int64(action.StartedAt)),
+		EndedAt:       &endedAt,
+		Status:        &status,
+		ProviderReqID: providerReqID,
+	})
+}
+
+func providerRequestID(header http.Header) string {
+	for _, key := range []string{"OpenAI-Request-ID", "X-Request-ID", "Request-ID", "X-GitHub-Request-Id"} {
+		if v := header.Get(key); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func ptrInt64(v int64) *int64 {
+	if v == 0 {
+		return nil
+	}
+	return &v
 }
 
 type trackingResponseWriter struct {

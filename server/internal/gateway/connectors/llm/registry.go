@@ -1,9 +1,6 @@
 package llm
 
 import (
-	"github.com/kave-io/kave/core/connectors/llm/anthropic"
-	"github.com/kave-io/kave/core/connectors/llm/gemini"
-	"github.com/kave-io/kave/core/connectors/llm/ollama"
 	"github.com/kave-io/kave/core/connectors/llm/openai"
 	"github.com/kave-io/kave/core/connectors/runtime"
 )
@@ -14,12 +11,6 @@ type Factory func() runtime.LLMConnector
 // ProviderFactories lists the built-in provider connector constructors.
 var ProviderFactories = map[string]Factory{
 	"openai": func() runtime.LLMConnector { return openai.NewConnector(nil) },
-	"anthropic": func() runtime.LLMConnector {
-		return anthropic.NewConnector(nil)
-	},
-	"google": func() runtime.LLMConnector { return gemini.NewConnector(nil) },
-	"gemini": func() runtime.LLMConnector { return gemini.NewConnector(nil) },
-	"ollama": func() runtime.LLMConnector { return ollama.NewConnector(nil) },
 }
 
 // BuildProviders returns the built-in providers, optionally filtered to the

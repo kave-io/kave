@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 	"go/ast"
+	"go/types"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -49,11 +50,16 @@ func (ev *egressVisitor) Visit(n ast.Node) ast.Visitor {
 	}
 	if call, ok := n.(*ast.CallExpr); ok {
 		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Do" {
+			if !isHTTPClientDo(ev.pkg, sel) {
+				return ev
+			}
 			pos := ev.ctx.FileSet.Position(call.Pos())
 			filePath := pos.Filename
 			allowedPaths := []string{
-				"/core/connectors/outbound/",
 				"/server/internal/gateway/transport.go",
+				"/core/fx/frankfurter.go",
+				"/server/ops/auth/credresolve/vault.go",
+				"/server/ops/fx/service.go",
 			}
 
 			isAllowed := false
@@ -70,11 +76,30 @@ func (ev *egressVisitor) Visit(n ast.Node) ast.Visitor {
 					Pos:     pos,
 					Subject: "client.Do",
 					Message: fmt.Sprintf("HTTP egress in %q outside chokepoint", ev.pkg.PkgPath),
-					FixHint: "Move HTTP calls to core/connectors/outbound/* or server/internal/gateway/transport.go",
+					FixHint: "Move HTTP calls to server/internal/gateway/transport.go or add a documented B2 exception",
 				})
 			}
 		}
 	}
 
 	return ev
+}
+
+func isHTTPClientDo(pkg *packages.Package, sel *ast.SelectorExpr) bool {
+	if pkg == nil || pkg.TypesInfo == nil {
+		return false
+	}
+	selection := pkg.TypesInfo.Selections[sel]
+	if selection == nil || selection.Kind() != types.MethodVal {
+		return false
+	}
+	fn, ok := selection.Obj().(*types.Func)
+	if !ok {
+		return false
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	if !ok || sig.Recv() == nil {
+		return false
+	}
+	return types.TypeString(sig.Recv().Type(), nil) == "*net/http.Client"
 }

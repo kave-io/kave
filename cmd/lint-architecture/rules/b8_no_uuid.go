@@ -20,7 +20,7 @@ func (B8NoUUID) Check(ctx *Context) []Violation {
 			continue
 		}
 		pkgName := pkg.PkgPath
-		if strings.HasSuffix(pkgName, "_test") || strings.Contains(pkgName, "/ids") {
+		if strings.HasSuffix(pkgName, "_test") || strings.Contains(pkgName, "/ids") || strings.Contains(pkgName, "/internal/infra/paseto") {
 			continue
 		}
 

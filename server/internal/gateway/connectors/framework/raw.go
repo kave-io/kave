@@ -77,10 +77,8 @@ func normalizeUpstreamPath(provider, remainder string) string {
 		return remainder
 	}
 	switch provider {
-	case "openai", "anthropic":
+	case "openai":
 		return "/v1" + remainder
-	case "google", "gemini":
-		return "/v1beta" + remainder
 	default:
 		return remainder
 	}
@@ -88,7 +86,10 @@ func normalizeUpstreamPath(provider, remainder string) string {
 
 func actionMethod(upstreamPath string, body []byte) string {
 	segments := strings.Split(strings.Trim(upstreamPath, "/"), "/")
-	method := segments[len(segments)-1]
+	method := strings.Join(segments[1:], ".")
+	if len(segments) > 0 && segments[0] != "v1" && segments[0] != "v1beta" {
+		method = strings.Join(segments, ".")
+	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {

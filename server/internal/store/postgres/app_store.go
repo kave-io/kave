@@ -862,26 +862,42 @@ func scanPostgresRun(scanner postgresScanner) (*runtimemodel.RunRecord, error) {
 
 func (p *PostgresAppStore) CreateAction(ctx context.Context, a *runtimemodel.ActionRecord) error {
 	metaJSON, _ := json.Marshal(a.Metadata)
-	var inputStr *string
-	if a.Input != nil {
-		s := string(*a.Input)
-		inputStr = &s
-	}
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO actions (id, run_id, action_type, connector, method, input, metadata, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, a.ID, a.RunID, a.ActionType, a.Connector, a.Method, inputStr, metaJSON, toTime(a.CreatedAt))
+		INSERT INTO actions (
+			id, run_id, agent_id, project_id, env_id, parent_id,
+			action_type, connector, method, input, output, error,
+			started_at, ended_at, depth, seq, status, source,
+			metadata, attempt, max_attempts, retry_reason, provider_req_id, external_id, created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12,
+			$13, $14, $15, $16, $17, $18,
+			$19, $20, $21, $22, $23, $24, $25
+		)
+	`, a.ID, a.RunID, a.AgentID, a.ProjectID, a.EnvID, a.ParentID,
+		a.ActionType, a.Connector, a.Method, jsonString(a.Input), jsonString(a.Output), a.Error,
+		ptrToTime(a.StartedAt), ptrToTime(a.EndedAt), a.Depth, a.Seq, a.Status, a.Source,
+		metaJSON, a.Attempt, a.MaxAttempts, a.RetryReason, a.ProviderReqID, a.ExternalID, toTime(a.CreatedAt))
 	return err
 }
 
 func (p *PostgresAppStore) GetAction(ctx context.Context, id string) (*runtimemodel.ActionRecord, error) {
 	var a runtimemodel.ActionRecord
 	var metaJSON []byte
-	var inputStr *string
+	var inputStr, outputStr *string
+	var startedAt, endedAt *time.Time
 	var createdAt time.Time
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, run_id, action_type, connector, method, input, metadata, created_at FROM actions WHERE id = $1
-	`, id).Scan(&a.ID, &a.RunID, &a.ActionType, &a.Connector, &a.Method, &inputStr, &metaJSON, &createdAt)
+		SELECT id, run_id, agent_id, project_id, env_id, parent_id,
+		       action_type, connector, method, input, output, error,
+		       started_at, ended_at, depth, seq, status, source,
+		       metadata, attempt, max_attempts, retry_reason, provider_req_id, external_id, created_at
+		FROM actions WHERE id = $1
+	`, id).Scan(
+		&a.ID, &a.RunID, &a.AgentID, &a.ProjectID, &a.EnvID, &a.ParentID,
+		&a.ActionType, &a.Connector, &a.Method, &inputStr, &outputStr, &a.Error,
+		&startedAt, &endedAt, &a.Depth, &a.Seq, &a.Status, &a.Source,
+		&metaJSON, &a.Attempt, &a.MaxAttempts, &a.RetryReason, &a.ProviderReqID, &a.ExternalID, &createdAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -892,18 +908,72 @@ func (p *PostgresAppStore) GetAction(ctx context.Context, id string) (*runtimemo
 		b := []byte(*inputStr)
 		a.Input = &b
 	}
+	if outputStr != nil {
+		b := []byte(*outputStr)
+		a.Output = &b
+	}
 	if err := json.Unmarshal(metaJSON, &a.Metadata); err != nil {
 		a.Metadata = make(map[string]any)
 	}
+	if startedAt != nil {
+		ms := startedAt.UnixMilli()
+		a.StartedAt = &ms
+	}
+	if endedAt != nil {
+		ms := endedAt.UnixMilli()
+		a.EndedAt = &ms
+	}
 	a.CreatedAt = createdAt.UnixMilli()
-	a.Source = "intercepted"
-	a.Status = "completed"
 	return &a, nil
+}
+
+func (p *PostgresAppStore) UpdateAction(ctx context.Context, id string, update *runtimemodel.ActionUpdate) error {
+	if update == nil {
+		return nil
+	}
+	set := make([]string, 0, 8)
+	args := make([]any, 0, 9)
+	add := func(expr string, value any) {
+		args = append(args, value)
+		set = append(set, fmt.Sprintf("%s = $%d", expr, len(args)))
+	}
+	if update.Output != nil {
+		add("output", jsonString(update.Output))
+	}
+	if update.Error != nil {
+		add("error", *update.Error)
+	}
+	if update.StartedAt != nil {
+		add("started_at", toTime(*update.StartedAt))
+	}
+	if update.EndedAt != nil {
+		add("ended_at", toTime(*update.EndedAt))
+	}
+	if update.Status != nil {
+		add("status", *update.Status)
+	}
+	if update.Metadata != nil {
+		metaJSON, _ := json.Marshal(update.Metadata)
+		add("metadata", metaJSON)
+	}
+	if update.ProviderReqID != nil {
+		add("provider_req_id", *update.ProviderReqID)
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	args = append(args, id)
+	_, err := p.pool.Exec(ctx, "UPDATE actions SET "+strings.Join(set, ", ")+" WHERE id = $"+fmt.Sprint(len(args)), args...)
+	return err
 }
 
 func (p *PostgresAppStore) ListActionsByRun(ctx context.Context, runID string, page store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT id, run_id, action_type, connector, method, input, metadata, created_at FROM actions WHERE run_id = $1 ORDER BY created_at ASC
+		SELECT id, run_id, agent_id, project_id, env_id, parent_id,
+		       action_type, connector, method, input, output, error,
+		       started_at, ended_at, depth, seq, status, source,
+		       metadata, attempt, max_attempts, retry_reason, provider_req_id, external_id, created_at
+		FROM actions WHERE run_id = $1 ORDER BY created_at ASC
 	`, runID)
 	if err != nil {
 		return store.PageResult[*runtimemodel.ActionRecord]{}, err
@@ -914,21 +984,36 @@ func (p *PostgresAppStore) ListActionsByRun(ctx context.Context, runID string, p
 	for rows.Next() {
 		var a runtimemodel.ActionRecord
 		var metaJSON []byte
-		var inputStr *string
+		var inputStr, outputStr *string
+		var startedAt, endedAt *time.Time
 		var createdAt time.Time
-		if err := rows.Scan(&a.ID, &a.RunID, &a.ActionType, &a.Connector, &a.Method, &inputStr, &metaJSON, &createdAt); err != nil {
+		if err := rows.Scan(
+			&a.ID, &a.RunID, &a.AgentID, &a.ProjectID, &a.EnvID, &a.ParentID,
+			&a.ActionType, &a.Connector, &a.Method, &inputStr, &outputStr, &a.Error,
+			&startedAt, &endedAt, &a.Depth, &a.Seq, &a.Status, &a.Source,
+			&metaJSON, &a.Attempt, &a.MaxAttempts, &a.RetryReason, &a.ProviderReqID, &a.ExternalID, &createdAt); err != nil {
 			return store.PageResult[*runtimemodel.ActionRecord]{}, err
 		}
 		if inputStr != nil {
 			b := []byte(*inputStr)
 			a.Input = &b
 		}
+		if outputStr != nil {
+			b := []byte(*outputStr)
+			a.Output = &b
+		}
 		if err := json.Unmarshal(metaJSON, &a.Metadata); err != nil {
 			a.Metadata = make(map[string]any)
 		}
+		if startedAt != nil {
+			ms := startedAt.UnixMilli()
+			a.StartedAt = &ms
+		}
+		if endedAt != nil {
+			ms := endedAt.UnixMilli()
+			a.EndedAt = &ms
+		}
 		a.CreatedAt = createdAt.UnixMilli()
-		a.Source = "intercepted"
-		a.Status = "completed"
 		actions = append(actions, &a)
 	}
 	return store.Paginate(actions, page), rows.Err()
@@ -1511,6 +1596,17 @@ func (p *PostgresAppStore) GetCredential(ctx context.Context, id string) (*contr
 }
 
 func (p *PostgresAppStore) StoreCredential(ctx context.Context, c *control.ConnectorCredential) error {
+	sourceType := c.SourceType
+	if sourceType == "" && c.Source != "" {
+		sourceType = string(c.Source)
+	}
+	secretRef := c.SecretRef
+	if secretRef == "" && (sourceType == string(control.CredentialSourceEnv) || c.Source == control.CredentialSourceEnv) {
+		secretRef = c.EnvVar
+	}
+	if secretRef == "" && (sourceType == string(control.CredentialSourceVault) || c.Source == control.CredentialSourceVault) {
+		secretRef = c.VaultRef
+	}
 	_, err := p.pool.Exec(ctx, `
 		INSERT INTO credentials (
 			id, project_id, env_id, connector_type, account_id, label, description,
@@ -1529,7 +1625,7 @@ func (p *PostgresAppStore) StoreCredential(ctx context.Context, c *control.Conne
 			status = excluded.status,
 			updated_at = excluded.updated_at
 	`, c.ID, c.ProjectID, c.EnvID, c.ConnectorType, c.AccountID, c.Label, c.Description,
-		c.SourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID, c.SecretRef, c.SecretVersion,
+		sourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID, secretRef, c.SecretVersion,
 		c.Status, c.Version, ptrToTime(c.ExpiresAt), ptrToTime(c.RotatedAt), c.RotatedBy,
 		c.CreatedBy, toTime(c.CreatedAt), toTime(c.UpdatedAt))
 	return err
@@ -1682,7 +1778,23 @@ func scanPostgresCredential(scanner postgresScanner) (*control.ConnectorCredenti
 	c.CreatedAt = createdAt.UnixMilli()
 	c.UpdatedAt = updatedAt.UnixMilli()
 	c.RevokedAt = timeToMillisPtr(revokedAt)
+	hydratePostgresCredentialSource(&c)
 	return &c, nil
+}
+
+func hydratePostgresCredentialSource(c *control.ConnectorCredential) {
+	if c == nil {
+		return
+	}
+	if c.Source == "" && c.SourceType != "" {
+		c.Source = control.CredentialSource(c.SourceType)
+	}
+	switch c.Source {
+	case control.CredentialSourceEnv:
+		c.EnvVar = c.SecretRef
+	case control.CredentialSourceVault:
+		c.VaultRef = c.SecretRef
+	}
 }
 
 // ── Transaction ───────────────────────────────────────────────────────────────
@@ -1731,6 +1843,13 @@ func pgSpendWhere(f *runtimemodel.SpendFilter, startN int) (string, []any, int) 
 }
 
 func toTime(ms int64) time.Time { return time.UnixMilli(ms) }
+func jsonString(v *[]byte) *string {
+	if v == nil {
+		return nil
+	}
+	s := string(*v)
+	return &s
+}
 func ptrToTime(ms *int64) *time.Time {
 	if ms == nil {
 		return nil

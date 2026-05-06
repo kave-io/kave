@@ -87,6 +87,9 @@ func (m *mockAppStore) CreateAction(_ context.Context, _ *runtimemodel.ActionRec
 func (m *mockAppStore) GetAction(_ context.Context, _ string) (*runtimemodel.ActionRecord, error) {
 	return nil, nil
 }
+func (m *mockAppStore) UpdateAction(_ context.Context, _ string, _ *runtimemodel.ActionUpdate) error {
+	return nil
+}
 func (m *mockAppStore) ListActionsByRun(_ context.Context, _ string, _ store.Page) (store.PageResult[*runtimemodel.ActionRecord], error) {
 	return store.PageResult[*runtimemodel.ActionRecord]{}, nil
 }
@@ -285,7 +288,7 @@ func TestGatewayAgentNotFound(t *testing.T) {
 	mux := http.NewServeMux()
 	g.RegisterRoutes(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/frameworks/claude-code/openai/v1/chat/completions", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/openai/chat/completions", nil)
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 
@@ -294,7 +297,7 @@ func TestGatewayAgentNotFound(t *testing.T) {
 	}
 }
 
-func TestGatewayForwardsClaudeCodeOpenAI(t *testing.T) {
+func TestGatewayForwardsOpenAI(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer real-key" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -329,7 +332,7 @@ func TestGatewayForwardsClaudeCodeOpenAI(t *testing.T) {
 		"model":    "gpt-4o",
 		"messages": []any{},
 	})
-	req := httptest.NewRequest(http.MethodPost, "/frameworks/claude-code/openai/v1/chat/completions", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/openai/chat/completions", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer real-token")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

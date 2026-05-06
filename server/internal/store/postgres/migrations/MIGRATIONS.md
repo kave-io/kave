@@ -16,6 +16,8 @@ The `006` collision from the audit plan was resolved by renumbering the later mi
 - `010_budget_block_fields`
 - `011_policy_casbin_document`
 - `012_run_provenance`
+- `013_audit`
+- `014_action_lifecycle`
 
 Rules going forward:
 

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/kave-io/kave/core/pkg/ids"
 	"github.com/kave-io/kave/core/runtime"
@@ -20,8 +21,13 @@ func New(stages ...Stage) *Pipeline {
 // If any Before returns an error, execution stops — handler and remaining stages do not run.
 // After hooks run in reverse regardless of handler error, so cleanup always fires.
 // If both the handler and an After hook fail, errors.Join preserves both errors.
-func (p *Pipeline) Execute(ctx context.Context, action *runtime.Action, handler Handler) (*Result, error) {
-	var err error
+func (p *Pipeline) Execute(ctx context.Context, action *runtime.Action, handler Handler) (result *Result, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result = nil
+			err = fmt.Errorf("pipeline panic: %v", recovered)
+		}
+	}()
 
 	if action.TraceID == "" {
 		traceID, err := ids.TraceID()

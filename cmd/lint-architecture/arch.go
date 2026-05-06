@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"go/token"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,13 +22,8 @@ func Run(opts LoadOptions) []rules.Violation {
 	if opts.Root == "" {
 		opts.Root = "."
 	}
-	pkgs, err := packages.Load(
-		&packages.Config{
-			Mode: packages.NeedImports | packages.NeedName | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
-			Dir:  opts.Root,
-		},
-		"./...",
-	)
+	fset := token.NewFileSet()
+	pkgs, err := loadPackages(opts.Root, fset)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error loading packages: %v\n", err)
 		return nil
@@ -42,9 +38,7 @@ func Run(opts LoadOptions) []rules.Violation {
 		Allowlist:  allowlist,
 		ModuleRoot: opts.Root,
 		Verbose:    opts.Verbose,
-	}
-	if len(pkgs) > 0 && pkgs[0].Fset != nil {
-		ctx.FileSet = pkgs[0].Fset
+		FileSet:    fset,
 	}
 	var allViolations []rules.Violation
 	for _, rule := range rules.All() {
@@ -67,6 +61,53 @@ func Run(opts LoadOptions) []rules.Violation {
 	})
 
 	return allViolations
+}
+
+func loadPackages(root string, fset *token.FileSet) ([]*packages.Package, error) {
+	dirs := workspaceDirs(root)
+	if len(dirs) == 0 {
+		dirs = []string{root}
+	}
+	var all []*packages.Package
+	for _, dir := range dirs {
+		pkgs, err := packages.Load(
+			&packages.Config{
+				Mode: packages.NeedImports | packages.NeedName | packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo,
+				Dir:  dir,
+				Fset: fset,
+			},
+			"./...",
+		)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, pkgs...)
+	}
+	return all, nil
+}
+
+func workspaceDirs(root string) []string {
+	content, err := os.ReadFile(filepath.Join(root, "go.work"))
+	if err != nil {
+		return nil
+	}
+	var dirs []string
+	seen := map[string]struct{}{}
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimSuffix(line, ",")
+		line = strings.Trim(line, "\"")
+		if !strings.HasPrefix(line, "./") && line != "." {
+			continue
+		}
+		dir := filepath.Clean(filepath.Join(root, line))
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		dirs = append(dirs, dir)
+	}
+	return dirs
 }
 
 func loadAllowlist(root string) map[string][]rules.Allow {

@@ -43,6 +43,8 @@ func (s *staticTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 // minimalChatCompletion is a minimal valid OpenAI chat completion response.
 const minimalChatCompletion = `{"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","content":"Hello!"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`
 
+const chatCompletionWithToolCall = `{"id":"chatcmpl-test","object":"chat.completion","created":1700000000,"model":"gpt-4o-mini","choices":[{"index":0,"message":{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup_repo","arguments":"{\"repo\":\"kave\"}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}`
+
 func chatRequestBody(t *testing.T) []byte {
 	t.Helper()
 	b, err := json.Marshal(map[string]any{
@@ -114,6 +116,55 @@ func TestIntegration_GatewayHappyPath(t *testing.T) {
 	}
 	if sp.EndedAt == nil {
 		t.Error("span.EndedAt should be set after successful completion")
+	}
+}
+
+func TestIntegration_GatewayObservedToolCallSpan(t *testing.T) {
+	t.Setenv("KAVE_TEST_OPENAI_KEY", "test-key-tool-span")
+	h := testutil.New(t)
+	h.Gateway.SetTransport(&staticTransport{
+		statusCode:  200,
+		body:        []byte(chatCompletionWithToolCall),
+		contentType: "application/json",
+	})
+
+	req, err := http.NewRequest(http.MethodPost,
+		h.Server.URL+"/v1/openai/chat/completions",
+		bytes.NewReader(chatRequestBody(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+h.RawToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := h.Client.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	res, err := h.SpanStore.QuerySpans(context.Background(),
+		&runtimemodel.SpanFilter{AgentID: testutil.AgentID},
+		store.Page{Limit: 10})
+	if err != nil {
+		t.Fatalf("QuerySpans: %v", err)
+	}
+	var observed *runtimemodel.SpanRow
+	for _, span := range res.Items {
+		if span.Kind == "observed_action" && span.Connector == "tool_call" {
+			observed = span
+			break
+		}
+	}
+	if observed == nil {
+		t.Fatalf("expected observed tool_call span, got %#v", res.Items)
+	}
+	if observed.ParentID == nil {
+		t.Fatal("observed span should be a child of the intercepted action span")
 	}
 }
 

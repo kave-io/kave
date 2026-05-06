@@ -11,10 +11,16 @@ import (
 type Kind string
 
 const (
-	KindFramework Kind = "framework"
-	KindProtocol  Kind = "protocol"
-	KindProvider  Kind = "provider"
-	KindImport    Kind = "import"
+	KindInbound  Kind = "inbound"
+	KindLLM      Kind = "llm"
+	KindTool     Kind = "tool"
+	KindProtocol Kind = "protocol"
+	KindImport   Kind = "import"
+
+	// Compatibility aliases for older call sites while the connector tree moves
+	// to the intercept/observe boundary terminology.
+	KindFramework Kind = KindInbound
+	KindProvider  Kind = KindLLM
 )
 
 // Capabilities describes what a connector can do.
@@ -22,10 +28,23 @@ type Capabilities struct {
 	Kind             Kind
 	SupportedActions []runtime.ActionType
 	SupportedMethods []string
+	SupportedRoutes  []string
+	RequiresAuth     bool
 	CanProxy         bool
 	StreamSupport    bool
 	APIVersion       string
 }
+
+// StaticDescriptor is the registry/read-model shape used by the gateway, CLI,
+// dashboard, and architecture linter.
+type StaticDescriptor struct {
+	ID   string
+	Caps Capabilities
+}
+
+func (d StaticDescriptor) Name() string { return d.ID }
+
+func (d StaticDescriptor) Capabilities() Capabilities { return d.Caps }
 
 // Descriptor provides connector metadata and capability discovery.
 type Descriptor interface {
