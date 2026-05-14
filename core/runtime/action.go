@@ -71,6 +71,7 @@ type Action struct {
 	Invocation
 	Status  ActionStatus
 	Outcome *Outcome
+	Attrs   map[string]any
 
 	// TraceID is written by the pipeline when a new trace is created and read
 	// by span persistence / trace export.

@@ -445,16 +445,20 @@ func (p *PostgresAppStore) ListProjects(ctx context.Context, orgID string, page 
 // ── EnvironmentStore ──────────────────────────────────────────────────────────
 
 func (p *PostgresAppStore) CreateEnvironment(ctx context.Context, e *control.Environment) error {
+	trustMode := string(e.TrustMode)
+	if trustMode == "" {
+		trustMode = string(control.TrustStrict)
+	}
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO environments (id, project_id, name, slug, type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, e.ID, e.ProjectID, e.Name, e.Slug, e.Type, toTime(e.CreatedAt), toTime(e.UpdatedAt))
+		INSERT INTO environments (id, project_id, name, slug, type, trust_mode, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, e.ID, e.ProjectID, e.Name, e.Slug, e.Type, trustMode, toTime(e.CreatedAt), toTime(e.UpdatedAt))
 	return err
 }
 
 func (p *PostgresAppStore) GetEnvironment(ctx context.Context, id string) (*control.Environment, error) {
 	row := p.pool.QueryRow(ctx, `
-		SELECT id, project_id, name, slug, type, created_at, updated_at
+		SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at
 		FROM environments WHERE id = $1
 	`, id)
 	return scanPostgresEnvironment(row)
@@ -462,17 +466,26 @@ func (p *PostgresAppStore) GetEnvironment(ctx context.Context, id string) (*cont
 
 func (p *PostgresAppStore) GetEnvironmentBySlug(ctx context.Context, projectID, slug string) (*control.Environment, error) {
 	row := p.pool.QueryRow(ctx, `
-		SELECT id, project_id, name, slug, type, created_at, updated_at
+		SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at
 		FROM environments WHERE project_id = $1 AND slug = $2
 	`, projectID, slug)
 	return scanPostgresEnvironment(row)
 }
 
 func (p *PostgresAppStore) ListEnvironments(ctx context.Context, projectID string, page store.Page) (store.PageResult[*control.Environment], error) {
-	rows, err := p.pool.Query(ctx, `
-		SELECT id, project_id, name, slug, type, created_at, updated_at
-		FROM environments WHERE project_id = $1 ORDER BY created_at ASC
-	`, projectID)
+	query := `
+		SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at
+		FROM environments ORDER BY created_at ASC
+	`
+	args := []any{}
+	if projectID != "" {
+		query = `
+			SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at
+			FROM environments WHERE project_id = $1 ORDER BY created_at ASC
+		`
+		args = append(args, projectID)
+	}
+	rows, err := p.pool.Query(ctx, query, args...)
 	if err != nil {
 		return store.PageResult[*control.Environment]{}, err
 	}
@@ -492,7 +505,7 @@ func (p *PostgresAppStore) ListEnvironments(ctx context.Context, projectID strin
 func scanPostgresEnvironment(scanner postgresScanner) (*control.Environment, error) {
 	var e control.Environment
 	var createdAt, updatedAt time.Time
-	err := scanner.Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &createdAt, &updatedAt)
+	err := scanner.Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &e.TrustMode, &createdAt, &updatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}

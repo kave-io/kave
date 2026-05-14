@@ -63,7 +63,7 @@ const topAgents = computed(() => overview.value?.top_agents ?? [])
       </div>
     </section>
 
-    <section :style="{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(320px, 1fr)', gap: '16px' }">
+    <section class="responsive-grid responsive-grid-wide">
       <KCard title="Live activity" subtitle="Streaming spans, policy decisions, cost events" flush>
         <template #action>
           <div style="display: flex; gap: 8px; align-items: center;">
@@ -96,12 +96,13 @@ const topAgents = computed(() => overview.value?.top_agents ?? [])
       </KCard>
     </section>
 
-    <section :style="{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: '16px' }">
+    <section class="responsive-grid">
       <KCard title="Spend by provider" subtitle="Last 24h" flush>
         <div style="padding: 4px 16px 14px;">
           <div
             v-for="p in spendByProvider"
             :key="p.name"
+            class="provider-spend-row"
             :style="{ padding: '10px 0', display: 'grid', gridTemplateColumns: '120px 1fr 80px', alignItems: 'center', gap: '12px' }"
           >
             <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">{{ p.name }}</span>

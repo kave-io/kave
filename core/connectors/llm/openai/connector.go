@@ -9,12 +9,15 @@ import (
 	"strings"
 
 	"github.com/kave-io/kave/core/connectors"
+	"github.com/kave-io/kave/core/connectors/llm/openai/codexauth"
 	"github.com/kave-io/kave/core/connectors/llm/shared"
 	"github.com/kave-io/kave/core/connectors/runtime"
 	"github.com/kave-io/kave/core/pipeline"
 	coreruntime "github.com/kave-io/kave/core/runtime"
 	"github.com/tidwall/gjson"
 )
+
+const codexChatGPTPrefix = "/backend-api/codex/"
 
 const (
 	APIVersion  = "v1"
@@ -68,7 +71,11 @@ func (c *Connector) Capabilities() connectors.Capabilities {
 }
 
 func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*runtime.PreparedRequest, error) {
-	base, err := url.Parse(c.baseURL)
+	baseURL := c.baseURL
+	if strings.TrimSpace(call.UpstreamBaseURL) != "" {
+		baseURL = strings.TrimRight(strings.TrimSpace(call.UpstreamBaseURL), "/")
+	}
+	base, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +83,29 @@ func (c *Connector) PrepareRequest(call *runtime.LLMCall, credential string) (*r
 	base.RawQuery = call.RawQuery
 
 	headers := runtime.CloneHeader(call.Header)
-	stripHopHeaders(headers)
+	preserveUpgrade := strings.EqualFold(headers.Get("Upgrade"), "websocket")
+	stripHopHeaders(headers, preserveUpgrade)
+
+	if credential == "" && strings.HasPrefix(call.UpstreamPath, codexChatGPTPrefix) {
+		auth, authErr := codexauth.Load()
+		if authErr != nil {
+			return nil, fmt.Errorf("%w: codex chatgpt auth: %v", runtime.ErrCredentialRequired, authErr)
+		}
+		credential = auth.AccessToken
+		if auth.AccountID != "" && headers.Get("chatgpt-account-id") == "" {
+			headers.Set("chatgpt-account-id", auth.AccountID)
+		}
+		if headers.Get("OpenAI-Beta") == "" {
+			headers.Set("OpenAI-Beta", "responses=experimental")
+		}
+		if headers.Get("originator") == "" {
+			headers.Set("originator", "codex_cli_rs")
+		}
+		if headers.Get("version") == "" {
+			headers.Set("version", "0.0.0")
+		}
+	}
+
 	if credential != "" {
 		headers.Set("Authorization", "Bearer "+strings.TrimPrefix(credential, "Bearer "))
 	}
@@ -119,7 +148,7 @@ func singleSlashJoin(basePath, path string) string {
 	return basePath + path
 }
 
-func stripHopHeaders(headers http.Header) {
+func stripHopHeaders(headers http.Header, preserveUpgrade bool) {
 	for _, key := range []string{
 		"Authorization",
 		"Connection",
@@ -132,6 +161,9 @@ func stripHopHeaders(headers http.Header) {
 		"Trailer",
 		"Upgrade",
 	} {
+		if preserveUpgrade && (key == "Connection" || key == "Upgrade") {
+			continue
+		}
 		headers.Del(key)
 	}
 }

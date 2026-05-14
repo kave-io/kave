@@ -276,17 +276,21 @@ func (s *SQLiteAppStore) ListProjects(ctx context.Context, orgID string, page st
 // ── EnvironmentStore ──────────────────────────────────────────────────────────
 
 func (s *SQLiteAppStore) CreateEnvironment(ctx context.Context, e *control.Environment) error {
+	trustMode := string(e.TrustMode)
+	if trustMode == "" {
+		trustMode = string(control.TrustStrict)
+	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO environments (id, project_id, name, slug, type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		e.ID, e.ProjectID, e.Name, e.Slug, e.Type, e.CreatedAt, e.UpdatedAt)
+		`INSERT INTO environments (id, project_id, name, slug, type, trust_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, e.ProjectID, e.Name, e.Slug, e.Type, trustMode, e.CreatedAt, e.UpdatedAt)
 	return err
 }
 
 func (s *SQLiteAppStore) GetEnvironment(ctx context.Context, id string) (*control.Environment, error) {
 	var e control.Environment
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, project_id, name, slug, type, created_at, updated_at FROM environments WHERE id = ?`, id).
-		Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &e.CreatedAt, &e.UpdatedAt)
+		`SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at FROM environments WHERE id = ?`, id).
+		Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &e.TrustMode, &e.CreatedAt, &e.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -296,8 +300,8 @@ func (s *SQLiteAppStore) GetEnvironment(ctx context.Context, id string) (*contro
 func (s *SQLiteAppStore) GetEnvironmentBySlug(ctx context.Context, projectID, slug string) (*control.Environment, error) {
 	var e control.Environment
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, project_id, name, slug, type, created_at, updated_at FROM environments WHERE project_id = ? AND slug = ?`, projectID, slug).
-		Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &e.CreatedAt, &e.UpdatedAt)
+		`SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at FROM environments WHERE project_id = ? AND slug = ?`, projectID, slug).
+		Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &e.TrustMode, &e.CreatedAt, &e.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -305,9 +309,13 @@ func (s *SQLiteAppStore) GetEnvironmentBySlug(ctx context.Context, projectID, sl
 }
 
 func (s *SQLiteAppStore) ListEnvironments(ctx context.Context, projectID string, page store.Page) (store.PageResult[*control.Environment], error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, project_id, name, slug, type, created_at, updated_at FROM environments WHERE project_id = ? ORDER BY name ASC`,
-		projectID)
+	query := `SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at FROM environments ORDER BY name ASC`
+	args := []any{}
+	if projectID != "" {
+		query = `SELECT id, project_id, name, slug, type, trust_mode, created_at, updated_at FROM environments WHERE project_id = ? ORDER BY name ASC`
+		args = append(args, projectID)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return store.PageResult[*control.Environment]{}, err
 	}
@@ -316,7 +324,7 @@ func (s *SQLiteAppStore) ListEnvironments(ctx context.Context, projectID string,
 	var items []*control.Environment
 	for rows.Next() {
 		var e control.Environment
-		if err := rows.Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.ProjectID, &e.Name, &e.Slug, &e.Type, &e.TrustMode, &e.CreatedAt, &e.UpdatedAt); err != nil {
 			return store.PageResult[*control.Environment]{}, err
 		}
 		items = append(items, &e)
@@ -1492,9 +1500,13 @@ func (t *txAppStore) CreateProject(ctx context.Context, p *control.Project) erro
 }
 
 func (t *txAppStore) CreateEnvironment(ctx context.Context, e *control.Environment) error {
+	trustMode := string(e.TrustMode)
+	if trustMode == "" {
+		trustMode = string(control.TrustStrict)
+	}
 	_, err := t.tx.ExecContext(ctx,
-		`INSERT INTO environments (id, project_id, name, slug, type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		e.ID, e.ProjectID, e.Name, e.Slug, e.Type, e.CreatedAt, e.UpdatedAt)
+		`INSERT INTO environments (id, project_id, name, slug, type, trust_mode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.ID, e.ProjectID, e.Name, e.Slug, e.Type, trustMode, e.CreatedAt, e.UpdatedAt)
 	return err
 }
 

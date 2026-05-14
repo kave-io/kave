@@ -3,6 +3,7 @@ package framework
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/kave-io/kave/core/connectors/runtime"
@@ -32,6 +33,10 @@ func (c *RawConnector) Name() string {
 }
 
 func (c *RawConnector) ParseLLMRequest(req *runtime.Request) (*runtime.LLMCall, error) {
+	if strings.HasPrefix(req.Path, "/backend-api/codex/") {
+		return c.parseOpenAICodexRequest(req)
+	}
+
 	trimmed := strings.TrimPrefix(req.Path, "/v1/")
 	slash := strings.Index(trimmed, "/")
 	if slash < 0 {
@@ -40,18 +45,20 @@ func (c *RawConnector) ParseLLMRequest(req *runtime.Request) (*runtime.LLMCall, 
 
 	provider := trimmed[:slash]
 	upstreamPath := normalizeUpstreamPath(provider, trimmed[slash:])
+	upstreamBaseURL := upstreamBaseURL(provider, upstreamPath)
 	method := actionMethod(upstreamPath, req.Body)
 
 	inputCopy := make([]byte, len(req.Body))
 	copy(inputCopy, req.Body)
 
 	return &runtime.LLMCall{
-		Provider:     provider,
-		Method:       req.Method,
-		UpstreamPath: upstreamPath,
-		RawQuery:     req.RawQuery,
-		Header:       runtime.CloneHeader(req.Header),
-		Body:         req.Body,
+		Provider:        provider,
+		Method:          req.Method,
+		UpstreamBaseURL: upstreamBaseURL,
+		UpstreamPath:    upstreamPath,
+		RawQuery:        req.RawQuery,
+		Header:          runtime.CloneHeader(req.Header),
+		Body:            req.Body,
 		Action: &coreruntime.Action{
 			Invocation: coreruntime.Invocation{
 				InvocationRef: coreruntime.InvocationRef{
@@ -71,6 +78,38 @@ func (c *RawConnector) ParseLLMRequest(req *runtime.Request) (*runtime.LLMCall, 
 	}, nil
 }
 
+func (c *RawConnector) parseOpenAICodexRequest(req *runtime.Request) (*runtime.LLMCall, error) {
+	inputCopy := make([]byte, len(req.Body))
+	copy(inputCopy, req.Body)
+
+	upstreamPath := req.Path
+	return &runtime.LLMCall{
+		Provider:        "openai",
+		Method:          req.Method,
+		UpstreamBaseURL: upstreamBaseURL("openai", upstreamPath),
+		UpstreamPath:    upstreamPath,
+		RawQuery:        req.RawQuery,
+		Header:          runtime.CloneHeader(req.Header),
+		Body:            req.Body,
+		Action: &coreruntime.Action{
+			Invocation: coreruntime.Invocation{
+				InvocationRef: coreruntime.InvocationRef{
+					ID: ids.New("act"),
+				},
+				InvocationTarget: coreruntime.InvocationTarget{
+					Type:      coreruntime.TypeLLM,
+					Connector: "openai",
+					Method:    actionMethod(upstreamPath, req.Body),
+				},
+				InvocationData: coreruntime.InvocationData{
+					Input: &inputCopy,
+				},
+			},
+			Status: coreruntime.StatusPending,
+		},
+	}, nil
+}
+
 func normalizeUpstreamPath(provider, remainder string) string {
 	remainder = "/" + strings.TrimPrefix(remainder, "/")
 	if strings.HasPrefix(remainder, "/v1/") || strings.HasPrefix(remainder, "/v1beta/") {
@@ -78,13 +117,29 @@ func normalizeUpstreamPath(provider, remainder string) string {
 	}
 	switch provider {
 	case "openai":
+		if strings.HasPrefix(remainder, "/backend-api/codex/") {
+			return remainder
+		}
 		return "/v1" + remainder
 	default:
 		return remainder
 	}
 }
 
+func upstreamBaseURL(provider, upstreamPath string) string {
+	if provider == "openai" && strings.HasPrefix(upstreamPath, "/backend-api/codex/") {
+		if v := strings.TrimSpace(os.Getenv("KAVE_CODEX_CHATGPT_UPSTREAM")); v != "" {
+			return v
+		}
+		return "https://chatgpt.com"
+	}
+	return ""
+}
+
 func actionMethod(upstreamPath string, body []byte) string {
+	if strings.HasPrefix(upstreamPath, "/backend-api/codex/") {
+		return "codex.responses"
+	}
 	segments := strings.Split(strings.Trim(upstreamPath, "/"), "/")
 	method := strings.Join(segments[1:], ".")
 	if len(segments) > 0 && segments[0] != "v1" && segments[0] != "v1beta" {

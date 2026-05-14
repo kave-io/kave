@@ -1,12 +1,18 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/kave-io/kave/core/pipeline"
 	coreruntime "github.com/kave-io/kave/core/runtime"
 )
+
+// ErrCredentialRequired signals that a connector could not prepare an upstream
+// request because no credential was supplied and the connector could not
+// self-acquire one. The gateway maps this to an authentication error.
+var ErrCredentialRequired = errors.New("connector credential required")
 
 // Request is the inbound request shape connectors can inspect without depending
 // on server packages.
@@ -20,13 +26,14 @@ type Request struct {
 
 // LLMCall is the normalized request a framework exposes to the server.
 type LLMCall struct {
-	Provider     string
-	Method       string
-	UpstreamPath string
-	RawQuery     string
-	Header       http.Header
-	Body         []byte
-	Action       *coreruntime.Action
+	Provider        string
+	Method          string
+	UpstreamBaseURL string
+	UpstreamPath    string
+	RawQuery        string
+	Header          http.Header
+	Body            []byte
+	Action          *coreruntime.Action
 }
 
 // PreparedRequest is the outbound HTTP request an LLM connector wants the

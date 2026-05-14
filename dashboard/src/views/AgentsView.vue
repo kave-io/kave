@@ -141,21 +141,21 @@ async function issueToken() {
 
     <template v-if="showToken && selected">
       <div class="drawer-overlay" :style="{ zIndex: 60 }" @click="showToken = false" />
-      <div role="dialog" :style="{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', width: '540px', zIndex: 61, boxShadow: 'var(--shadow-lg)' }">
+      <div role="dialog" class="modal-panel modal-panel-md">
         <strong style="font-size: 15px;">Token created</strong>
         <div style="font-size: 13px; color: var(--text-muted); margin: 6px 0 14px;">Copy this token now. Kave will not show it again.</div>
         <div class="code" style="word-break: break-all; font-size: 12px; padding: 14px; position: relative;">{{ rawToken }}<div style="position: absolute; top: 8px; right: 8px;"><KCopyBtn :value="rawToken" label="copy token" /></div></div>
-        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;"><KBtn @click="showToken = false">Done</KBtn></div>
+        <div class="modal-actions"><KBtn @click="showToken = false">Done</KBtn></div>
       </div>
     </template>
 
     <template v-if="showCreate">
       <div class="drawer-overlay" :style="{ zIndex: 60 }" @click="showCreate = false" />
-      <div role="dialog" :style="{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '22px', width: '520px', zIndex: 61, boxShadow: 'var(--shadow-lg)' }">
+      <div role="dialog" class="modal-panel modal-panel-sm">
         <strong style="font-size: 15px;">Create agent</strong>
         <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px; margin-bottom: 16px;">Define what this agent is and what policy governs it.</div>
         <div style="display: flex; flex-direction: column; gap: 12px;"><label style="display: flex; flex-direction: column; gap: 4px;"><span class="sh">Name</span><input v-model="newName" class="input" placeholder="my-agent" /></label><label style="display: flex; flex-direction: column; gap: 4px;"><span class="sh">Policy</span><select v-model="newPolicy" class="input select"><option value="">No policy</option><option v-for="p in policies" :key="p.id" :value="p.id">{{ p.name }} ({{ p.id }})</option></select></label></div>
-        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;"><KBtn @click="showCreate = false">Cancel</KBtn><KBtn variant="primary" icon="check" :disabled="createAgent.isPending.value" @click="submitCreateAgent">Create agent</KBtn></div>
+        <div class="modal-actions"><KBtn @click="showCreate = false">Cancel</KBtn><KBtn variant="primary" icon="check" :disabled="createAgent.isPending.value" @click="submitCreateAgent">Create agent</KBtn></div>
       </div>
     </template>
   </div>

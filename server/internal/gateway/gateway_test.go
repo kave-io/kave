@@ -19,6 +19,7 @@ import (
 // mockAppStore implements store.AppStore with minimal logic for gateway tests.
 type mockAppStore struct {
 	agent *controlmodel.Agent
+	env   *controlmodel.Environment
 	token *controlmodel.AgentToken
 	cred  *controlmodel.ConnectorCredential
 }
@@ -29,7 +30,7 @@ func (m *mockAppStore) GetAgentByID(_ context.Context, _ string) (*controlmodel.
 	return m.agent, nil
 }
 func (m *mockAppStore) GetAgentByName(_ context.Context, _, _ string) (*controlmodel.Agent, error) {
-	return nil, nil
+	return m.agent, nil
 }
 func (m *mockAppStore) UpdateAgent(_ context.Context, _ string, _ *controlmodel.AgentUpdate) error {
 	return nil
@@ -270,7 +271,7 @@ func (m *mockAppStore) GetEnvironment(_ context.Context, _ string) (*controlmode
 	return nil, nil
 }
 func (m *mockAppStore) GetEnvironmentBySlug(_ context.Context, _, _ string) (*controlmodel.Environment, error) {
-	return nil, nil
+	return m.env, nil
 }
 func (m *mockAppStore) ListEnvironments(_ context.Context, _ string, _ store.Page) (store.PageResult[*controlmodel.Environment], error) {
 	return store.PageResult[*controlmodel.Environment]{}, nil

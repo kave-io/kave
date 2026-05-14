@@ -1,0 +1,86 @@
+#!/usr/bin/env sh
+# KAVE_CODEX_SHIM
+set -eu
+
+canonical_path() {
+	if command -v realpath >/dev/null 2>&1; then
+		realpath "$1"
+		return
+	fi
+	if command -v readlink >/dev/null 2>&1; then
+		readlink -f "$1"
+		return
+	fi
+	printf '%s\n' "$1"
+}
+
+find_real_codex() {
+	if [ -n "${KAVE_CODEX_REAL:-}" ]; then
+		printf '%s\n' "$KAVE_CODEX_REAL"
+		return
+	fi
+	if [ -n "${KAVE_CODEX_REAL_DEFAULT:-}" ]; then
+		printf '%s\n' "$KAVE_CODEX_REAL_DEFAULT"
+		return
+	fi
+
+	self="$(canonical_path "$0")"
+	old_ifs="$IFS"
+	IFS=:
+	for dir in ${PATH:-}; do
+		[ -n "$dir" ] || dir=.
+		candidate="$dir/codex"
+		if [ -x "$candidate" ] && [ "$(canonical_path "$candidate")" != "$self" ]; then
+			printf '%s\n' "$candidate"
+			IFS="$old_ifs"
+			return
+		fi
+	done
+	IFS="$old_ifs"
+	return 1
+}
+
+real_codex="$(find_real_codex)" || {
+	printf '%s\n' "kave codex shim: real Codex binary not found; set KAVE_CODEX_REAL=/path/to/codex" >&2
+	exit 127
+}
+
+if [ "${KAVE_CODEX_SHIM_DISABLE:-}" = "1" ]; then
+	exec "$real_codex" "$@"
+fi
+
+openai_base="${OPENAI_BASE_URL:-}"
+openai_base="${openai_base%/}"
+
+case "$openai_base" in
+*/v1/openai)
+	;;
+*)
+	exec "$real_codex" "$@"
+	;;
+esac
+
+if [ -n "${OPENAI_API_KEY:-}" ]; then
+	exec "$real_codex" \
+		-c 'model_provider="kave"' \
+		-c 'model_providers.kave.name="Kave OpenAI"' \
+		-c "model_providers.kave.base_url=\"$openai_base\"" \
+		-c 'model_providers.kave.env_key="OPENAI_API_KEY"' \
+		-c 'model_providers.kave.wire_api="responses"' \
+		-c 'forced_login_method="api"' \
+		"$@"
+fi
+
+# ChatGPT-login users: route via a custom model_provider whose base_url
+# overrides codex's hard-coded chatgpt.com/backend-api/codex default.
+# Codex still attaches its ChatGPT JWT (auth_mode=chatgpt); the URL just
+# points at kave, which forwards to chatgpt.com and traces the call.
+chatgpt_kave_base="${openai_base%/v1/openai}/backend-api/codex"
+
+exec "$real_codex" \
+	-c 'model_provider="kave"' \
+	-c 'model_providers.kave.name="Kave (ChatGPT)"' \
+	-c "model_providers.kave.base_url=\"$chatgpt_kave_base\"" \
+	-c 'model_providers.kave.wire_api="responses"' \
+	-c 'forced_login_method="chatgpt"' \
+	"$@"

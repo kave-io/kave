@@ -195,6 +195,7 @@ kave-local-install:
 	echo "Building daemon binary -> $$BIN_DIR/kave-server"; \
 	cd server && go build -o "$$BIN_DIR/kave-server" .; \
 	cd - >/dev/null; \
+	KAVE_BIN_DIR="$$BIN_DIR" scripts/install-codex-shim; \
 	echo "Writing local config -> $$CFG_DIR/kave.yaml"; \
 	printf '%s\n' \
 		'apiVersion: kave.io/v1' \
@@ -257,6 +258,7 @@ kave-local-uninstall:
 	rm -f "$$SVC_FILE"; \
 	systemctl --user daemon-reload >/dev/null 2>&1 || true; \
 	systemctl --user reset-failed >/dev/null 2>&1 || true; \
+	KAVE_BIN_DIR="$(HOME)/.local/bin" scripts/uninstall-codex-shim; \
 	rm -f "$(HOME)/.local/bin/kave" "$(HOME)/.local/bin/kave-server"; \
 	rm -rf "$(HOME)/.kave"; \
 	echo "Removed user service, binaries, and ~/.kave."

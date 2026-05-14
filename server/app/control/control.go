@@ -196,9 +196,18 @@ func (s *Server) ListEnvironments(ctx context.Context, req *controlv1.ListEnviro
 // ── Agent Operations ───────────────────────────────────────────────────────
 
 func (s *Server) CreateAgent(ctx context.Context, req *controlv1.CreateAgentRequest) (*controlv1.Agent, error) {
+	env, err := s.appStore.GetEnvironment(ctx, req.EnvId)
+	if err != nil {
+		return nil, err
+	}
+	if env == nil {
+		return nil, status.Errorf(codes.NotFound, "environment %q not found", req.EnvId)
+	}
+
 	now := nowMS()
 	agent := &control.Agent{
 		ID:          newID("agn"),
+		ProjectID:   env.ProjectID,
 		EnvID:       req.EnvId,
 		Name:        req.Name,
 		Description: req.Description,
@@ -307,9 +316,18 @@ func (s *Server) RestoreAgent(ctx context.Context, req *controlv1.RestoreAgentRe
 // are deferred to later plans.
 
 func (s *Server) CreatePolicy(ctx context.Context, req *controlv1.CreatePolicyRequest) (*controlv1.PolicyRecord, error) {
+	env, err := s.appStore.GetEnvironment(ctx, req.EnvId)
+	if err != nil {
+		return nil, err
+	}
+	if env == nil {
+		return nil, status.Errorf(codes.NotFound, "environment %q not found", req.EnvId)
+	}
+
 	now := nowMS()
 	pol := &control.PolicyRecord{
 		ID:                newID("pol"),
+		ProjectID:         env.ProjectID,
 		EnvID:             req.EnvId,
 		Name:              req.Name,
 		Description:       req.Description,

@@ -2,6 +2,10 @@ import { useQuery } from '@tanstack/vue-query'
 import type { Ref } from 'vue'
 import { runsClient } from '@/lib/rpc/clients'
 
+function unrefString(v?: string | Ref<string>) {
+  return typeof v === 'string' ? v : v?.value
+}
+
 export function useRuns(params: {
   projectId?: string | Ref<string>
   envId?: string | Ref<string>
@@ -10,15 +14,16 @@ export function useRuns(params: {
   limit?: number
 }) {
   return useQuery({
-    queryKey: ['runs', params],
+    queryKey: ['runs', params.projectId, params.envId, params.agentId, params.status, params.limit ?? 100],
     queryFn: () =>
       runsClient.list({
-        projectId: typeof params.projectId === 'string' ? params.projectId : params.projectId?.value,
-        envId: typeof params.envId === 'string' ? params.envId : params.envId?.value,
-        agentId: typeof params.agentId === 'string' ? params.agentId : params.agentId?.value,
+        projectId: unrefString(params.projectId),
+        envId: unrefString(params.envId),
+        agentId: unrefString(params.agentId),
         status: params.status,
         limit: params.limit,
       }),
+    refetchInterval: 5000,
   })
 }
 

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, watchEffect } from 'vue'
+import { computed, onMounted, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView } from 'vue-router'
 import { useColorMode } from '@vueuse/core'
 import { RTL_CODES } from './stores/locale'
+import { initializeWorkspaceContext } from './stores/workspace'
 
 const { locale } = useI18n()
 const colorMode = useColorMode()
@@ -26,6 +27,10 @@ watchEffect(() => {
     meta.content = themeColor
     document.head.appendChild(meta)
   }
+})
+
+onMounted(() => {
+  void initializeWorkspaceContext()
 })
 </script>
 

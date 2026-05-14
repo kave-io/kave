@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
+	"sync"
 
 	"github.com/kave-io/kave/core/connectors/runtime"
 	controlmodel "github.com/kave-io/kave/core/model/control"
@@ -23,6 +26,16 @@ import (
 
 func (g *FrameworkGateway) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/openai/", g.handleRaw("openai"))
+	mux.HandleFunc("/backend-api/codex/responses", g.handleCodexChatGPTCompatibility)
+	mux.HandleFunc("/backend-api/codex/responses/", g.handleCodexChatGPTCompatibility)
+	mux.HandleFunc("/backend-api/wham/apps", g.handleChatGPTAppsPassthrough)
+	mux.HandleFunc("/backend-api/wham/apps/", g.handleChatGPTAppsPassthrough)
+	mux.HandleFunc("/backend-api/codex/wham/apps", g.handleCodexChatGPTAppsPassthrough)
+	mux.HandleFunc("/backend-api/codex/wham/apps/", g.handleCodexChatGPTAppsPassthrough)
+	mux.HandleFunc("/connectors/directory/list", g.handleChatGPTDirectoryPassthrough)
+	mux.HandleFunc("/connectors/directory/list/", g.handleChatGPTDirectoryPassthrough)
+	mux.HandleFunc("/connectors/directory/list_workspace", g.handleChatGPTDirectoryPassthrough)
+	mux.HandleFunc("/connectors/directory/list_workspace/", g.handleChatGPTDirectoryPassthrough)
 	mux.HandleFunc("/v1/tools/github/", g.handleTool("github"))
 	mux.HandleFunc("/frameworks/", g.handleFramework)
 }
@@ -35,6 +48,93 @@ func (g *FrameworkGateway) handleRaw(provider string) http.HandlerFunc {
 		}
 		g.handleProxy(w, r, "raw")
 	}
+}
+
+func (g *FrameworkGateway) handleCodexChatGPTCompatibility(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/backend-api/codex/responses" {
+		http.NotFound(w, r)
+		return
+	}
+	g.handleProxy(w, r, "raw")
+}
+
+func (g *FrameworkGateway) handleChatGPTAppsPassthrough(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/backend-api/wham/apps" {
+		http.NotFound(w, r)
+		return
+	}
+	g.handleChatGPTPassthrough(w, r, "/backend-api/wham/apps")
+}
+
+func (g *FrameworkGateway) handleCodexChatGPTAppsPassthrough(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/backend-api/codex/wham/apps" {
+		http.NotFound(w, r)
+		return
+	}
+	g.handleChatGPTPassthrough(w, r, "/backend-api/wham/apps")
+}
+
+func (g *FrameworkGateway) handleChatGPTDirectoryPassthrough(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/connectors/directory/list", "/connectors/directory/list_workspace":
+		g.handleChatGPTPassthrough(w, r, r.URL.Path)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (g *FrameworkGateway) handleChatGPTPassthrough(w http.ResponseWriter, r *http.Request, upstreamPath string) {
+	var body []byte
+	if r.Body != nil {
+		body, _ = io.ReadAll(r.Body)
+	}
+
+	upstreamURL, err := chatGPTUpstreamURL(upstreamPath, r.URL.RawQuery)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "gateway.bad_upstream", "invalid ChatGPT upstream", nil)
+		return
+	}
+
+	headers := runtime.CloneHeader(r.Header)
+	stripProxyHopHeaders(headers)
+	resp, err := g.transport.Do(r.Context(), &runtime.PreparedRequest{
+		Method: r.Method,
+		URL:    upstreamURL,
+		Header: headers,
+		Body:   body,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "gateway.upstream_error", fmt.Sprintf("gateway upstream error: transport: %v", err), nil)
+		return
+	}
+	defer resp.Body.Close()
+
+	copyHeaders(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+
+	if strings.Contains(resp.Header.Get("Content-Type"), "event-stream") {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			_, _ = io.Copy(w, resp.Body)
+			return
+		}
+		buf := make([]byte, 4096)
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				_, _ = w.Write(buf[:n])
+				flusher.Flush()
+			}
+			if readErr == io.EOF {
+				return
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}
+
+	_, _ = io.Copy(w, resp.Body)
 }
 
 func (g *FrameworkGateway) handleFramework(w http.ResponseWriter, r *http.Request) {
@@ -177,10 +277,17 @@ func (g *FrameworkGateway) handleToolProxy(w http.ResponseWriter, r *http.Reques
 func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, framework string) {
 	ctx := r.Context()
 	tw := &trackingResponseWriter{ResponseWriter: w}
+	callerAuthorization := strings.TrimSpace(r.Header.Get("Authorization"))
 
 	identity, ok := authctx.From(ctx)
 	if !ok {
-		identity, _ = serverauth.ParseIdentity(ctx, r.Header.Get("Authorization"), g.app, nil, true)
+		parsed, err := serverauth.ParseIdentity(ctx, callerAuthorization, g.app, nil, true)
+		if err != nil && strings.HasPrefix(callerAuthorization, "Bearer ") {
+			// Unknown bearer is treated as upstream passthrough auth, not Kave identity auth.
+			identity = authctx.Identity{Kind: authctx.KindAnonymous}
+		} else {
+			identity = parsed
+		}
 	}
 	if identity.IsInvalid() {
 		writeError(tw, http.StatusUnauthorized, "gateway.unauthorized", "invalid authorization", nil)
@@ -231,7 +338,7 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		}
 
 		// Axis 2: Provider auth requirement
-		if connector.RequiresAuth() {
+		if connector.RequiresAuth() && callerAuthorization == "" {
 			writeError(tw, http.StatusUnauthorized, "gateway.provider_requires_authentication", "provider requires authentication", nil)
 			return
 		}
@@ -264,6 +371,17 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		agent, err = g.app.GetAgentByID(ctx, agentID)
 		if err != nil || agent == nil {
 			writeError(tw, http.StatusUnauthorized, "gateway.agent_not_found", "agent not found", nil)
+			return
+		}
+	} else {
+		env, envErr := g.app.GetEnvironmentBySlug(ctx, "default", "default")
+		if envErr != nil || env == nil {
+			writeError(tw, http.StatusUnauthorized, "gateway.env_requires_authentication", "environment not found", nil)
+			return
+		}
+		agent, err = g.app.GetAgentByName(ctx, env.ID, "default")
+		if err != nil || agent == nil {
+			writeError(tw, http.StatusUnauthorized, "gateway.agent_not_found", "default guest agent not found", nil)
 			return
 		}
 	}
@@ -341,14 +459,24 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 	}
 
 	handler := func(ctx context.Context, action *coreruntime.Action) (*pipeline.Result, error) {
-		credential, credErr := g.resolveCredential(ctx, agent.EnvID, call.Provider)
-		if errors.Is(credErr, credresolve.ErrPassthrough) {
-			credential = identity.RawAuthorization
-		} else if credErr != nil && provider.RequiresAuth() {
-			return nil, fmt.Errorf("%w: missing connector credential", serverauth.ErrUnauthenticated)
+		credential := ""
+		if (identity.IsAnonymous() || identity.IsGuest()) && callerAuthorization != "" {
+			credential = callerAuthorization
+		}
+		if credential == "" {
+			var credErr error
+			credential, credErr = g.resolveCredential(ctx, agent.EnvID, call.Provider)
+			if errors.Is(credErr, credresolve.ErrPassthrough) {
+				credential = identity.RawAuthorization
+			}
+			// Connector gets a chance to self-acquire (e.g. codex ChatGPT-login).
+			// If it can't, it returns ErrCredentialRequired below.
 		}
 		prepared, err := provider.PrepareRequest(call, credential)
 		if err != nil {
+			if errors.Is(err, runtime.ErrCredentialRequired) {
+				return nil, fmt.Errorf("%w: missing connector credential", serverauth.ErrUnauthenticated)
+			}
 			return nil, err
 		}
 
@@ -359,6 +487,12 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 		defer resp.Body.Close()
 
 		contentType := resp.Header.Get("Content-Type")
+		transport := responseTransport(r, resp)
+		setIngressHeaders(tw.Header(), run.ID, action.TraceID, routeName(framework, call), transport)
+		mergeActionAttrs(action, ingressAttrs(r, framework, call, transport, credentialMode(identity, callerAuthorization, credential), resp.StatusCode))
+		if transport == "websocket" {
+			return g.handleWebSocket(tw, resp, provider)
+		}
 		if strings.Contains(contentType, "event-stream") {
 			return g.handleStream(tw, resp, provider)
 		}
@@ -370,8 +504,147 @@ func (g *FrameworkGateway) handleProxy(w http.ResponseWriter, r *http.Request, f
 	g.finishRun(ctx, run.ID, err)
 	if err != nil && result == nil && !tw.WroteHeader() {
 		status, code, message, details := mapError(err)
+		setIngressHeaders(tw.Header(), run.ID, call.Action.TraceID, routeName(framework, call), "blocked")
+		mergeActionAttrs(call.Action, ingressAttrs(r, framework, call, "blocked", "none", status))
 		writeError(tw, status, code, message, details)
 	}
+}
+
+func routeName(framework string, call *runtime.LLMCall) string {
+	if isCodexChatGPTPath(call.UpstreamPath) {
+		return "openai.codex.chatgpt"
+	}
+	if framework == "" || framework == "raw" {
+		return "openai"
+	}
+	return framework + "." + call.Provider
+}
+
+func responseTransport(r *http.Request, resp *http.Response) string {
+	if isWebSocketRequest(r) || isWebSocketResponse(resp) {
+		return "websocket"
+	}
+	if strings.Contains(resp.Header.Get("Content-Type"), "event-stream") {
+		return "sse"
+	}
+	return "buffered"
+}
+
+func setIngressHeaders(header http.Header, runID, traceID, route, transport string) {
+	if runID != "" {
+		header.Set("X-Kave-Run-ID", runID)
+	}
+	if traceID != "" {
+		header.Set("X-Kave-Trace-ID", traceID)
+	}
+	if route != "" {
+		header.Set("X-Kave-Ingress-Route", route)
+	}
+	if transport != "" {
+		header.Set("X-Kave-Transport", transport)
+	}
+}
+
+func ingressAttrs(r *http.Request, framework string, call *runtime.LLMCall, transport, credMode string, status int) map[string]any {
+	authMode := "api_key"
+	if isCodexChatGPTPath(call.UpstreamPath) {
+		authMode = "chatgpt_bearer"
+	}
+	return map[string]any{
+		"ingress.route":           routeName(framework, call),
+		"ingress.transport":       transport,
+		"ingress.inbound_path":    r.URL.Path,
+		"ingress.upstream_path":   call.UpstreamPath,
+		"ingress.framework":       framework,
+		"ingress.auth_mode":       authMode,
+		"ingress.credential_mode": credMode,
+		"ingress.http_status":     status,
+		"connector.path":          "/v1/openai",
+	}
+}
+
+func credentialMode(identity authctx.Identity, callerAuthorization, credential string) string {
+	if callerAuthorization != "" && credential == callerAuthorization && (identity.IsAnonymous() || identity.IsGuest()) {
+		return "passthrough"
+	}
+	if credential != "" {
+		return "stored"
+	}
+	return "none"
+}
+
+func mergeActionAttrs(action *coreruntime.Action, attrs map[string]any) {
+	if action == nil || len(attrs) == 0 {
+		return
+	}
+	if action.Attrs == nil {
+		action.Attrs = map[string]any{}
+	}
+	for k, v := range attrs {
+		action.Attrs[k] = v
+	}
+}
+
+func isCodexChatGPTPath(path string) bool {
+	return strings.HasPrefix(path, "/backend-api/codex/")
+}
+
+func chatGPTUpstreamURL(path, rawQuery string) (string, error) {
+	baseURL := strings.TrimRight(strings.TrimSpace(os.Getenv("KAVE_CODEX_CHATGPT_UPSTREAM")), "/")
+	if baseURL == "" {
+		baseURL = "https://chatgpt.com"
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+	base.Path = joinURLPath(base.Path, path)
+	base.RawQuery = rawQuery
+	return base.String(), nil
+}
+
+func joinURLPath(basePath, path string) string {
+	basePath = strings.TrimRight(basePath, "/")
+	path = "/" + strings.TrimLeft(path, "/")
+	if basePath == "" {
+		return path
+	}
+	return basePath + path
+}
+
+func stripProxyHopHeaders(headers http.Header) {
+	for _, key := range []string{
+		"Connection",
+		"Transfer-Encoding",
+		"Accept-Encoding",
+		"Keep-Alive",
+		"Proxy-Authenticate",
+		"Proxy-Authorization",
+		"TE",
+		"Trailer",
+		"Upgrade",
+	} {
+		headers.Del(key)
+	}
+}
+
+func isWebSocketRequest(r *http.Request) bool {
+	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket") && headerHasToken(r.Header, "Connection", "upgrade")
+}
+
+func isWebSocketResponse(resp *http.Response) bool {
+	return resp.StatusCode == http.StatusSwitchingProtocols && strings.EqualFold(resp.Header.Get("Upgrade"), "websocket")
+}
+
+func headerHasToken(h http.Header, key, token string) bool {
+	for _, value := range h.Values(key) {
+		for _, part := range strings.Split(value, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), token) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (g *FrameworkGateway) handleBuffered(w http.ResponseWriter, resp *http.Response, provider runtime.LLMConnector) (*pipeline.Result, error) {
@@ -453,4 +726,53 @@ func (g *FrameworkGateway) handleStream(w http.ResponseWriter, resp *http.Respon
 	}
 	result.ProviderRequestID = providerRequestID(resp.Header)
 	return result, nil
+}
+
+func (g *FrameworkGateway) handleWebSocket(w http.ResponseWriter, resp *http.Response, _ runtime.LLMConnector) (*pipeline.Result, error) {
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil, fmt.Errorf("%w: upstream status %d", ErrUpstream, resp.StatusCode)
+	}
+
+	upstream, ok := resp.Body.(io.ReadWriteCloser)
+	if !ok {
+		return nil, fmt.Errorf("%w: upstream websocket is not writable", ErrUpstream)
+	}
+	defer upstream.Close()
+
+	downstream, rw, err := http.NewResponseController(w).Hijack()
+	if err != nil {
+		return nil, fmt.Errorf("websocket hijack: %w", err)
+	}
+	defer downstream.Close()
+
+	copyHeaders(resp.Header, w.Header())
+	if _, err := fmt.Fprintf(rw, "HTTP/1.1 %d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode)); err != nil {
+		return nil, err
+	}
+	if err := resp.Header.Write(rw); err != nil {
+		return nil, err
+	}
+	if _, err := rw.WriteString("\r\n"); err != nil {
+		return nil, err
+	}
+	if err := rw.Flush(); err != nil {
+		return nil, err
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(upstream, downstream)
+		_ = upstream.Close()
+	}()
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(downstream, upstream)
+		_ = downstream.Close()
+	}()
+	wg.Wait()
+
+	return &pipeline.Result{ProviderRequestID: providerRequestID(resp.Header)}, nil
 }

@@ -91,6 +91,9 @@ func copyHeaders(dst, src http.Header) {
 // For framework paths (/frameworks/<name>/<provider>/...) it returns the provider.
 func (g *FrameworkGateway) parseProviderFromPath(path, framework string) string {
 	if framework == "raw" {
+		if strings.HasPrefix(path, "/backend-api/codex/") {
+			return "openai"
+		}
 		// path: /v1/<provider>/...
 		parts := strings.SplitN(strings.TrimPrefix(path, "/v1/"), "/", 2)
 		if len(parts) > 0 && parts[0] != "" {
@@ -227,4 +230,8 @@ func (t *trackingResponseWriter) Flush() {
 	if f, ok := t.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+func (t *trackingResponseWriter) Unwrap() http.ResponseWriter {
+	return t.ResponseWriter
 }

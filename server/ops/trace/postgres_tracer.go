@@ -3,6 +3,7 @@ package trace
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/kave-io/kave/core/bus"
 	runtimemodel "github.com/kave-io/kave/core/model/runtime"
@@ -84,6 +85,11 @@ func (t *Tracer) After(ctx context.Context, action *runtime.Action, result *pipe
 		TraceID:    action.TraceID,
 		RootSpanID: rootSpanID,
 		CreatedAt:  endedAtMS,
+	}
+	if len(action.Attrs) > 0 {
+		if attrs, err := encodeAttrs(action.Attrs); err == nil {
+			row.Attrs = bytesPtr(attrs)
+		}
 	}
 
 	if result != nil {
@@ -179,7 +185,7 @@ func (t *Tracer) writeObservedSpan(ctx context.Context, spanStore coreStore.Span
 	if name == "" {
 		name = observed.Connector + "." + observed.Method
 	}
-	attrs, _ := json.Marshal(observed.Attrs)
+	attrs, _ := encodeAttrs(observed.Attrs)
 	startedAt := at
 	endedAt := at
 	row := &runtimemodel.SpanRow{
@@ -223,4 +229,34 @@ func bytesPtr(v []byte) *[]byte {
 		return nil
 	}
 	return &v
+}
+
+func encodeAttrs(attrs map[string]any) ([]byte, error) {
+	if len(attrs) == 0 {
+		return nil, nil
+	}
+	typed := make(map[string]coretrace.AttrVal, len(attrs))
+	for key, value := range attrs {
+		switch v := value.(type) {
+		case string:
+			typed[key] = coretrace.StringAttr(v)
+		case int:
+			typed[key] = coretrace.IntAttr(int64(v))
+		case int64:
+			typed[key] = coretrace.IntAttr(v)
+		case int32:
+			typed[key] = coretrace.IntAttr(int64(v))
+		case float64:
+			typed[key] = coretrace.FloatAttr(v)
+		case float32:
+			typed[key] = coretrace.FloatAttr(float64(v))
+		case bool:
+			typed[key] = coretrace.BoolAttr(v)
+		default:
+			if value != nil {
+				typed[key] = coretrace.StringAttr(fmt.Sprint(value))
+			}
+		}
+	}
+	return json.Marshal(typed)
 }

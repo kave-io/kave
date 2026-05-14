@@ -77,8 +77,9 @@ function palGo(item: { to: string }) {
 </script>
 
 <template>
-  <div :style="{ display: 'flex', height: '100%', minHeight: 0 }" :dir="isRtl ? 'rtl' : 'ltr'">
+  <div class="app-shell" :dir="isRtl ? 'rtl' : 'ltr'">
     <aside
+      :class="['app-sidebar', collapsed ? 'is-collapsed' : '']"
       :style="{
         width: collapsed ? 'var(--sidebar-w-collapsed)' : 'var(--sidebar-w)',
         flexShrink: 0,
@@ -90,16 +91,16 @@ function palGo(item: { to: string }) {
         transition: 'width 180ms',
       }"
     >
-      <div style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 8px;">
+      <div class="app-brand" style="display: flex; align-items: center; gap: 10px; padding: 4px 8px 8px;">
         <KLogo :size="26" />
         <span v-if="!collapsed" style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em;">Kave</span>
         <span v-if="!collapsed" style="margin-left: auto; font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em;">v0.7.2</span>
       </div>
 
-      <nav style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 4px;">
-        <div v-for="g in NAV" :key="g.group">
+      <nav class="app-nav" style="display: flex; flex-direction: column; gap: 12px; flex: 1; margin-top: 4px;">
+        <div v-for="g in NAV" :key="g.group" class="app-nav-group">
           <div v-if="!collapsed" class="sh" style="padding: 0 10px 6px; font-size: 10.5px;">{{ g.group }}</div>
-          <div style="display: flex; flex-direction: column; gap: 1px;">
+          <div class="app-nav-items" style="display: flex; flex-direction: column; gap: 1px;">
             <button
               v-for="it in g.items"
               :key="it.id"
@@ -131,7 +132,7 @@ function palGo(item: { to: string }) {
         </div>
       </nav>
 
-      <div v-if="!collapsed" style="padding: 10px; border-top: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 6px;">
+      <div v-if="!collapsed" class="app-sidebar-links" style="padding: 10px; border-top: 1px solid var(--border-soft); display: flex; flex-direction: column; gap: 6px;">
         <a href="https://docs.kave.io" target="_blank" rel="noopener" style="display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 4px; font-size: 12px; color: var(--text-dim); text-decoration: none;">
           <KIcon name="book" :size="13" />Docs<KIcon name="arrow-up-right" :size="11" :style="{ marginLeft: 'auto' }" />
         </a>
@@ -142,6 +143,7 @@ function palGo(item: { to: string }) {
     </aside>
 
     <main
+      class="app-main"
       :style="{
         flex: 1,
         minWidth: 0,
@@ -156,6 +158,7 @@ function palGo(item: { to: string }) {
       }"
     >
       <header
+        class="app-header"
         :style="{
           height: 'var(--header-h)',
           flexShrink: 0,
@@ -184,6 +187,7 @@ function palGo(item: { to: string }) {
         </select>
 
         <button
+          class="app-search"
           :style="{ display: 'flex', alignItems: 'center', gap: '8px', height: '28px', padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--text-faint)', fontSize: '12px', cursor: 'pointer', minWidth: '220px', marginLeft: '8px', fontFamily: 'inherit' }"
           @click="paletteOpen = true"
         >
@@ -192,7 +196,7 @@ function palGo(item: { to: string }) {
           <span class="kbd">⌘K</span>
         </button>
 
-        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+        <div class="app-header-actions" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
           <KBadge :tone="daemonStatus.isError.value ? 'danger' : 'success'" :dot="daemonStatus.isError.value ? null : 'live'">
             Daemon · {{ daemonStatus.isError.value ? 'Offline' : (daemonStatus.data.value?.version || 'Live') }}
           </KBadge>
@@ -200,7 +204,7 @@ function palGo(item: { to: string }) {
         </div>
       </header>
 
-      <div style="flex: 1; overflow: auto; min-height: 0; position: relative;">
+      <div class="app-content" style="flex: 1; overflow: auto; min-height: 0; position: relative;">
         <RouterView />
       </div>
     </main>
@@ -208,7 +212,7 @@ function palGo(item: { to: string }) {
     <!-- Command palette -->
     <template v-if="paletteOpen">
       <div class="drawer-overlay" :style="{ zIndex: 80 }" @click="paletteOpen = false" />
-      <div role="dialog" :style="{ position: 'fixed', top: '20%', left: '50%', transform: 'translateX(-50%)', width: '540px', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: '12px', boxShadow: 'var(--shadow-lg)', zIndex: 81, overflow: 'hidden' }">
+      <div role="dialog" class="command-palette" :style="{ position: 'fixed', top: '20%', left: '50%', transform: 'translateX(-50%)', width: '540px', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: '12px', boxShadow: 'var(--shadow-lg)', zIndex: 81, overflow: 'hidden' }">
         <div style="display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border-soft);">
           <KIcon name="search" :size="16" :style="{ color: 'var(--text-dim)' }" />
           <input v-model="palQ" autofocus placeholder="Search pages, runs, agents, actions…" :style="{ flex: 1, border: 0, background: 'transparent', fontSize: '14px', color: 'var(--text)', outline: 'none', fontFamily: 'inherit' }" />

@@ -291,6 +291,24 @@ func seedDefaults(ctx context.Context, app store.AppStore) {
 			CreatedAt:         now, UpdatedAt: now,
 		})
 	}
+
+	if ag, _ := app.GetAgentByName(ctx, "default", "default"); ag == nil {
+		policyID := "default"
+		_ = app.CreateAgent(ctx, &controlmodel.Agent{
+			ID:          "default",
+			ProjectID:   "default",
+			EnvID:       "default",
+			Name:        "default",
+			Description: "Default permissive local agent",
+			PolicyID:    &policyID,
+			Status:      controlmodel.AgentStatusActive,
+			Metadata:    map[string]any{},
+			CreatedBy:   "system",
+			UpdatedBy:   "system",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		})
+	}
 }
 
 // isPermissivePublicBind returns true if the bind address is not loopback.

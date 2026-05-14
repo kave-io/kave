@@ -1,0 +1,98 @@
+#!/usr/bin/env sh
+set -eu
+
+bin_dir="${KAVE_BIN_DIR:-$HOME/.local/bin}"
+shim_src="${KAVE_CODEX_SHIM_SRC:-scripts/codex-shim}"
+
+canonical_path() {
+	if command -v realpath >/dev/null 2>&1; then
+		realpath "$1"
+		return
+	fi
+	if command -v readlink >/dev/null 2>&1; then
+		readlink -f "$1"
+		return
+	fi
+	printf '%s\n' "$1"
+}
+
+is_kave_shim() {
+	[ -f "$1" ] && grep -q 'KAVE_CODEX_SHIM' "$1" 2>/dev/null
+}
+
+path_dir_before() {
+	needle="$(canonical_path "$1")"
+	before="$(canonical_path "$2")"
+	old_ifs="$IFS"
+	IFS=:
+	for dir in ${PATH:-}; do
+		[ -n "$dir" ] || dir=.
+		canon="$(canonical_path "$dir")"
+		if [ "$canon" = "$needle" ]; then
+			IFS="$old_ifs"
+			return 0
+		fi
+		if [ "$canon" = "$before" ]; then
+			IFS="$old_ifs"
+			return 1
+		fi
+	done
+	IFS="$old_ifs"
+	return 1
+}
+
+write_shim() {
+	dest="$1"
+	real="${2:-}"
+	tmp="$dest.tmp.$$"
+	if [ -n "$real" ]; then
+		{
+			printf '%s\n' '#!/usr/bin/env sh'
+			printf "KAVE_CODEX_REAL_DEFAULT='%s'\n" "$real"
+			tail -n +2 "$shim_src"
+		} > "$tmp"
+	else
+		cp "$shim_src" "$tmp"
+	fi
+	chmod 0755 "$tmp"
+	mv "$tmp" "$dest"
+}
+
+mkdir -p "$bin_dir"
+dest="$bin_dir/codex"
+active="$(command -v codex || true)"
+
+if [ -z "$active" ]; then
+	write_shim "$dest" ""
+	printf '%s\n' "Installed Codex shim -> $dest"
+	exit 0
+fi
+
+active_canon="$(canonical_path "$active")"
+dest_canon="$(canonical_path "$dest" 2>/dev/null || printf '%s\n' "$dest")"
+
+if is_kave_shim "$active"; then
+	real_default="$(awk -F"'" '/^KAVE_CODEX_REAL_DEFAULT=/{print $2; exit}' "$active" 2>/dev/null || true)"
+	write_shim "$active" "$real_default"
+	printf '%s\n' "Updated Codex shim -> $active"
+	exit 0
+fi
+
+if path_dir_before "$bin_dir" "$(dirname "$active")"; then
+	write_shim "$dest" "$active_canon"
+	printf '%s\n' "Installed Codex shim -> $dest"
+	exit 0
+fi
+
+if [ -L "$active" ] && [ -w "$(dirname "$active")" ]; then
+	real="$(canonical_path "$active")"
+	write_shim "$active" "$real"
+	printf '%s\n' "Wrapped active Codex launcher -> $active"
+	printf '%s\n' "Real Codex remains at $real"
+	exit 0
+fi
+
+write_shim "$dest" "$active_canon"
+printf '%s\n' "Installed Codex shim -> $dest"
+printf '%s\n' "Warning: $dest is after $active in PATH, so plain 'codex' will still bypass Kave."
+printf '%s\n' "Move $bin_dir before $(dirname "$active") in PATH, or set KAVE_CODEX_REAL=$active_canon and put scripts/codex-shim earlier."

@@ -26,7 +26,7 @@ const groups = computed(() => ['All', ...CONNECTORS.map(g => g.kind)])
 const visibleGroups = computed(() => CONNECTORS.filter(g => tabFilter.value === 'All' || g.kind === tabFilter.value))
 
 const SNIPPETS: Record<string, string> = {
-  openai: `export OPENAI_BASE_URL=http://127.0.0.1:18080/v1/openai\nexport OPENAI_API_KEY=<kave-agent-token>`,
+  openai: `export OPENAI_BASE_URL=http://127.0.0.1:18080/v1/openai\nexport OPENAI_API_KEY=<kave-agent-token-or-provider-key>`,
   github: `export KAVE_GITHUB_BASE_URL=http://127.0.0.1:18080/v1/tools/github\nexport KAVE_AGENT_TOKEN=<kave-agent-token>`,
 }
 const snippet = computed(() => selected.value
