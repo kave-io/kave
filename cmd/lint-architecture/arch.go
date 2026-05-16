@@ -142,6 +142,11 @@ func loadAllowlist(root string) map[string][]rules.Allow {
 			path := strings.TrimSpace(parts[0])
 			reason := strings.TrimSpace(parts[1])
 
+			// Strip optional HTTP method prefix (e.g. "POST /foo" -> "/foo", "* /foo" -> "/foo").
+			if idx := strings.Index(path, " "); idx > 0 && !strings.HasPrefix(path, "/") {
+				path = strings.TrimSpace(path[idx+1:])
+			}
+
 			allowlist[f.ruleID] = append(allowlist[f.ruleID], rules.Allow{
 				Path:   path,
 				Reason: reason,

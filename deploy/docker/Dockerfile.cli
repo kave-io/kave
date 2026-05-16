@@ -1,0 +1,3 @@
+FROM gcr.io/distroless/static-debian12
+COPY kave /usr/local/bin/kave
+ENTRYPOINT ["/usr/local/bin/kave"]

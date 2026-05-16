@@ -1,0 +1,13 @@
+{
+  "method": "POST",
+  "url": "https://chatgpt.com/backend-api/codex/responses",
+  "headers": {
+    "Authorization": [
+      "Bearer chatgpt-token"
+    ],
+    "Content-Type": [
+      "application/json"
+    ]
+  },
+  "body": "{\"model\":\"gpt-5-codex\",\"stream\":true,\"input\":\"hi\"}"
+}

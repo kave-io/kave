@@ -6,6 +6,16 @@ GET /health : healthz endpoint
 POST /v1/openai/* : LLM gateway proxy
 * /v1/tools/github/* : GitHub tool gateway proxy
 * /frameworks/* : framework adapter routes
+POST /backend-api/codex/responses : ChatGPT Codex compatibility passthrough
+POST /backend-api/codex/responses/ : ChatGPT Codex compatibility passthrough (trailing slash)
+* /backend-api/wham/apps : ChatGPT apps passthrough
+* /backend-api/wham/apps/ : ChatGPT apps passthrough (trailing slash)
+* /backend-api/codex/wham/apps : ChatGPT Codex apps passthrough
+* /backend-api/codex/wham/apps/ : ChatGPT Codex apps passthrough (trailing slash)
+* /connectors/directory/list : ChatGPT connectors directory passthrough
+* /connectors/directory/list/ : ChatGPT connectors directory passthrough (trailing slash)
+* /connectors/directory/list_workspace : ChatGPT connectors workspace directory passthrough
+* /connectors/directory/list_workspace/ : ChatGPT connectors workspace directory passthrough (trailing slash)
 GET /api/v1/fx/currencies : pre-migration FX HTTP route (will be deleted in B2 cleanup)
 GET /api/v1/fx/rates : pre-migration FX HTTP route (will be deleted in B2 cleanup)
 GET /api/v1/fx/convert : pre-migration FX HTTP route (will be deleted in B2 cleanup)

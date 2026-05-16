@@ -173,29 +173,45 @@ func parseJSONUsage(body []byte) *coreruntime.TokenUsage {
 		gjson.GetBytes(body, "model"),
 		gjson.GetBytes(body, "response.model"),
 	)
+	// Responses-API SSE wraps the usage block inside the response.completed
+	// event under "response.usage.*", whereas Chat Completions and the
+	// non-stream Responses API put it at the root under "usage.*". Check both.
 	input := firstInt(
 		gjson.GetBytes(body, "usage.prompt_tokens"),
 		gjson.GetBytes(body, "usage.input_tokens"),
+		gjson.GetBytes(body, "response.usage.input_tokens"),
+		gjson.GetBytes(body, "response.usage.prompt_tokens"),
 	)
 	output := firstInt(
 		gjson.GetBytes(body, "usage.completion_tokens"),
 		gjson.GetBytes(body, "usage.output_tokens"),
+		gjson.GetBytes(body, "response.usage.output_tokens"),
+		gjson.GetBytes(body, "response.usage.completion_tokens"),
 	)
 	cacheRead := firstInt(
 		gjson.GetBytes(body, "usage.prompt_tokens_details.cached_tokens"),
 		gjson.GetBytes(body, "usage.input_tokens_details.cached_tokens"),
+		gjson.GetBytes(body, "response.usage.input_tokens_details.cached_tokens"),
 	)
 	cacheWrite := firstInt(
 		gjson.GetBytes(body, "usage.prompt_tokens_details.cache_creation_tokens"),
 		gjson.GetBytes(body, "usage.input_tokens_details.cache_write_tokens"),
 		gjson.GetBytes(body, "usage.input_tokens_details.cached_creation_tokens"),
+		gjson.GetBytes(body, "response.usage.input_tokens_details.cache_write_tokens"),
 	)
 	reasoning := firstInt(
 		gjson.GetBytes(body, "usage.completion_tokens_details.reasoning_tokens"),
 		gjson.GetBytes(body, "usage.output_tokens_details.reasoning_tokens"),
+		gjson.GetBytes(body, "response.usage.output_tokens_details.reasoning_tokens"),
 	)
-	audioInput := firstInt(gjson.GetBytes(body, "usage.prompt_tokens_details.audio_tokens"))
-	audioOutput := firstInt(gjson.GetBytes(body, "usage.completion_tokens_details.audio_tokens"))
+	audioInput := firstInt(
+		gjson.GetBytes(body, "usage.prompt_tokens_details.audio_tokens"),
+		gjson.GetBytes(body, "response.usage.input_tokens_details.audio_tokens"),
+	)
+	audioOutput := firstInt(
+		gjson.GetBytes(body, "usage.completion_tokens_details.audio_tokens"),
+		gjson.GetBytes(body, "response.usage.output_tokens_details.audio_tokens"),
+	)
 
 	if input == 0 && output == 0 && cacheRead == 0 && cacheWrite == 0 && reasoning == 0 && model == "" {
 		return nil

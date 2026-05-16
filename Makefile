@@ -1,8 +1,10 @@
 .PHONY: help dev dev-server dev-dashboard serve build build-server dashboard-build \
-        test test-fast lint fmt vet migrate clean cli-docs \
+        test test-fast test-unit test-integration test-e2e test-contracts \
+        bench fuzz loadgen lint lint-arch fmt vet migrate clean cli-docs \
         kave-local-install kave-local-uninstall kave-local-reinstall \
         buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
-        buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev
+        buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev \
+        docker-build docker-push release-snapshot release
 .NOTPARALLEL: kave-local-install kave-local-uninstall kave-local-reinstall
 
 DASHBOARD_DIR := dashboard
@@ -24,10 +26,23 @@ help:
 	@echo "  make build-server      Compile server binary only (assumes dashboard already built)"
 	@echo "  make dashboard-build   Build dashboard into server/ui/dist/"
 	@echo ""
+	@echo "Release:"
+	@echo "  make release-snapshot  Local dry-run release (GoReleaser --snapshot, no publish)"
+	@echo "  make docker-build      Build multi-arch Docker images locally (server + cli)"
+	@echo "  make docker-push       Push Docker images to GHCR (requires docker login)"
+	@echo ""
 	@echo "Quality:"
-	@echo "  make test              Run all tests"
-	@echo "  make test-fast         Run tests (cached)"
+	@echo "  make test              Run unit + integration + contracts"
+	@echo "  make test-unit         Unit tests only (no external deps)"
+	@echo "  make test-integration  Tests tagged 'integration' (local services)"
+	@echo "  make test-e2e          Tests tagged 'e2e' (boots full stack)"
+	@echo "  make test-contracts    Golden-file contract tests"
+	@echo "  make test-fast         Cached run across all modules"
+	@echo "  make bench             Run all Go benchmarks"
+	@echo "  make fuzz              Run every Fuzz* corpus (FUZZTIME=10s)"
+	@echo "  make loadgen           Run loadgen scenarios"
 	@echo "  make lint              staticcheck on all Go modules"
+	@echo "  make lint-arch         Run architecture linter (B*-* rules)"
 	@echo "  make fmt               gofmt all Go files"
 	@echo "  make vet               go vet all modules"
 	@echo "  make cli-docs          Regenerate Cobra CLI docs"
@@ -77,20 +92,76 @@ dashboard-build:
 	@echo "Dashboard built -> server/ui/dist/"
 
 # ── Test ─────────────────────────────────────────────────────────────────────
+# Build-tag convention:
+#   default       — unit tests (fast, no external deps)
+#   //go:build integration — tests that hit local services (duckdb, sqlite, postgres-in-docker)
+#   //go:build e2e         — full-stack tests booting the server binary
+#   //go:build contracts   — golden-file contract tests for HTTP/gRPC surfaces
+# Run `make test` for the umbrella; CI runs the splits separately.
 
-test:
-	cd core       && go test -v ./...
-	cd server     && go test -v ./...
-	cd cli        && go test -v ./...
-	cd proto/gen  && go test -v ./...
-	cd cmd/lint-architecture && go test -v ./...
+GO_MODULES := core server cli proto/gen cmd/lint-architecture
+TEST_FLAGS ?=
+
+test: test-unit test-integration test-contracts
+
+test-unit:
+	@for m in $(GO_MODULES); do \
+	  echo ">> unit: $$m"; \
+	  (cd $$m && go test -count=1 $(TEST_FLAGS) ./...) || exit 1; \
+	done
+
+test-integration:
+	@for m in $(GO_MODULES); do \
+	  echo ">> integration: $$m"; \
+	  (cd $$m && go test -count=1 -tags=integration $(TEST_FLAGS) ./...) || exit 1; \
+	done
+
+test-e2e:
+	@for m in $(GO_MODULES); do \
+	  echo ">> e2e: $$m"; \
+	  (cd $$m && go test -count=1 -tags=e2e -timeout=10m $(TEST_FLAGS) ./...) || exit 1; \
+	done
+
+test-contracts:
+	@for m in $(GO_MODULES); do \
+	  echo ">> contracts: $$m"; \
+	  (cd $$m && go test -count=1 -tags=contracts $(TEST_FLAGS) ./...) || exit 1; \
+	done
 
 test-fast:
-	cd core       && go test -count=1 ./...
-	cd server     && go test -count=1 ./...
-	cd cli        && go test -count=1 ./...
-	cd proto/gen  && go test -count=1 ./...
-	cd cmd/lint-architecture && go test -count=1 ./...
+	@for m in $(GO_MODULES); do \
+	  (cd $$m && go test ./...) || exit 1; \
+	done
+
+bench:
+	@for m in $(GO_MODULES); do \
+	  echo ">> bench: $$m"; \
+	  (cd $$m && go test -run=^$$ -bench=. -benchmem -benchtime=1s ./...) || exit 1; \
+	done
+
+# Run every Fuzz* corpus briefly. Use FUZZTIME=30s make fuzz for longer runs.
+FUZZTIME ?= 10s
+fuzz:
+	@for m in $(GO_MODULES); do \
+	  echo ">> fuzz: $$m (FUZZTIME=$(FUZZTIME))"; \
+	  for pkg in $$(cd $$m && go list ./...); do \
+	    for fn in $$(cd $$m && go test -list '^Fuzz.*' $$pkg 2>/dev/null | grep '^Fuzz' || true); do \
+	      echo "   - $$pkg :: $$fn"; \
+	      (cd $$m && go test -run=^$$ -fuzz=^$$fn$$ -fuzztime=$(FUZZTIME) $$pkg) || exit 1; \
+	    done; \
+	  done; \
+	done
+
+# Loadgen: long-running perf scenarios under ./benchmarks/loadgen (placeholder until scenarios land).
+loadgen:
+	@if [ -d benchmarks/loadgen ]; then \
+	  go run ./benchmarks/loadgen/... ; \
+	else \
+	  echo "no benchmarks/loadgen scenarios yet — see benchmarks/BASELINE.md"; \
+	fi
+
+lint-arch:
+	go run ./cmd/lint-architecture
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 
@@ -181,6 +252,49 @@ cli-docs:
 	@echo "  KAVE_DOCS_DIR=../kave-docs make cli-docs"
 	@test -n "$(KAVE_DOCS_DIR)" || (echo "error: KAVE_DOCS_DIR not set" && exit 1)
 	cd cli && env GOCACHE=/tmp/go-build go run ./tools/gen-docs $(KAVE_DOCS_DIR)/src/content/docs/cli/reference
+
+# ── Release ───────────────────────────────────────────────────────────────────
+
+GORELEASER ?= goreleaser
+DOCKER_REGISTRY ?= ghcr.io/kave-io
+
+release-snapshot:
+	@command -v $(GORELEASER) >/dev/null 2>&1 || (echo "goreleaser not installed: https://goreleaser.com/install/" && exit 1)
+	$(GORELEASER) release --snapshot --clean
+
+release:
+	@command -v $(GORELEASER) >/dev/null 2>&1 || (echo "goreleaser not installed: https://goreleaser.com/install/" && exit 1)
+	$(GORELEASER) release --clean
+
+docker-build: dashboard-build
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  --target server \
+	  -t $(DOCKER_REGISTRY)/kave-server:dev \
+	  --load=false \
+	  .
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  --target cli \
+	  -t $(DOCKER_REGISTRY)/kave-cli:dev \
+	  --load=false \
+	  .
+
+docker-push: dashboard-build
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  --target server \
+	  -t $(DOCKER_REGISTRY)/kave-server:dev \
+	  --push \
+	  .
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  --target cli \
+	  -t $(DOCKER_REGISTRY)/kave-cli:dev \
+	  --push \
+	  .
+
+# ── Local Install ─────────────────────────────────────────────────────────────
 
 kave-local-install:
 	@set -eu; \

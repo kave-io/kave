@@ -1,0 +1,21 @@
+{
+  "body_len": 382,
+  "token_usage": {
+    "InputTokens": 120,
+    "OutputTokens": 30,
+    "CacheRead": 80,
+    "CacheWrite": 0,
+    "Reasoning": 5,
+    "AudioInput": 0,
+    "AudioOutput": 0,
+    "ImageUnits": 0,
+    "Model": "gpt-4o"
+  },
+  "has_usage_link": true,
+  "spans": [
+    {
+      "name": "tool.lookup_repo",
+      "input": "{\"repo\":\"kave\"}"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "body_len": 333,
+  "token_usage": {
+    "InputTokens": 42,
+    "OutputTokens": 7,
+    "CacheRead": 0,
+    "CacheWrite": 0,
+    "Reasoning": 0,
+    "AudioInput": 0,
+    "AudioOutput": 0,
+    "ImageUnits": 0,
+    "Model": "gpt-4o"
+  },
+  "has_usage_link": true,
+  "spans": [
+    {
+      "name": "tool.search",
+      "input": "{\"q\":\"openai\"}"
+    }
+  ]
+}

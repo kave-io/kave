@@ -1,0 +1,21 @@
+{
+  "body_len": 325,
+  "token_usage": {
+    "InputTokens": 55,
+    "OutputTokens": 13,
+    "CacheRead": 21,
+    "CacheWrite": 0,
+    "Reasoning": 8,
+    "AudioInput": 0,
+    "AudioOutput": 0,
+    "ImageUnits": 0,
+    "Model": "gpt-5.4"
+  },
+  "has_usage_link": true,
+  "spans": [
+    {
+      "name": "tool.create_issue",
+      "input": "{\"title\":\"bug\"}"
+    }
+  ]
+}
