@@ -20,8 +20,7 @@ WORKDIR /build
 RUN apt-get update && apt-get install -y --no-install-recommends gcc && \
     rm -rf /var/lib/apt/lists/*
 
-# Workspace + module files (cache layer — invalidated only on dep changes)
-COPY go.work go.work.sum ./
+# Module files (cache layer — invalidated only on dep changes)
 COPY core/go.mod core/go.sum ./core/
 COPY server/go.mod server/go.sum ./server/
 COPY cli/go.mod cli/go.sum ./cli/
@@ -60,7 +59,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -o /out/kave .
 
 # ── Stage 3: server image ─────────────────────────────────────────────────────
-# distroless/base has glibc — required for CGO-linked binaries
+# The server uses CGO through DuckDB and sqlite3, so the runtime image must
+# include glibc. distroless/static is only safe for the pure-Go CLI image.
 FROM gcr.io/distroless/base-debian12 AS server
 COPY --from=builder /out/kave-server /usr/local/bin/kave-server
 EXPOSE 18080 19090

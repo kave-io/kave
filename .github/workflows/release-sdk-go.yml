@@ -1,0 +1,89 @@
+name: release-sdk-go
+
+on:
+  push:
+    tags: ["sdk/go/v*"]
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  GOTOOLCHAIN: auto
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout core
+        uses: actions/checkout@v4
+        with:
+          path: core
+          fetch-depth: 0
+
+      - name: Checkout Go SDK
+        uses: actions/checkout@v4
+        with:
+          repository: kave-io/go-sdk
+          path: sdk/go
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: |
+            sdk/go/go.sum
+            core/server/go.sum
+            core/proto/gen/go.sum
+
+      - name: Enforce changelog entry
+        run: core/scripts/check-sdk-changelog.sh go "${GITHUB_REF_NAME#sdk/go/}"
+
+      - name: Test Go SDK
+        working-directory: sdk/go
+        run: go test ./...
+
+      - name: Build contract server image
+        run: docker build --target server -t kave-server:contract core
+
+      - name: Start contract server
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kave-data"
+          docker run -d --name kave-contract \
+            -p 18080:18080 \
+            -p 19090:19090 \
+            -v "$RUNNER_TEMP/kave-data:/data" \
+            -e KAVE_SERVER_ADDR=0.0.0.0:18080 \
+            -e KAVE_GRPC_ADDR=0.0.0.0:19090 \
+            -e KAVE_DAEMON_ADDRESS=0.0.0.0:19090 \
+            -e KAVE_DAEMON_PROXY_ADDRESS=0.0.0.0:18081 \
+            -e KAVE_STORAGE_DEFAULTS_APP_PATH=/data/app.db \
+            -e KAVE_STORAGE_DEFAULTS_SPAN_PATH=/data/spans.duckdb \
+            kave-server:contract
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18080/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs kave-contract
+          exit 1
+
+      - name: Run contract tests
+        working-directory: sdk/go
+        env:
+          KAVE_CONTRACT_ADDR: http://127.0.0.1:18080
+        run: go test -tags contracts ./... -count=1 -timeout=120s
+
+      - name: Verify clean go install
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          GOMODCACHE="$tmp/mod" GOCACHE="$tmp/build" \
+            go install "github.com/kave-io/kave/sdk/go/examples/bootstrap@${GITHUB_REF_NAME}"
+
+      - name: Stop contract server
+        if: always()
+        run: docker rm -f kave-contract || true

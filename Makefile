@@ -5,13 +5,17 @@
         buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
         buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev \
         sdk-generate sdk-test \
-        docker-build docker-push release-snapshot release
+        docker-build docker-push release-snapshot release-snapshot-core \
+        release-snapshot-sdk-go release-snapshot-sdk-py release-snapshot-sdk-ts \
+        docs-publish release
 .NOTPARALLEL: kave-local-install kave-local-uninstall kave-local-reinstall
 
 DASHBOARD_DIR := dashboard
 SERVER_DIR    := server
 BUF_COMPOSE_FILE := compose.buf.yaml
 BUF_CONTAINER := buf
+SDK_ROOT ?= ../sdk
+DIST_DIR ?= dist
 
 help:
 	@echo "Kave — Control Plane for AI Agents"
@@ -28,7 +32,8 @@ help:
 	@echo "  make dashboard-build   Build dashboard into server/ui/dist/"
 	@echo ""
 	@echo "Release:"
-	@echo "  make release-snapshot  Local dry-run release (GoReleaser --snapshot, no publish)"
+	@echo "  make release-snapshot  Local dry-run release plus SDK package artifacts"
+	@echo "  make docs-publish      Rebuild external docs for KAVE_VERSION=<tag>"
 	@echo "  make docker-build      Build multi-arch Docker images locally (server + cli)"
 	@echo "  make docker-push       Push Docker images to GHCR (requires docker login)"
 	@echo ""
@@ -269,14 +274,50 @@ cli-docs:
 	@test -n "$(KAVE_DOCS_DIR)" || (echo "error: KAVE_DOCS_DIR not set" && exit 1)
 	cd cli && env GOCACHE=/tmp/go-build go run ./tools/gen-docs $(KAVE_DOCS_DIR)/src/content/docs/cli/reference
 
+docs-publish: cli-docs
+	@test -n "$(KAVE_VERSION)" || (echo "error: KAVE_VERSION not set, e.g. KAVE_VERSION=v0.2.0 make docs-publish" && exit 1)
+	@mkdir -p "$(KAVE_DOCS_DIR)/src/content/docs/sdk/go" "$(KAVE_DOCS_DIR)/src/content/docs/sdk/python" "$(KAVE_DOCS_DIR)/src/content/docs/sdk/typescript"
+	cp "$(SDK_ROOT)/go/README.md" "$(KAVE_DOCS_DIR)/src/content/docs/sdk/go/quickstart.md"
+	cp "$(SDK_ROOT)/py/README.md" "$(KAVE_DOCS_DIR)/src/content/docs/sdk/python/quickstart.md"
+	cp "$(SDK_ROOT)/ts/README.md" "$(KAVE_DOCS_DIR)/src/content/docs/sdk/typescript/quickstart.md"
+	cd "$(KAVE_DOCS_DIR)" && KAVE_VERSION="$(KAVE_VERSION)" bun install --frozen-lockfile
+	cd "$(KAVE_DOCS_DIR)" && KAVE_VERSION="$(KAVE_VERSION)" bun run build
+	@if command -v gh >/dev/null 2>&1; then \
+	  gh api repos/kave-io/kave-docs/dispatches \
+	    -f event_type=kave-release \
+	    -f client_payload[version]="$(KAVE_VERSION)"; \
+	else \
+	  echo "gh not installed; docs built locally but dispatch was skipped"; \
+	fi
+
 # ── Release ───────────────────────────────────────────────────────────────────
 
 GORELEASER ?= goreleaser
 DOCKER_REGISTRY ?= ghcr.io/kave-io
 
-release-snapshot:
+release-snapshot: release-snapshot-core release-snapshot-sdk-go release-snapshot-sdk-py release-snapshot-sdk-ts
+
+release-snapshot-core:
 	@command -v $(GORELEASER) >/dev/null 2>&1 || (echo "goreleaser not installed: https://goreleaser.com/install/" && exit 1)
 	$(GORELEASER) release --snapshot --clean
+
+release-snapshot-sdk-go:
+	@mkdir -p "$(DIST_DIR)/sdk/go"
+	cd "$(SDK_ROOT)/go" && go build -o "../../core/$(DIST_DIR)/sdk/go/bootstrap" ./examples/bootstrap
+	cd "$(SDK_ROOT)/go" && go build -o "../../core/$(DIST_DIR)/sdk/go/runtime" ./examples/runtime
+	cd "$(SDK_ROOT)/go" && go build -o "../../core/$(DIST_DIR)/sdk/go/streaming" ./examples/streaming
+	cd "$(DIST_DIR)" && tar -czf "kave-sdk-go_snapshot.tar.gz" sdk/go
+
+release-snapshot-sdk-py:
+	@command -v uv >/dev/null 2>&1 || (echo "uv not installed: https://docs.astral.sh/uv/" && exit 1)
+	@mkdir -p "$(DIST_DIR)/sdk/py"
+	cd "$(SDK_ROOT)/py" && uv build --out-dir "../../core/$(DIST_DIR)/sdk/py"
+
+release-snapshot-sdk-ts:
+	@command -v bun >/dev/null 2>&1 || (echo "bun not installed: https://bun.sh" && exit 1)
+	@mkdir -p "$(DIST_DIR)/sdk/ts"
+	cd "$(SDK_ROOT)/ts" && bun run build
+	cd "$(SDK_ROOT)/ts" && npm pack --pack-destination "../../core/$(DIST_DIR)/sdk/ts"
 
 release:
 	@command -v $(GORELEASER) >/dev/null 2>&1 || (echo "goreleaser not installed: https://goreleaser.com/install/" && exit 1)

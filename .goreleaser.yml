@@ -6,6 +6,7 @@ before:
   hooks:
     # Dashboard must be built before server binary (//go:embed all:dist)
     - make dashboard-build
+    - ./scripts/package-compose.sh {{ .Tag }}
 
 builds:
   - id: server
@@ -190,6 +191,22 @@ docker_manifests:
       - ghcr.io/kave-io/kave-cli:latest-amd64
       - ghcr.io/kave-io/kave-cli:latest-arm64
 
+docker_signs:
+  - artifacts: all
+    cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    args:
+      - sign
+      - --yes
+      - ${artifact}
+
+release:
+  extra_files:
+    - glob: ./dist/kave-compose_*.tar.gz
+    - glob: ./dist/compose.yml
+    - glob: ./scripts/install.sh
+
 changelog:
   sort: asc
   filters:
@@ -199,3 +216,15 @@ changelog:
       - "^chore:"
       - Merge pull request
       - Merge branch
+
+# TODO(homebrew): enable after kave-io/homebrew-tap exists and has a first user.
+# brews:
+#   - name: kave
+#     repository:
+#       owner: kave-io
+#       name: homebrew-tap
+#     directory: Formula
+#     homepage: https://kave.io
+#     description: Control plane for AI agents
+#     license: Apache-2.0
+#     template: deploy/homebrew/kave.rb.tmpl

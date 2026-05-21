@@ -43,6 +43,17 @@ import (
 var buildVersion = "dev"
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "version":
+			fmt.Printf("kave-server %s\n", buildVersion)
+			return
+		case "healthz":
+			fmt.Println("ok")
+			return
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

@@ -15,6 +15,8 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      provenance-subjects: ${{ steps.provenance-subjects.outputs.subjects }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,7 +24,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.work
+          go-version-file: server/go.mod
           cache: true
 
       - uses: oven-sh/setup-bun@v2
@@ -64,3 +66,39 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COSIGN_EXPERIMENTAL: "1"
+
+      - name: Verify multi-arch server images
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          for arch in amd64 arm64; do
+            docker run --rm --platform "linux/${arch}" \
+              "ghcr.io/kave-io/kave-server:${version}-${arch}" --version
+          done
+
+      - name: Trigger docs publish
+        run: |
+          gh api repos/kave-io/kave-docs/dispatches \
+            -f event_type=kave-release \
+            -f client_payload[version]="${GITHUB_REF_NAME}"
+        env:
+          GH_TOKEN: ${{ secrets.DOCS_REPO_TOKEN || github.token }}
+
+      - name: Collect provenance subjects
+        id: provenance-subjects
+        run: |
+          set -euo pipefail
+          subjects="$(find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum | base64 -w0)"
+          echo "subjects=${subjects}" >> "$GITHUB_OUTPUT"
+
+  provenance:
+    needs: release
+    if: needs.release.outputs.provenance-subjects != ''
+    permissions:
+      actions: read
+      id-token: write
+      contents: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: ${{ needs.release.outputs.provenance-subjects }}
+      upload-assets: true
