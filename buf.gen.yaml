@@ -14,13 +14,20 @@ plugins:
   - local: protoc-gen-connect-go
     out: proto/gen
     opt: paths=source_relative
+  # TypeScript — single output consumed by sdk/ts AND core/dashboard (via path alias)
   - remote: buf.build/bufbuild/es:v2.10.0
-    out: dashboard/src/gen
+    out: sdk/ts/src/gen
     opt:
       - target=ts
       - import_extension=.js
   - remote: buf.build/connectrpc/es:v1.6.1
-    out: dashboard/src/gen
+    out: sdk/ts/src/gen
     opt:
       - target=ts
       - import_extension=.js
+
+  # Python — replaces sdk/py/scripts/gen.sh
+  - remote: buf.build/protocolbuffers/python:v28.3
+    out: sdk/py
+  - remote: buf.build/grpc/python:v1.66.2
+    out: sdk/py

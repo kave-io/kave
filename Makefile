@@ -4,6 +4,7 @@
         kave-local-install kave-local-uninstall kave-local-reinstall \
         buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
         buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev \
+        sdk-generate sdk-test \
         docker-build docker-push release-snapshot release
 .NOTPARALLEL: kave-local-install kave-local-uninstall kave-local-reinstall
 
@@ -46,6 +47,10 @@ help:
 	@echo "  make fmt               gofmt all Go files"
 	@echo "  make vet               go vet all modules"
 	@echo "  make cli-docs          Regenerate Cobra CLI docs"
+	@echo ""
+	@echo "SDK:"
+	@echo "  make sdk-generate      buf generate → Go/Python/TS stubs in sdk/*/gen"
+	@echo "  make sdk-test          Start fixture server + run Go contract tests"
 	@echo ""
 	@echo "Ops:"
 	@echo "  make migrate           Run database migrations"
@@ -217,10 +222,21 @@ buf-format: buf-up
 	@docker exec $(BUF_CONTAINER) buf format -w
 
 buf-generate: buf-up
-	@mkdir -p dashboard/src/gen
-	@find dashboard/src/gen -mindepth 1 -delete
+	@mkdir -p sdk/ts/src/gen sdk/py/kave/gen
+	@find sdk/ts/src/gen -mindepth 1 -delete 2>/dev/null || true
+	@find sdk/py -name '*_pb2*.py' -o -name '*_pb2*.pyi' | xargs rm -f 2>/dev/null || true
 	@docker exec $(BUF_CONTAINER) buf generate
 	@git checkout -- proto/gen/go.mod proto/gen/go.sum 2>/dev/null || true
+
+sdk-generate: buf-generate
+
+sdk-test: buf-up
+	@echo "Starting fixture server..."
+	@docker compose -f ../sdk/contract-tests/server/docker-compose.yml up -d
+	@echo "Running Go contract tests..."
+	@cd ../sdk/go && go test -tags contracts ./... -v -count=1 -timeout 120s \
+		-run TestContract || (docker compose -f ../sdk/contract-tests/server/docker-compose.yml down; exit 1)
+	@docker compose -f ../sdk/contract-tests/server/docker-compose.yml down
 
 buf-breaking: buf-up
 	@docker exec $(BUF_CONTAINER) buf breaking --against '.git#branch=main'
