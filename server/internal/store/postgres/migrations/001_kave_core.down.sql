@@ -11,4 +11,3 @@ DROP TABLE IF EXISTS workspaces;
 
 DROP FUNCTION IF EXISTS set_updated_at();
 
-DROP EXTENSION IF EXISTS "pgvector";

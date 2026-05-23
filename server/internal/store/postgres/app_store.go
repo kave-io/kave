@@ -630,9 +630,9 @@ func (p *PostgresAppStore) CreatePolicy(ctx context.Context, pol *control.Policy
 		casbinDoc = pol.CasbinDocument
 	}
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO policies (id, workspace_id, name, description, allowed_connectors, allowed_methods, casbin_document, budget_cap_amount_nanos, config, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`, pol.ID, pol.ProjectID, pol.Name, pol.Description, pol.AllowedConnectors, pol.AllowedMethods, casbinDoc, amountToDB(pol.BudgetCap), pol.Config, toTime(pol.CreatedAt), toTime(pol.UpdatedAt))
+		INSERT INTO policies (id, workspace_id, name, description, allowed_types, allowed_connectors, allowed_methods, casbin_document, budget_cap_amount_nanos, config, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, pol.ID, pol.ProjectID, pol.Name, pol.Description, pol.AllowedTypes, pol.AllowedConnectors, pol.AllowedMethods, casbinDoc, amountToDB(pol.BudgetCap), pol.Config, toTime(pol.CreatedAt), toTime(pol.UpdatedAt))
 	return err
 }
 
@@ -641,9 +641,9 @@ func (p *PostgresAppStore) GetPolicy(ctx context.Context, id string) (*control.P
 	var createdAt, updatedAt time.Time
 	var budgetAmount int64
 	err := p.pool.QueryRow(ctx, `
-		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, COALESCE(casbin_document, ''), budget_cap_amount_nanos, config, created_at, updated_at
+		SELECT id, workspace_id, name, description, allowed_types, allowed_connectors, allowed_methods, COALESCE(casbin_document, ''), budget_cap_amount_nanos, config, created_at, updated_at
 		FROM policies WHERE id = $1
-	`, id).Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &pol.CasbinDocument, &budgetAmount, &pol.Config, &createdAt, &updatedAt)
+	`, id).Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedTypes, &pol.AllowedConnectors, &pol.AllowedMethods, &pol.CasbinDocument, &budgetAmount, &pol.Config, &createdAt, &updatedAt)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -670,7 +670,7 @@ func (p *PostgresAppStore) GetAgentPolicy(ctx context.Context, agentID string) (
 
 func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string, page store.Page) (store.PageResult[*control.PolicyRecord], error) {
 	rows, err := p.pool.Query(ctx, `
-		SELECT id, workspace_id, name, description, allowed_connectors, allowed_methods, COALESCE(casbin_document, ''), budget_cap_amount_nanos, config, created_at, updated_at
+		SELECT id, workspace_id, name, description, allowed_types, allowed_connectors, allowed_methods, COALESCE(casbin_document, ''), budget_cap_amount_nanos, config, created_at, updated_at
 		FROM policies WHERE workspace_id = $1 ORDER BY name
 	`, envID)
 	if err != nil {
@@ -683,7 +683,7 @@ func (p *PostgresAppStore) ListPolicies(ctx context.Context, envID string, page 
 		var pol control.PolicyRecord
 		var createdAt, updatedAt time.Time
 		var budgetAmount int64
-		if err := rows.Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedConnectors, &pol.AllowedMethods, &pol.CasbinDocument, &budgetAmount, &pol.Config, &createdAt, &updatedAt); err != nil {
+		if err := rows.Scan(&pol.ID, &pol.ProjectID, &pol.Name, &pol.Description, &pol.AllowedTypes, &pol.AllowedConnectors, &pol.AllowedMethods, &pol.CasbinDocument, &budgetAmount, &pol.Config, &createdAt, &updatedAt); err != nil {
 			return store.PageResult[*control.PolicyRecord]{}, err
 		}
 		pol.BudgetCap = amountFromDB(budgetAmount)
@@ -1552,6 +1552,10 @@ func (p *PostgresAppStore) UpdatePolicy(ctx context.Context, id string, u *contr
 	if len(u.AllowedConnectors) > 0 {
 		query += fmt.Sprintf(`, allowed_connectors = $%d`, len(args)+1)
 		args = append(args, u.AllowedConnectors)
+	}
+	if len(u.AllowedTypes) > 0 {
+		query += fmt.Sprintf(`, allowed_types = $%d`, len(args)+1)
+		args = append(args, u.AllowedTypes)
 	}
 	if len(u.AllowedMethods) > 0 {
 		query += fmt.Sprintf(`, allowed_methods = $%d`, len(args)+1)

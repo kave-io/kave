@@ -2,6 +2,7 @@
 # Full standalone build — produces both server and cli images as named targets.
 # Usage:
 #   docker build --target server -t kave-server .
+#   docker build --target server-arch -t kave-server:arch .
 #   docker build --target cli   -t kave-cli .
 
 # ── Stage 1: dashboard ────────────────────────────────────────────────────────
@@ -67,7 +68,20 @@ EXPOSE 18080 19090
 VOLUME ["/data"]
 ENTRYPOINT ["/usr/local/bin/kave-server"]
 
-# ── Stage 4: cli image ────────────────────────────────────────────────────────
+# ── Stage 4: server image (Arch Linux runtime) ──────────────────────────────
+# Use this target when you want an Arch-based production image while keeping
+# the same server binary and runtime behavior.
+FROM archlinux:base AS server-arch
+RUN pacman -Syu --noconfirm --needed ca-certificates tzdata && \
+    pacman -Scc --noconfirm && \
+    useradd --create-home --uid 10001 --shell /usr/bin/nologin kave
+COPY --from=builder /out/kave-server /usr/local/bin/kave-server
+USER 10001:10001
+EXPOSE 18080 19090
+VOLUME ["/data"]
+ENTRYPOINT ["/usr/local/bin/kave-server"]
+
+# ── Stage 5: cli image ────────────────────────────────────────────────────────
 FROM gcr.io/distroless/static-debian12 AS cli
 COPY --from=builder /out/kave /usr/local/bin/kave
 ENTRYPOINT ["/usr/local/bin/kave"]

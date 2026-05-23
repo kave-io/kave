@@ -1,6 +1,3 @@
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "pgvector";
-
 -- Helper function to set updated_at timestamp
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$

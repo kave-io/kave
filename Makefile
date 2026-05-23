@@ -5,7 +5,8 @@
         buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
         buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev \
         sdk-generate sdk-test \
-        docker-build docker-push release-snapshot release-snapshot-core \
+        docker-build docker-push docker-build-arch docker-push-arch \
+        release-snapshot release-snapshot-core \
         release-snapshot-sdk-go release-snapshot-sdk-py release-snapshot-sdk-ts \
         docs-publish release
 .NOTPARALLEL: kave-local-install kave-local-uninstall kave-local-reinstall
@@ -348,6 +349,22 @@ docker-push: dashboard-build
 	  --platform linux/amd64,linux/arm64 \
 	  --target cli \
 	  -t $(DOCKER_REGISTRY)/kave-cli:dev \
+	  --push \
+	  .
+
+docker-build-arch: dashboard-build
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  --target server-arch \
+	  -t $(DOCKER_REGISTRY)/kave-server:dev-arch \
+	  --load=false \
+	  .
+
+docker-push-arch: dashboard-build
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  --target server-arch \
+	  -t $(DOCKER_REGISTRY)/kave-server:dev-arch \
 	  --push \
 	  .
 
