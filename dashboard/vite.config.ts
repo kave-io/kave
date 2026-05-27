@@ -21,8 +21,8 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      // @/gen resolves to the SDK TS gen tree (single source of truth after Plan 00)
-      '@/gen': fileURLToPath(new URL('../../sdk/ts/src/gen', import.meta.url)),
+      // Keep generated types within this repo so Docker builds don't depend on sibling dirs.
+      '@/gen': fileURLToPath(new URL('./src/gen', import.meta.url)),
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },

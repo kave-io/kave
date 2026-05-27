@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+declare module '*.vue'
 
 interface ImportMetaEnv {
   readonly VITE_RPC_BASE_URL?: string

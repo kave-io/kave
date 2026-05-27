@@ -8,7 +8,7 @@
 # ── Stage 1: dashboard ────────────────────────────────────────────────────────
 FROM oven/bun:1.2 AS dashboard
 WORKDIR /build/dashboard
-COPY dashboard/package.json dashboard/bun.lockb* ./
+COPY dashboard/package.json dashboard/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY dashboard/ .
 # vite.config outDir is ../server/ui/dist (relative to dashboard/), so output
@@ -18,6 +18,8 @@ RUN bun run build
 # ── Stage 2: Go builder ───────────────────────────────────────────────────────
 FROM golang:1.26-bookworm AS builder
 WORKDIR /build
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
 RUN apt-get update && apt-get install -y --no-install-recommends gcc && \
     rm -rf /var/lib/apt/lists/*
 
@@ -60,9 +62,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     -o /out/kave .
 
 # ── Stage 3: server image ─────────────────────────────────────────────────────
-# The server uses CGO through DuckDB and sqlite3, so the runtime image must
-# include glibc. distroless/static is only safe for the pure-Go CLI image.
-FROM gcr.io/distroless/base-debian12 AS server
+# The server uses CGO through DuckDB (C++) and sqlite3, so the runtime image
+# must include glibc AND libstdc++. distroless/cc-debian12 ships both;
+# distroless/static is only safe for the pure-Go CLI image.
+FROM gcr.io/distroless/cc-debian12 AS server
 COPY --from=builder /out/kave-server /usr/local/bin/kave-server
 EXPOSE 18080 19090
 VOLUME ["/data"]

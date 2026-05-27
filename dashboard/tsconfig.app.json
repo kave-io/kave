@@ -5,7 +5,7 @@
   "compilerOptions": {
     "noUncheckedIndexedAccess": true,
     "paths": {
-      "@/gen/*": ["../../sdk/ts/src/gen/*"],
+      "@/gen/*": ["./src/gen/*"],
       "@/*": ["./src/*"],
       "#build/ui": ["./node_modules/.nuxt-ui/ui"]
     },
