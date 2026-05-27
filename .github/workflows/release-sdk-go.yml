@@ -57,6 +57,7 @@ jobs:
             -v "$RUNNER_TEMP/kave-data:/data" \
             -e KAVE_SERVER_ADDR=0.0.0.0:18080 \
             -e KAVE_GRPC_ADDR=0.0.0.0:19090 \
+            -e KAVE_ALLOW_PERMISSIVE_PUBLIC=1 \
             -e KAVE_DAEMON_ADDRESS=0.0.0.0:19090 \
             -e KAVE_DAEMON_PROXY_ADDRESS=0.0.0.0:18081 \
             -e KAVE_STORAGE_DEFAULTS_APP_PATH=/data/app.db \
