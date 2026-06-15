@@ -111,8 +111,8 @@ dockers:
   - id: kave-server-amd64
     ids: [server]
     image_templates:
-      - ghcr.io/kave-io/kave-server:{{.Version}}-amd64
-      - ghcr.io/kave-io/kave-server:latest-amd64
+      - kave-io/kave-server:{{.Version}}-amd64
+      - kave-io/kave-server:latest-amd64
     dockerfile: deploy/docker/Dockerfile.server
     use: buildx
     build_flag_templates:
@@ -126,8 +126,8 @@ dockers:
   - id: kave-server-arm64
     ids: [server]
     image_templates:
-      - ghcr.io/kave-io/kave-server:{{.Version}}-arm64
-      - ghcr.io/kave-io/kave-server:latest-arm64
+      - kave-io/kave-server:{{.Version}}-arm64
+      - kave-io/kave-server:latest-arm64
     dockerfile: deploy/docker/Dockerfile.server
     use: buildx
     goarch: arm64
@@ -142,8 +142,8 @@ dockers:
   - id: kave-cli-amd64
     ids: [cli]
     image_templates:
-      - ghcr.io/kave-io/kave-cli:{{.Version}}-amd64
-      - ghcr.io/kave-io/kave-cli:latest-amd64
+      - kave-io/kave-cli:{{.Version}}-amd64
+      - kave-io/kave-cli:latest-amd64
     dockerfile: deploy/docker/Dockerfile.cli
     use: buildx
     build_flag_templates:
@@ -157,8 +157,8 @@ dockers:
   - id: kave-cli-arm64
     ids: [cli]
     image_templates:
-      - ghcr.io/kave-io/kave-cli:{{.Version}}-arm64
-      - ghcr.io/kave-io/kave-cli:latest-arm64
+      - kave-io/kave-cli:{{.Version}}-arm64
+      - kave-io/kave-cli:latest-arm64
     dockerfile: deploy/docker/Dockerfile.cli
     use: buildx
     goarch: arm64
@@ -171,25 +171,25 @@ dockers:
       - --label=org.opencontainers.image.created={{.Date}}
 
 docker_manifests:
-  - name_template: ghcr.io/kave-io/kave-server:{{.Version}}
+  - name_template: kave-io/kave-server:{{.Version}}
     image_templates:
-      - ghcr.io/kave-io/kave-server:{{.Version}}-amd64
-      - ghcr.io/kave-io/kave-server:{{.Version}}-arm64
+      - kave-io/kave-server:{{.Version}}-amd64
+      - kave-io/kave-server:{{.Version}}-arm64
 
-  - name_template: ghcr.io/kave-io/kave-server:latest
+  - name_template: kave-io/kave-server:latest
     image_templates:
-      - ghcr.io/kave-io/kave-server:latest-amd64
-      - ghcr.io/kave-io/kave-server:latest-arm64
+      - kave-io/kave-server:latest-amd64
+      - kave-io/kave-server:latest-arm64
 
-  - name_template: ghcr.io/kave-io/kave-cli:{{.Version}}
+  - name_template: kave-io/kave-cli:{{.Version}}
     image_templates:
-      - ghcr.io/kave-io/kave-cli:{{.Version}}-amd64
-      - ghcr.io/kave-io/kave-cli:{{.Version}}-arm64
+      - kave-io/kave-cli:{{.Version}}-amd64
+      - kave-io/kave-cli:{{.Version}}-arm64
 
-  - name_template: ghcr.io/kave-io/kave-cli:latest
+  - name_template: kave-io/kave-cli:latest
     image_templates:
-      - ghcr.io/kave-io/kave-cli:latest-amd64
-      - ghcr.io/kave-io/kave-cli:latest-arm64
+      - kave-io/kave-cli:latest-amd64
+      - kave-io/kave-cli:latest-arm64
 
 docker_signs:
   - artifacts: all

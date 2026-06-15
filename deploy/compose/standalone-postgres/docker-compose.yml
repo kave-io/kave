@@ -15,7 +15,7 @@ services:
       retries: 10
 
   kave-server:
-    image: ghcr.io/kave-io/kave-server:${KAVE_VERSION:-latest}
+    image: kave-io/kave-server:${KAVE_VERSION:-latest}
     restart: unless-stopped
     working_dir: /etc/kave
     depends_on:

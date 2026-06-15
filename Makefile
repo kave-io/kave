@@ -5,7 +5,7 @@
         buf-build buf-up buf-down buf-shell buf-version buf-lint buf-format-check \
         buf-format buf-generate buf-breaking buf-test buf-clean buf-quick-dev \
         sdk-generate sdk-test \
-        docker-build docker-push docker-build-arch docker-push-arch \
+        docker-build docker-push docker-save-server docker-build-arch docker-push-arch \
         release-snapshot release-snapshot-core \
         release-snapshot-sdk-go release-snapshot-sdk-py release-snapshot-sdk-ts \
         docs-publish release
@@ -36,7 +36,8 @@ help:
 	@echo "  make release-snapshot  Local dry-run release plus SDK package artifacts"
 	@echo "  make docs-publish      Rebuild external docs for KAVE_VERSION=<tag>"
 	@echo "  make docker-build      Build multi-arch Docker images locally (server + cli)"
-	@echo "  make docker-push       Push Docker images to GHCR (requires docker login)"
+	@echo "  make docker-push       Push Docker images to Docker Hub (requires docker login)"
+	@echo "  make docker-save-server Build server image and save a local Docker tar archive"
 	@echo ""
 	@echo "Quality:"
 	@echo "  make test              Run unit + integration + contracts"
@@ -294,7 +295,11 @@ docs-publish: cli-docs
 # ── Release ───────────────────────────────────────────────────────────────────
 
 GORELEASER ?= goreleaser
-DOCKER_REGISTRY ?= ghcr.io/kave-io
+DOCKER_REGISTRY ?= kave-io
+VERSION ?= dev
+LOCAL_PLATFORM ?= linux/amd64
+SERVER_IMAGE ?= $(DOCKER_REGISTRY)/kave-server:$(VERSION)
+SERVER_IMAGE_TAR ?= $(DIST_DIR)/images/kave-server-$(VERSION)-$(subst /,-,$(LOCAL_PLATFORM)).tar
 
 release-snapshot: release-snapshot-core release-snapshot-sdk-go release-snapshot-sdk-py release-snapshot-sdk-ts
 
@@ -351,6 +356,17 @@ docker-push: dashboard-build
 	  -t $(DOCKER_REGISTRY)/kave-cli:dev \
 	  --push \
 	  .
+
+docker-save-server: dashboard-build
+	@mkdir -p "$(dir $(SERVER_IMAGE_TAR))"
+	docker buildx build \
+	  --platform $(LOCAL_PLATFORM) \
+	  --target server \
+	  -t $(SERVER_IMAGE) \
+	  --load \
+	  .
+	docker save $(SERVER_IMAGE) -o "$(SERVER_IMAGE_TAR)"
+	@echo "Saved server image: $(SERVER_IMAGE_TAR)"
 
 docker-build-arch: dashboard-build
 	docker buildx build \

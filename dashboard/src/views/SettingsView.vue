@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useColorMode } from '@vueuse/core'
 import { KIcon, KCard, KCopyBtn } from '@/components/kv'
 import LocaleSelector from '@/components/LocaleSelector.vue'
 import CurrencySelector from '@/components/CurrencySelector.vue'

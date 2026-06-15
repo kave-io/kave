@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute, RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useColorMode } from '@vueuse/core'
 import { KIcon, KBtn, KBadge, KLogo } from '@/components/kv'
 import { RTL_CODES } from '@/stores/locale'
 import { useDaemonStatus } from '@/composables/api/useControl'
