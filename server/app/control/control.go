@@ -240,8 +240,19 @@ func (s *Server) GetAgent(ctx context.Context, req *controlv1.GetAgentRequest) (
 }
 
 func (s *Server) ListAgents(ctx context.Context, req *controlv1.ListAgentsRequest) (*controlv1.ListAgentsResponse, error) {
+	// Agents are workspace(project)-scoped — the store filters workspace_id.
+	// Callers pass an env id, so resolve it to the env's project id first;
+	// passing the env id straight through always returns an empty list and
+	// makes EnsureAgent create duplicates.
+	env, err := s.appStore.GetEnvironment(ctx, req.EnvId)
+	if err != nil {
+		return nil, err
+	}
+	if env == nil {
+		return nil, status.Errorf(codes.NotFound, "environment %q not found", req.EnvId)
+	}
 	page := store.Page{Limit: int(req.Limit), Cursor: req.Cursor}
-	result, err := s.appStore.ListAgents(ctx, req.EnvId, page)
+	result, err := s.appStore.ListAgents(ctx, env.ProjectID, page)
 	if err != nil {
 		return nil, err
 	}
@@ -365,8 +376,17 @@ func (s *Server) GetPolicy(ctx context.Context, req *controlv1.GetPolicyRequest)
 }
 
 func (s *Server) ListPolicies(ctx context.Context, req *controlv1.ListPoliciesRequest) (*controlv1.ListPoliciesResponse, error) {
+	// Policies are workspace(project)-scoped — resolve env id to project id so
+	// the store's workspace_id filter matches (see ListAgents for the why).
+	env, err := s.appStore.GetEnvironment(ctx, req.EnvId)
+	if err != nil {
+		return nil, err
+	}
+	if env == nil {
+		return nil, status.Errorf(codes.NotFound, "environment %q not found", req.EnvId)
+	}
 	page := store.Page{Limit: int(req.Limit), Cursor: req.Cursor}
-	result, err := s.appStore.ListPolicies(ctx, req.EnvId, page)
+	result, err := s.appStore.ListPolicies(ctx, env.ProjectID, page)
 	if err != nil {
 		return nil, err
 	}
@@ -557,9 +577,18 @@ func (s *Server) RevokeToken(ctx context.Context, req *controlv1.RevokeTokenRequ
 // ── Credential Operations ──────────────────────────────────────────────────
 
 func (s *Server) CreateCredential(ctx context.Context, req *controlv1.CreateCredentialRequest) (*controlv1.ConnectorCredential, error) {
+	env, err := s.appStore.GetEnvironment(ctx, req.EnvId)
+	if err != nil {
+		return nil, err
+	}
+	if env == nil {
+		return nil, status.Errorf(codes.NotFound, "environment %q not found", req.EnvId)
+	}
+
 	now := nowMS()
 	cred := &control.ConnectorCredential{
 		ID:            newID("crd"),
+		ProjectID:     env.ProjectID,
 		EnvID:         req.EnvId,
 		ConnectorType: req.ConnectorType,
 		Label:         req.Label,
