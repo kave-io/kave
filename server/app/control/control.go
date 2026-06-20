@@ -2,13 +2,17 @@ package control
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 
 	"github.com/kave-io/kave/core/bus"
 	"github.com/kave-io/kave/core/model/control"
+	"github.com/kave-io/kave/core/pkg/keyring"
 	"github.com/kave-io/kave/core/store"
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
+	infraCrypto "github.com/kave-io/kave/server/internal/infra/crypto"
 	"github.com/kave-io/kave/server/internal/daemon"
 	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"go.yaml.in/yaml/v3"
@@ -597,6 +601,25 @@ func (s *Server) CreateCredential(ctx context.Context, req *controlv1.CreateCred
 		CreatedBy:     "system",
 		CreatedAt:     now,
 		UpdatedAt:     now,
+	}
+	// Encrypt the supplied secret at rest. Mirrors credresolve.Resolve, which
+	// decrypts cred.EncryptedBlob with the master key and AAD = cred.ID.
+	if len(req.EncryptedBlob) > 0 {
+		key, err := keyring.GetOrCreateMasterKey(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "credential master key: %v", err)
+		}
+		aes, err := infraCrypto.NewAES(key)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "credential cipher: %v", err)
+		}
+		blob, err := aes.Encrypt(req.EncryptedBlob, []byte(cred.ID))
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "encrypt credential: %v", err)
+		}
+		sum := sha256.Sum256(req.EncryptedBlob)
+		cred.EncryptedBlob = blob
+		cred.KeyHash = hex.EncodeToString(sum[:])
 	}
 	if err := s.appStore.StoreCredential(ctx, cred); err != nil {
 		return nil, err

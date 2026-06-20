@@ -1411,10 +1411,17 @@ func (p *PostgresAppStore) TouchAPIToken(ctx context.Context, tokenID string) er
 
 func (p *PostgresAppStore) InsertAgentToken(ctx context.Context, token *control.AgentToken) error {
 	scopes, _ := json.Marshal(token.Scopes)
+	// The control service populates Hash (hex sha256 of the raw token); TokenHash
+	// is the legacy []byte field and is usually empty. Lookups bind []byte(hash),
+	// so persist the hex hash as bytes from whichever field carries it.
+	tokenHash := token.TokenHash
+	if len(tokenHash) == 0 {
+		tokenHash = []byte(token.Hash)
+	}
 	_, err := p.pool.Exec(ctx, `
 		INSERT INTO agent_tokens_new (id, org_id, agent_id, name, token_hash, scopes, expires_at, last_used_at, created_at, revoked_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, token.ID, token.OrgID, token.AgentID, token.Name, token.TokenHash, string(scopes),
+	`, token.ID, token.OrgID, token.AgentID, token.Name, tokenHash, string(scopes),
 		toTime(token.ExpiresAt), ptrToTime(token.LastUsedAt), toTime(token.CreatedAt), ptrToTime(token.RevokedAt))
 	return err
 }
@@ -1812,6 +1819,12 @@ func hydratePostgresCredentialSource(c *control.ConnectorCredential) {
 		c.EnvVar = c.SecretRef
 	case control.CredentialSourceVault:
 		c.VaultRef = c.SecretRef
+	case control.CredentialSourceEncrypted:
+		// credresolve.Resolve reads cred.Encrypted.Ciphertext; reconstruct it
+		// from the flat encrypted_blob column persisted by StoreCredential.
+		if len(c.EncryptedBlob) > 0 {
+			c.Encrypted = &control.EncryptedBlob{Ciphertext: c.EncryptedBlob, KeyID: c.WrappingKeyID}
+		}
 	}
 }
 

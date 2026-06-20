@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"reflect"
 	"strings"
 
@@ -220,6 +221,10 @@ func classifyExitCode(code string, statusCode int) int {
 }
 
 func (c *HTTPClient) sessionToken() (string, error) {
+	// Env override: lets headless/CI use a PAT without the OS keyring.
+	if tok := strings.TrimSpace(os.Getenv("KAVE_TOKEN")); tok != "" {
+		return tok, nil
+	}
 	if c == nil || c.SessionKey == "" {
 		return "", nil
 	}
