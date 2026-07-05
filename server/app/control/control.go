@@ -486,17 +486,32 @@ func (s *Server) CreateToken(ctx context.Context, req *controlv1.CreateTokenRequ
 	if err != nil {
 		return nil, err
 	}
+	// Resolve the agent's workspace so org_id satisfies the
+	// agent_tokens_new.org_id -> workspaces(id) FK.
+	agent, err := s.appStore.GetAgentByID(ctx, req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	if agent == nil {
+		return nil, status.Errorf(codes.NotFound, "agent %q not found", req.AgentId)
+	}
 	now := nowMS()
 	tok := &control.AgentToken{
 		ID:          newID("tok"),
+		OrgID:       agent.ProjectID, // agents.workspace_id; valid workspaces(id)
 		AgentID:     req.AgentId,
 		Name:        req.Name,
 		TokenPrefix: prefix,
 		Hash:        hash,
-		IssuedFor:   "human",
-		IssuedBy:    "system",
-		NotBefore:   now,
-		CreatedAt:   now,
+		// TokenHash is what the gateway looks up (GetAgentTokenByHash). It is the
+		// byte form of hex(sha256(raw)); leaving it nil violates the NOT NULL
+		// constraint on agent_tokens_new.token_hash.
+		TokenHash: []byte(hash),
+		Scopes:    []string{"*"},
+		IssuedFor: "human",
+		IssuedBy:  "system",
+		NotBefore: now,
+		CreatedAt: now,
 	}
 	if err := s.appStore.InsertAgentToken(ctx, tok); err != nil {
 		return nil, err
