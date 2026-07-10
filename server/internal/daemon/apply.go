@@ -402,11 +402,13 @@ func desiredCredentials(cfg *config.Config, projectID, envID string) []*controlm
 
 func credentialSourceType(source string) string {
 	switch strings.ToLower(source) {
+	case "env":
+		return string(controlmodel.CredentialSourceEnv)
 	case "passthrough":
 		return controlmodel.CredSourcePassthrough
 	case "vault":
 		return controlmodel.CredSourceVaultRef
-	case "file", "env":
+	case "file":
 		return controlmodel.CredSourceVaultRef
 	default:
 		return controlmodel.CredSourceVaultRef

@@ -13,11 +13,16 @@ import (
 )
 
 // NewRawLLMFamily builds the provider-only proxy surface used by /v1/* routes.
-func NewRawLLMFamily() LLMFamily {
+func NewRawLLMFamily(providers ...serverllm.Providers) LLMFamily {
+	llmProviders := serverllm.DefaultProviders()
+	if len(providers) > 0 && providers[0] != nil {
+		llmProviders = providers[0]
+	}
+
 	return LLMFamily{
 		Name:      "raw",
 		Framework: NewRawConnector(),
-		Providers: serverllm.DefaultProviders(),
+		Providers: llmProviders,
 	}
 }
 

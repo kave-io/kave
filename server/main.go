@@ -181,7 +181,7 @@ func main() {
 	}()
 
 	// Create and register framework gateway
-	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistry(), cfg.Security.AllowAnonymous, vaultResolver)
+	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistryWithConnectors(gatewayConnectorConfigs(cfg.Connectors)), cfg.Security.AllowAnonymous, vaultResolver)
 	mux := http.NewServeMux()
 	gatewayServer.RegisterRoutes(mux)
 	connectport.Register(mux, controlServer, runtimeServer, auditServer, appcontrol.NewDaemonService(daemonState))
@@ -232,6 +232,18 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func gatewayConnectorConfigs(connectors []config.ConnectorConfig) []gateway.ConnectorConfig {
+	out := make([]gateway.ConnectorConfig, 0, len(connectors))
+	for _, connector := range connectors {
+		out = append(out, gateway.ConnectorConfig{
+			Name:    connector.Name,
+			Enabled: connector.Enabled,
+			Config:  connector.Config,
+		})
+	}
+	return out
 }
 
 // seedDefaults ensures the default project, policy, and agent exist.

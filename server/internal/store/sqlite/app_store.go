@@ -1337,8 +1337,11 @@ func (s *SQLiteAppStore) StoreCredential(ctx context.Context, c *control.Connect
 			expires_at, rotated_at, rotated_by, created_by, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
+			source_type = excluded.source_type,
 			label = excluded.label, description = excluded.description,
 			encrypted_blob = excluded.encrypted_blob, key_hash = excluded.key_hash,
+			wrapping_key_id = excluded.wrapping_key_id,
+			secret_ref = excluded.secret_ref, secret_version = excluded.secret_version,
 			status = excluded.status, updated_at = excluded.updated_at`,
 		c.ID, c.ProjectID, c.EnvID, c.ConnectorType, c.AccountID, c.Label, c.Description,
 		sourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID,

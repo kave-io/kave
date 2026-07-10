@@ -136,3 +136,9 @@ func TestBuildPlanAndApply(t *testing.T) {
 		t.Fatalf("expected empty plan after apply, got %#v", nextPlan)
 	}
 }
+
+func TestCredentialSourceTypeEnv(t *testing.T) {
+	if got, want := credentialSourceType("env"), string(controlmodel.CredentialSourceEnv); got != want {
+		t.Fatalf("credentialSourceType(env) = %q, want %q", got, want)
+	}
+}

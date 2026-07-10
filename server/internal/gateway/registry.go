@@ -2,13 +2,22 @@ package gateway
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kave-io/kave/core/connectors"
 	"github.com/kave-io/kave/core/connectors/runtime"
 	coreruntime "github.com/kave-io/kave/core/runtime"
 	serverframework "github.com/kave-io/kave/server/internal/gateway/connectors/framework"
+	serverllm "github.com/kave-io/kave/server/internal/gateway/connectors/llm"
 	servertool "github.com/kave-io/kave/server/internal/gateway/connectors/tool"
 )
+
+// ConnectorConfig is the gateway-facing subset of the loaded connector config.
+type ConnectorConfig struct {
+	Name    string
+	Enabled bool
+	Config  map[string]any
+}
 
 // Registry resolves framework names to their LLM family bundles.
 type Registry struct {
@@ -18,12 +27,63 @@ type Registry struct {
 
 // NewRegistry builds the default framework registry.
 func NewRegistry() *Registry {
+	return NewRegistryWithConnectors(nil)
+}
+
+// NewRegistryWithConnectors builds the framework registry from loaded connector
+// config. An empty connector list preserves the default provider set.
+func NewRegistryWithConnectors(connectors []ConnectorConfig) *Registry {
+	providers := serverllm.DefaultProviders()
+	if len(connectors) > 0 {
+		enabled, configs := providerConfig(connectors)
+		providers = serverllm.BuildProviders(enabled, configs)
+	}
+
 	return &Registry{
 		frameworks: map[string]serverframework.LLMFamily{
-			"raw": serverframework.NewRawLLMFamily(),
+			"raw": serverframework.NewRawLLMFamily(providers),
 		},
 		tools: servertool.DefaultTools(),
 	}
+}
+
+func providerConfig(connectors []ConnectorConfig) ([]string, map[string]serverllm.ProviderConfig) {
+	enabled := make([]string, 0, len(connectors))
+	configs := make(map[string]serverllm.ProviderConfig, len(connectors))
+
+	for _, connector := range connectors {
+		name := strings.TrimSpace(connector.Name)
+		if name == "" || !connector.Enabled {
+			continue
+		}
+		enabled = append(enabled, name)
+
+		cfg := serverllm.ProviderConfig{}
+		if baseURL, ok := stringConfig(connector.Config, "base_url"); ok {
+			cfg.BaseURL = baseURL
+		} else if baseURL, ok := stringConfig(connector.Config, "baseURL"); ok {
+			cfg.BaseURL = baseURL
+		}
+		configs[name] = cfg
+	}
+
+	return enabled, configs
+}
+
+func stringConfig(config map[string]any, key string) (string, bool) {
+	if config == nil {
+		return "", false
+	}
+	value, ok := config[key]
+	if !ok {
+		return "", false
+	}
+	s, ok := value.(string)
+	if !ok {
+		return "", false
+	}
+	s = strings.TrimSpace(s)
+	return s, s != ""
 }
 
 // Register adds or replaces a framework family.

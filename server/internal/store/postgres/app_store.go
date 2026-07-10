@@ -1632,6 +1632,7 @@ func (p *PostgresAppStore) StoreCredential(ctx context.Context, c *control.Conne
 			expires_at, rotated_at, rotated_by, created_by, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (id) DO UPDATE SET
+			source_type = excluded.source_type,
 			label = excluded.label,
 			description = excluded.description,
 			encrypted_blob = excluded.encrypted_blob,
