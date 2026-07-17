@@ -295,10 +295,12 @@ docs-publish: cli-docs
 # ── Release ───────────────────────────────────────────────────────────────────
 
 GORELEASER ?= goreleaser
-DOCKER_REGISTRY ?= kave-io
-VERSION ?= dev
+DOCKER_REGISTRY ?= alijulaeerad
+VERSION ?= 1.4.0
 LOCAL_PLATFORM ?= linux/amd64
 SERVER_IMAGE ?= $(DOCKER_REGISTRY)/kave-server:$(VERSION)
+CLI_IMAGE ?= $(DOCKER_REGISTRY)/kave-cli:$(VERSION)
+SERVER_ARCH_IMAGE ?= $(DOCKER_REGISTRY)/kave-server:$(VERSION)-arch
 SERVER_IMAGE_TAR ?= $(DIST_DIR)/images/kave-server-$(VERSION)-$(subst /,-,$(LOCAL_PLATFORM)).tar
 
 release-snapshot: release-snapshot-core release-snapshot-sdk-go release-snapshot-sdk-py release-snapshot-sdk-ts
@@ -333,13 +335,15 @@ docker-build: dashboard-build
 	docker buildx build \
 	  --platform linux/amd64,linux/arm64 \
 	  --target server \
-	  -t $(DOCKER_REGISTRY)/kave-server:dev \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(SERVER_IMAGE) \
 	  --load=false \
 	  .
 	docker buildx build \
 	  --platform linux/amd64,linux/arm64 \
 	  --target cli \
-	  -t $(DOCKER_REGISTRY)/kave-cli:dev \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(CLI_IMAGE) \
 	  --load=false \
 	  .
 
@@ -347,13 +351,15 @@ docker-push: dashboard-build
 	docker buildx build \
 	  --platform linux/amd64,linux/arm64 \
 	  --target server \
-	  -t $(DOCKER_REGISTRY)/kave-server:dev \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(SERVER_IMAGE) \
 	  --push \
 	  .
 	docker buildx build \
 	  --platform linux/amd64,linux/arm64 \
 	  --target cli \
-	  -t $(DOCKER_REGISTRY)/kave-cli:dev \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(CLI_IMAGE) \
 	  --push \
 	  .
 
@@ -362,6 +368,7 @@ docker-save-server: dashboard-build
 	docker buildx build \
 	  --platform $(LOCAL_PLATFORM) \
 	  --target server \
+	  --build-arg VERSION=$(VERSION) \
 	  -t $(SERVER_IMAGE) \
 	  --load \
 	  .
@@ -372,7 +379,8 @@ docker-build-arch: dashboard-build
 	docker buildx build \
 	  --platform linux/amd64,linux/arm64 \
 	  --target server-arch \
-	  -t $(DOCKER_REGISTRY)/kave-server:dev-arch \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(SERVER_ARCH_IMAGE) \
 	  --load=false \
 	  .
 
@@ -380,7 +388,8 @@ docker-push-arch: dashboard-build
 	docker buildx build \
 	  --platform linux/amd64,linux/arm64 \
 	  --target server-arch \
-	  -t $(DOCKER_REGISTRY)/kave-server:dev-arch \
+	  --build-arg VERSION=$(VERSION) \
+	  -t $(SERVER_ARCH_IMAGE) \
 	  --push \
 	  .
 
