@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -64,6 +65,22 @@ func main() {
 	}
 	cfg := loadRes.Config
 
+	// Honor FX offline settings directly from env. The layered viper loader drops
+	// file-provided scalar values for env-bound keys (the same class of bug is
+	// hand-worked-around for security.allow_legacy_tokens in config/layered.go),
+	// and the env path decodes the raw string into these bool/float fields
+	// incorrectly — so neither fx.offline in kave.yaml nor KAVE_FX_OFFLINE reach
+	// cfg.FX. Read them here, after load, so offline FX is actually configurable
+	// on hosts without outbound internet (e.g. no route to api.frankfurter.dev).
+	if v := os.Getenv("KAVE_FX_OFFLINE"); v == "true" || v == "1" {
+		cfg.FX.Offline = true
+	}
+	if v := os.Getenv("KAVE_FX_FIXED_IRT_PER_USD"); v != "" {
+		if f, perr := strconv.ParseFloat(v, 64); perr == nil {
+			cfg.FX.FixedIRTPerUSD = f
+		}
+	}
+
 	storeManager, err := storeimpl.NewManager(ctx, cfg.Storage, cfg.Postgres)
 	if err != nil {
 		log.Fatalf("create stores: %v", err)
@@ -77,20 +94,34 @@ func main() {
 	if err != nil {
 		log.Fatalf("create cost service: %v", err)
 	}
+	fxOffline := cfg.FX.Offline || cfg.FX.FixedIRTPerUSD > 0
 	fxService := fx.NewService(appStore, time.Duration(cfg.FX.RefreshIntervalSeconds)*time.Second)
 	if err := fxService.Load(ctx); err != nil {
 		log.Fatalf("load fx rates: %v", err)
 	}
-	if err := fxService.EnsureFresh(ctx); err != nil {
-		log.Fatalf("refresh fx rates: %v", err)
+	if fxOffline {
+		if err := fxService.SetFixedRate(ctx, cfg.FX.FixedIRTPerUSD); err != nil {
+			log.Fatalf("set fixed fx rate: %v", err)
+		}
+		log.Printf("fx: offline mode, fixed rate %v IRT/USD", cfg.FX.FixedIRTPerUSD)
+	} else {
+		// Don't hard-fail startup on a transient FX provider outage: log and let
+		// the background ticker retry. (Previously log.Fatalf here crash-looped the
+		// whole server whenever api.frankfurter.dev was unreachable.)
+		if err := fxService.EnsureFresh(ctx); err != nil {
+			log.Printf("warning: initial fx refresh failed (continuing; background refresh will retry): %v", err)
+		}
+		fxService.Start(context.Background())
 	}
-	fxService.Start(context.Background())
 	// core/fx.Service is used by the FX gRPC server (core/fx uses Frankfurter directly).
-	corefxService := corefx.NewService(appStore, 0) // 0 → default IRT/USD rate
+	// irt_per_usd is configured in micro (rate × 1e6); 0 → built-in default.
+	corefxService := corefx.NewService(appStore, int64(cfg.FX.FixedIRTPerUSD*1e6))
 	if err := corefxService.Load(ctx); err != nil {
 		log.Printf("warn: core fx load failed (rates may be stale): %v", err)
 	}
-	corefxService.StartRefresh(context.Background())
+	if !fxOffline {
+		corefxService.StartRefresh(context.Background())
+	}
 	if err := storeManager.Migrate(ctx); err != nil {
 		log.Fatalf("span store migrations: %v", err)
 	}

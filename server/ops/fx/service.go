@@ -76,6 +76,30 @@ func (s *Service) Load(ctx context.Context) error {
 	return nil
 }
 
+// SetFixedRate seeds an operator-configured USD↔IRT rate without contacting any
+// external provider. Use on offline hosts. irtPerUSD is Toman per USD (e.g. 190000).
+// It persists and loads the rate so cost conversion works exactly like a fetched rate.
+func (s *Service) SetFixedRate(ctx context.Context, irtPerUSD float64) error {
+	if irtPerUSD <= 0 {
+		return fmt.Errorf("fx: fixed_irt_per_usd must be > 0, got %v", irtPerUSD)
+	}
+	asOf := time.Now().UTC().Format("2006-01-02")
+	now := time.Now().UTC().UnixMilli()
+	usdToIRT := new(big.Rat).SetFloat64(irtPerUSD)
+	irtToUSD := new(big.Rat).Inv(new(big.Rat).Set(usdToIRT))
+	const provider = "fixed"
+	records := []runtimemodel.FXRateRecord{
+		{BaseCurrency: money.USD, QuoteCurrency: money.USD, Rate: "1", Provider: provider, AsOfDate: asOf, FetchedAt: now},
+		{BaseCurrency: money.IRT, QuoteCurrency: money.IRT, Rate: "1", Provider: provider, AsOfDate: asOf, FetchedAt: now},
+		{BaseCurrency: money.USD, QuoteCurrency: money.IRT, Rate: formatRat(usdToIRT, 18), Provider: provider, AsOfDate: asOf, FetchedAt: now},
+		{BaseCurrency: money.IRT, QuoteCurrency: money.USD, Rate: formatRat(irtToUSD, 18), Provider: provider, AsOfDate: asOf, FetchedAt: now},
+	}
+	if err := s.app.UpsertFXRates(ctx, records); err != nil {
+		return err
+	}
+	return s.Load(ctx)
+}
+
 func (s *Service) EnsureFresh(ctx context.Context) error {
 	s.mu.RLock()
 	hasRates := len(s.rates) > 0

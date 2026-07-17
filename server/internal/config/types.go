@@ -171,6 +171,12 @@ func (g GRPCConfig) Addr() string {
 
 type FXConfig struct {
 	RefreshIntervalSeconds int `mapstructure:"refresh_interval_seconds"`
+	// Offline disables external FX provider fetching (Frankfurter). Use on hosts
+	// without internet access. Requires FixedIRTPerUSD to be set.
+	Offline bool `mapstructure:"offline"`
+	// FixedIRTPerUSD is an operator-set Toman/USD rate used when Offline is true
+	// (or simply when set), e.g. 190000. Skips all network FX calls.
+	FixedIRTPerUSD float64 `mapstructure:"fixed_irt_per_usd"`
 }
 
 type PostgresConfig struct {
