@@ -64,6 +64,51 @@ jobs:
           cache: true
       - run: make test-integration
 
+  test-v2-postgres:
+    name: test-v2-postgres (required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      KAVE_TEST_V2_POSTGRES_ADMIN_DSN: postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+      - name: Create isolated V2 test databases
+        run: |
+          docker exec -i "${{ job.services.postgres.id }}" \
+            psql -U postgres -d postgres --set ON_ERROR_STOP=1 <<'SQL'
+          CREATE DATABASE kave_v2_store;
+          CREATE DATABASE kave_v2_kernel;
+          SQL
+      - name: Vet the V2 kernel
+        working-directory: server
+        run: go vet ./internal/v2/...
+      - name: Race-test the V2 Postgres stores and runtime-role contract
+        working-directory: server
+        env:
+          KAVE_TEST_V2_POSTGRES_DSN: postgres://postgres@127.0.0.1:5432/kave_v2_store?sslmode=disable
+        run: go test -race -count=1 -timeout=12m ./internal/v2/postgres
+      - name: Race-test the fresh-database V2 kernel acceptance flow
+        working-directory: server
+        env:
+          KAVE_TEST_V2_POSTGRES_DSN: postgres://postgres@127.0.0.1:5432/kave_v2_kernel?sslmode=disable
+        run: go test -race -count=1 -timeout=6m ./internal/v2 -run '^TestKernelPostgres_'
+
   test-contracts:
     runs-on: ubuntu-latest
     steps:

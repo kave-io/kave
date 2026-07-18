@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 	"sort"
@@ -95,7 +96,10 @@ func (s *State) buildPlanForConfig(ctx context.Context, cfg *config.Config) (App
 		}
 	}
 
-	desiredCreds := desiredCredentials(cfg, projectID, defaultEnvSlug(cfg))
+	desiredCreds, err := desiredCredentials(cfg, projectID, defaultEnvSlug(cfg))
+	if err != nil {
+		return plan, err
+	}
 	existingCreds, err := listAllCredentials(ctx, s.app, defaultEnvSlug(cfg))
 	if err != nil {
 		return plan, err
@@ -375,56 +379,62 @@ func desiredPolicies(cfg *config.Config, projectID, envID string) []*controlmode
 	return out
 }
 
-func desiredCredentials(cfg *config.Config, projectID, envID string) []*controlmodel.ConnectorCredential {
+func desiredCredentials(cfg *config.Config, projectID, envID string) ([]*controlmodel.ConnectorCredential, error) {
 	now := time.Now().UnixMilli()
 	var out []*controlmodel.ConnectorCredential
 	for _, cred := range cfg.Credentials {
 		if cred.Name == "" {
 			continue
 		}
-		out = append(out, &controlmodel.ConnectorCredential{
+		sourceType, secretRef, err := desiredCredentialSource(cred)
+		if err != nil {
+			return nil, fmt.Errorf("credential %q: %w", cred.Name, err)
+		}
+		desired := &controlmodel.ConnectorCredential{
 			ID:            cred.Name,
 			ProjectID:     projectID,
 			EnvID:         envID,
 			ConnectorType: cred.Connector,
 			Label:         cred.Label,
-			SourceType:    credentialSourceType(cred.Source),
-			SecretRef:     credentialSecretRef(cred),
+			SourceType:    sourceType,
+			SecretRef:     secretRef,
 			SecretVersion: cred.Ref,
 			Status:        controlmodel.CredStatusActive,
 			CreatedBy:     "system",
 			CreatedAt:     now,
 			UpdatedAt:     now,
-		})
+		}
+		if err := desired.NormalizeSourceFields(); err != nil {
+			return nil, err
+		}
+		out = append(out, desired)
 	}
-	return out
+	return out, nil
 }
 
-func credentialSourceType(source string) string {
-	switch strings.ToLower(source) {
+func desiredCredentialSource(cred config.CredentialConfig) (sourceType, secretRef string, err error) {
+	source := strings.ToLower(strings.TrimSpace(cred.Source))
+	switch source {
 	case "env":
-		return string(controlmodel.CredentialSourceEnv)
+		if strings.TrimSpace(cred.Env) == "" {
+			return "", "", fmt.Errorf("source env requires a non-empty env field")
+		}
+		return controlmodel.CredSourceEnv, strings.TrimSpace(cred.Env), nil
+	case "vault", "vault_ref":
+		if strings.TrimSpace(cred.Ref) == "" {
+			return "", "", fmt.Errorf("source %s requires a non-empty ref field", source)
+		}
+		return controlmodel.CredSourceVaultRef, strings.TrimSpace(cred.Ref), nil
 	case "passthrough":
-		return controlmodel.CredSourcePassthrough
-	case "vault":
-		return controlmodel.CredSourceVaultRef
-	case "file":
-		return controlmodel.CredSourceVaultRef
+		return controlmodel.CredSourcePassthrough, "", nil
+	case "encrypted":
+		return "", "", fmt.Errorf("source encrypted cannot be declared in config; create it through the credential control API")
+	case "oauth", "sts", "file":
+		return "", "", fmt.Errorf("source %s is not supported by the V1 credential runtime", source)
+	case "":
+		return "", "", fmt.Errorf("source is required")
 	default:
-		return controlmodel.CredSourceVaultRef
-	}
-}
-
-func credentialSecretRef(cred config.CredentialConfig) string {
-	switch strings.ToLower(cred.Source) {
-	case "env":
-		return cred.Env
-	case "file":
-		return cred.File
-	case "vault":
-		return cred.Ref
-	default:
-		return cred.Ref
+		return "", "", fmt.Errorf("source %s is not recognized", source)
 	}
 }
 

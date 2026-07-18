@@ -1318,16 +1318,8 @@ func (s *SQLiteAppStore) GetCredential(ctx context.Context, id string) (*control
 }
 
 func (s *SQLiteAppStore) StoreCredential(ctx context.Context, c *control.ConnectorCredential) error {
-	sourceType := c.SourceType
-	if sourceType == "" && c.Source != "" {
-		sourceType = string(c.Source)
-	}
-	secretRef := c.SecretRef
-	if secretRef == "" && (sourceType == string(control.CredentialSourceEnv) || c.Source == control.CredentialSourceEnv) {
-		secretRef = c.EnvVar
-	}
-	if secretRef == "" && (sourceType == string(control.CredentialSourceVault) || c.Source == control.CredentialSourceVault) {
-		secretRef = c.VaultRef
+	if err := c.NormalizeSourceFields(); err != nil {
+		return fmt.Errorf("sqlite: normalize credential source: %w", err)
 	}
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO credentials (
@@ -1339,13 +1331,14 @@ func (s *SQLiteAppStore) StoreCredential(ctx context.Context, c *control.Connect
 		ON CONFLICT(id) DO UPDATE SET
 			source_type = excluded.source_type,
 			label = excluded.label, description = excluded.description,
+			source_type = excluded.source_type,
 			encrypted_blob = excluded.encrypted_blob, key_hash = excluded.key_hash,
 			wrapping_key_id = excluded.wrapping_key_id,
 			secret_ref = excluded.secret_ref, secret_version = excluded.secret_version,
 			status = excluded.status, updated_at = excluded.updated_at`,
 		c.ID, c.ProjectID, c.EnvID, c.ConnectorType, c.AccountID, c.Label, c.Description,
-		sourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID,
-		secretRef, c.SecretVersion, c.Status, c.Version,
+		c.SourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID,
+		c.SecretRef, c.SecretVersion, c.Status, c.Version,
 		c.ExpiresAt, c.RotatedAt, c.RotatedBy, c.CreatedBy, c.CreatedAt, c.UpdatedAt)
 	return err
 }
@@ -1435,8 +1428,13 @@ func (s *SQLiteAppStore) scanCredential(row *sql.Row) (*control.ConnectorCredent
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
-	hydrateCredentialSource(&c)
-	return &c, err
+	if err != nil {
+		return nil, err
+	}
+	if err := hydrateCredentialSource(&c); err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 func (s *SQLiteAppStore) scanCredentialRow(rows *sql.Rows) (*control.ConnectorCredential, error) {
@@ -1449,23 +1447,20 @@ func (s *SQLiteAppStore) scanCredentialRow(rows *sql.Rows) (*control.ConnectorCr
 		&c.CreatedBy, &c.CreatedAt, &c.UpdatedAt, &c.RevokedAt, &c.RevokedBy, &c.RevokeReason); err != nil {
 		return nil, err
 	}
-	hydrateCredentialSource(&c)
+	if err := hydrateCredentialSource(&c); err != nil {
+		return nil, err
+	}
 	return &c, nil
 }
 
-func hydrateCredentialSource(c *control.ConnectorCredential) {
+func hydrateCredentialSource(c *control.ConnectorCredential) error {
 	if c == nil {
-		return
+		return nil
 	}
-	if c.Source == "" && c.SourceType != "" {
-		c.Source = control.CredentialSource(c.SourceType)
+	if err := c.NormalizeSourceFields(); err != nil {
+		return fmt.Errorf("sqlite: hydrate credential %q: %w", c.ID, err)
 	}
-	switch c.Source {
-	case control.CredentialSourceEnv:
-		c.EnvVar = c.SecretRef
-	case control.CredentialSourceVault:
-		c.VaultRef = c.SecretRef
-	}
+	return nil
 }
 
 // ── Transaction ───────────────────────────────────────────────────────────────
@@ -1594,6 +1589,9 @@ func (t *txAppStore) AddRunSpend(ctx context.Context, runID string, cost money.A
 }
 
 func (t *txAppStore) StoreCredential(ctx context.Context, c *control.ConnectorCredential) error {
+	if err := c.NormalizeSourceFields(); err != nil {
+		return fmt.Errorf("sqlite: normalize credential source: %w", err)
+	}
 	_, err := t.tx.ExecContext(ctx, `
 		INSERT INTO credentials (
 			id, project_id, env_id, connector_type, account_id, label, description,

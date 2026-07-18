@@ -7,7 +7,9 @@ import (
 	"github.com/kave-io/kave/server/internal/authctx"
 	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func NewAuthUnaryInterceptor(app store.AppStore, tokens *serverauth.TokenManager, allowAnonymous, allowLegacy bool) grpc.UnaryServerInterceptor {
@@ -18,11 +20,13 @@ func NewAuthUnaryInterceptor(app store.AppStore, tokens *serverauth.TokenManager
 		}
 		id, err := identityFromMetadata(ctx, app, tokens, allowLegacy)
 		if err != nil {
-			id = authctx.Identity{Kind: authctx.KindInvalid, Err: err.Error()}
+			return nil, status.Error(codes.Unauthenticated, serverauth.ErrUnauthenticated.Error())
 		}
 		if id.IsAnonymous() && !allowAnonymous {
-			id.Kind = authctx.KindInvalid
-			id.Err = serverauth.ErrUnauthenticated.Error()
+			return nil, status.Error(codes.Unauthenticated, serverauth.ErrUnauthenticated.Error())
+		}
+		if id.IsInvalid() {
+			return nil, status.Error(codes.Unauthenticated, serverauth.ErrUnauthenticated.Error())
 		}
 		ctx = authctx.With(ctx, id)
 		return handler(ctx, req)
@@ -38,11 +42,13 @@ func NewAuthStreamInterceptor(app store.AppStore, tokens *serverauth.TokenManage
 		ctx := ss.Context()
 		id, err := identityFromMetadata(ctx, app, tokens, allowLegacy)
 		if err != nil {
-			id = authctx.Identity{Kind: authctx.KindInvalid, Err: err.Error()}
+			return status.Error(codes.Unauthenticated, serverauth.ErrUnauthenticated.Error())
 		}
 		if id.IsAnonymous() && !allowAnonymous {
-			id.Kind = authctx.KindInvalid
-			id.Err = serverauth.ErrUnauthenticated.Error()
+			return status.Error(codes.Unauthenticated, serverauth.ErrUnauthenticated.Error())
+		}
+		if id.IsInvalid() {
+			return status.Error(codes.Unauthenticated, serverauth.ErrUnauthenticated.Error())
 		}
 		wrapped := &serverStreamWithContext{ServerStream: ss, ctx: authctx.With(ctx, id)}
 		return handler(srv, wrapped)
@@ -55,7 +61,9 @@ func identityFromMetadata(ctx context.Context, app store.AppStore, tokens *serve
 		return authctx.Identity{Kind: authctx.KindAnonymous}, nil
 	}
 	authHeader := ""
-	if vals := md.Get("authorization"); len(vals) > 0 {
+	if vals := md.Get("authorization"); len(vals) > 1 {
+		return authctx.Identity{}, serverauth.ErrUnauthenticated
+	} else if len(vals) == 1 {
 		authHeader = vals[0]
 	}
 	return serverauth.ParseIdentity(ctx, authHeader, app, tokens, allowLegacy)

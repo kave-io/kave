@@ -1,13 +1,26 @@
 package control
 
+import (
+	"bytes"
+	"fmt"
+	"strings"
+)
+
 // CredentialSource is the source for a connector credential.
 type CredentialSource string
 
 const (
 	CredentialSourceEnv         CredentialSource = "env"
-	CredentialSourceVault       CredentialSource = "vault"
+	CredentialSourceVaultRef    CredentialSource = "vault_ref"
 	CredentialSourcePassthrough CredentialSource = "passthrough"
 	CredentialSourceEncrypted   CredentialSource = "encrypted"
+	CredentialSourceOAuth       CredentialSource = "oauth"
+	CredentialSourceSTS         CredentialSource = "sts"
+
+	// CredentialSourceVault is the legacy spelling persisted by early V1
+	// releases. New writes use CredentialSourceVaultRef, but reads and runtime
+	// resolution continue to accept both spellings.
+	CredentialSourceVault CredentialSource = "vault"
 )
 
 // EncryptedBlob stores encrypted credential material for local dev only.
@@ -19,12 +32,35 @@ type EncryptedBlob struct {
 
 // Credential source type constants — which tier of the four-tier model.
 const (
+	CredSourceEnv         = "env"         // Process environment variable name in SecretRef.
 	CredSourceEncrypted   = "encrypted"   // Tier 2: encrypted-at-rest in Kave
 	CredSourceVaultRef    = "vault_ref"   // Tier 1: external secret manager (Vault, AWS Secrets, etc.)
 	CredSourceOAuth       = "oauth"       // Tier 3: ephemeral via OAuth refresh token
 	CredSourceSTS         = "sts"         // Tier 3: ephemeral via cloud STS/AssumeRole
 	CredSourcePassthrough = "passthrough" // Tier 4: no stored secret; caller supplies per-request
 )
+
+// CanonicalCredentialSource normalizes the V1 source vocabulary. In
+// particular, legacy rows containing "vault" are exposed as "vault_ref" so
+// callers do not need to understand two spellings for the same source.
+func CanonicalCredentialSource(source string) CredentialSource {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case string(CredentialSourceVault), string(CredentialSourceVaultRef):
+		return CredentialSourceVaultRef
+	case string(CredentialSourceEnv):
+		return CredentialSourceEnv
+	case string(CredentialSourceEncrypted):
+		return CredentialSourceEncrypted
+	case string(CredentialSourcePassthrough):
+		return CredentialSourcePassthrough
+	case string(CredentialSourceOAuth):
+		return CredentialSourceOAuth
+	case string(CredentialSourceSTS):
+		return CredentialSourceSTS
+	default:
+		return CredentialSource(strings.ToLower(strings.TrimSpace(source)))
+	}
+}
 
 // Credential status constants.
 const (
@@ -87,6 +123,76 @@ type ConnectorCredential struct {
 	RevokedAt    *int64 // UnixMilli; nil = active
 	RevokedBy    string
 	RevokeReason string
+}
+
+// NormalizeSourceFields reconciles the legacy structured source fields with
+// the flat fields used by the V1 stores. It never resolves or returns a secret.
+// Unknown/future source values are retained so the runtime can reject them with
+// a precise error instead of accidentally treating them as Vault references.
+func (c *ConnectorCredential) NormalizeSourceFields() error {
+	if c == nil {
+		return fmt.Errorf("credential is nil")
+	}
+
+	fromSource := CanonicalCredentialSource(string(c.Source))
+	fromType := CanonicalCredentialSource(c.SourceType)
+	if fromSource != "" && fromType != "" && fromSource != fromType {
+		return fmt.Errorf("credential %q has conflicting sources %q and %q", c.ID, c.Source, c.SourceType)
+	}
+
+	source := fromType
+	if source == "" {
+		source = fromSource
+	}
+	if source == "" {
+		return nil
+	}
+	c.Source = source
+	c.SourceType = string(source)
+
+	switch source {
+	case CredentialSourceEnv:
+		ref, err := consistentCredentialReference(c.ID, "environment variable", c.EnvVar, c.SecretRef)
+		if err != nil {
+			return err
+		}
+		c.EnvVar = ref
+		c.SecretRef = ref
+	case CredentialSourceVaultRef:
+		ref, err := consistentCredentialReference(c.ID, "vault reference", c.VaultRef, c.SecretRef)
+		if err != nil {
+			return err
+		}
+		c.VaultRef = ref
+		c.SecretRef = ref
+	case CredentialSourceEncrypted:
+		if c.Encrypted != nil && len(c.Encrypted.Ciphertext) > 0 {
+			if len(c.EncryptedBlob) > 0 && !bytes.Equal(c.EncryptedBlob, c.Encrypted.Ciphertext) {
+				return fmt.Errorf("credential %q has conflicting encrypted blobs", c.ID)
+			}
+			c.EncryptedBlob = c.Encrypted.Ciphertext
+			if c.WrappingKeyID == "" {
+				c.WrappingKeyID = c.Encrypted.KeyID
+			}
+		}
+		if len(c.EncryptedBlob) > 0 {
+			c.Encrypted = &EncryptedBlob{
+				Ciphertext: c.EncryptedBlob,
+				KeyID:      c.WrappingKeyID,
+			}
+		}
+	}
+	return nil
+}
+
+func consistentCredentialReference(id, kind, structured, flat string) (string, error) {
+	if structured != "" && flat != "" && structured != flat {
+		return "", fmt.Errorf("credential %q has conflicting %s references", id, kind)
+	}
+	if structured != "" {
+		return structured, nil
+	}
+	return flat, nil
 }
 
 // CredentialFilter is used by ResolveCredential to find the best matching active credential.

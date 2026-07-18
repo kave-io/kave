@@ -336,16 +336,18 @@ func tokenToProto(t *control.AgentToken) *controlv1.AgentToken {
 // ── Credential ────────────────────────────────────────────────────────────────
 
 func credentialSourceToProto(s string) controlv1.CredentialSource {
-	switch s {
-	case "encrypted":
+	switch control.CanonicalCredentialSource(s) {
+	case control.CredentialSourceEnv:
+		return controlv1.CredentialSource_CREDENTIAL_SOURCE_ENV
+	case control.CredentialSourceEncrypted:
 		return controlv1.CredentialSource_CREDENTIAL_SOURCE_ENCRYPTED
-	case "vault_ref":
+	case control.CredentialSourceVaultRef:
 		return controlv1.CredentialSource_CREDENTIAL_SOURCE_VAULT_REF
-	case "oauth":
+	case control.CredentialSourceOAuth:
 		return controlv1.CredentialSource_CREDENTIAL_SOURCE_OAUTH
-	case "sts":
+	case control.CredentialSourceSTS:
 		return controlv1.CredentialSource_CREDENTIAL_SOURCE_STS
-	case "passthrough":
+	case control.CredentialSourcePassthrough:
 		return controlv1.CredentialSource_CREDENTIAL_SOURCE_PASSTHROUGH
 	default:
 		return controlv1.CredentialSource_CREDENTIAL_SOURCE_UNSPECIFIED
@@ -377,7 +379,7 @@ func credentialToProto(c *control.ConnectorCredential) *controlv1.ConnectorCrede
 		AccountId:     c.AccountID,
 		Label:         c.Label,
 		Description:   c.Description,
-		SourceType:    credentialSourceToProto(c.SourceType),
+		SourceType:    credentialSourceToProto(credentialSourceName(c)),
 		KeyHash:       c.KeyHash,
 		WrappingKeyId: c.WrappingKeyID,
 		SecretRef:     c.SecretRef,
@@ -395,6 +397,16 @@ func credentialToProto(c *control.ConnectorCredential) *controlv1.ConnectorCrede
 		RevokedBy:     c.RevokedBy,
 		RevokeReason:  c.RevokeReason,
 	}
+}
+
+func credentialSourceName(c *control.ConnectorCredential) string {
+	if c == nil {
+		return ""
+	}
+	if c.SourceType != "" {
+		return c.SourceType
+	}
+	return string(c.Source)
 }
 
 // ── Budget ───────────────────────────────────────────────────────────────────

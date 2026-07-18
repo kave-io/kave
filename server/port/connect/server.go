@@ -21,9 +21,10 @@ import (
 
 // Register mounts browser-compatible Connect handlers under /rpc.
 // It intentionally wires RPCs currently used by the dashboard.
-func Register(mux *http.ServeMux, control *appcontrol.Server, runtime *appruntime.Server, audit *appaudit.Server, daemon *appcontrol.DaemonServiceImpl) {
+func Register(mux *http.ServeMux, control *appcontrol.Server, runtime *appruntime.Server, audit *appaudit.Server, daemon *appcontrol.DaemonServiceImpl, auth AuthConfig) {
+	authenticate := NewAuthMiddleware(auth)
 	mount := func(procedure string, handler http.Handler) {
-		mux.Handle("/rpc"+procedure, http.StripPrefix("/rpc", handler))
+		mux.Handle("/rpc"+procedure, authenticate(http.StripPrefix("/rpc", handler)))
 	}
 
 	mountUnary := func(procedure string, handler http.Handler) {

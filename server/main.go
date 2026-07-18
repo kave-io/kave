@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +29,7 @@ import (
 	appcasbin "github.com/kave-io/kave/server/internal/infra/casbin"
 	"github.com/kave-io/kave/server/internal/logsink"
 	storeimpl "github.com/kave-io/kave/server/internal/store"
+	v2kernel "github.com/kave-io/kave/server/internal/v2"
 	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"github.com/kave-io/kave/server/ops/auth/credresolve"
 	"github.com/kave-io/kave/server/ops/budget"
@@ -38,7 +40,6 @@ import (
 	connectport "github.com/kave-io/kave/server/port/connect"
 	portgrpc "github.com/kave-io/kave/server/port/grpc"
 	"github.com/kave-io/kave/server/ui"
-	"net"
 )
 
 var buildVersion = "dev"
@@ -51,6 +52,22 @@ func main() {
 			return
 		case "healthz":
 			fmt.Println("ok")
+			return
+		case "v2-migrate":
+			if len(os.Args) != 2 {
+				log.Fatal("v2 migration accepts no positional arguments; use the documented environment variables")
+			}
+			if err := runV2Migrate(); err != nil {
+				log.Fatalf("v2 migration: %v", err)
+			}
+			return
+		case "v2-bootstrap":
+			if len(os.Args) != 2 {
+				log.Fatal("v2 bootstrap accepts no positional arguments; use the documented environment variables")
+			}
+			if err := runV2Bootstrap(); err != nil {
+				log.Fatalf("v2 bootstrap: %v", err)
+			}
 			return
 		}
 	}
@@ -214,8 +231,39 @@ func main() {
 	// Create and register framework gateway
 	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistryWithConnectors(gatewayConnectorConfigs(cfg.Connectors)), cfg.Security.AllowAnonymous, vaultResolver)
 	mux := http.NewServeMux()
+	if cfg.V2.Enabled {
+		if err := v2kernel.ValidateTransportSecurity(cfg.V2.TransportSecurity, bindAddr); err != nil {
+			log.Fatalf("v2 transport security: %v", err)
+		}
+		pool, err := v2kernel.OpenRuntimePool(ctx, cfg.V2.RuntimeDSN, cfg.V2.RuntimeRole)
+		if err != nil {
+			log.Fatalf("open v2 runtime database: %v", err)
+		}
+		defer pool.Close()
+		if err := v2kernel.Register(ctx, mux, pool, v2kernel.Config{
+			MasterKey:                       cfg.V2.MasterKey,
+			MasterDecryptionKeys:            cfg.V2.MasterDecryptionKeys,
+			SecretIdempotencyKey:            cfg.V2.SecretIdempotencyKey,
+			RuntimeRole:                     cfg.V2.RuntimeRole,
+			ProviderEgressAllowedPrivateIPs: cfg.V2.ProviderEgress.AllowedPrivateIPs,
+		}); err != nil {
+			log.Fatalf("register v2 kernel: %v", err)
+		}
+	}
 	gatewayServer.RegisterRoutes(mux)
-	connectport.Register(mux, controlServer, runtimeServer, auditServer, appcontrol.NewDaemonService(daemonState))
+	connectport.Register(
+		mux,
+		controlServer,
+		runtimeServer,
+		auditServer,
+		appcontrol.NewDaemonService(daemonState),
+		connectport.AuthConfig{
+			App:            appStore,
+			Tokens:         authTokens,
+			AllowAnonymous: cfg.Security.AllowAnonymous,
+			AllowLegacy:    cfg.Security.AllowLegacyTokens,
+		},
+	)
 
 	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
 		log.Fatalf("build apply plan: %v", err)

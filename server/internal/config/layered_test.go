@@ -81,6 +81,9 @@ agents:
 	if got := res.Config.Storage.Defaults.App.Path; got != "project.db" {
 		t.Fatalf("Storage.Defaults.App.Path = %q, want project.db", got)
 	}
+	if res.Config.Security.AllowAnonymous {
+		t.Fatal("Security.AllowAnonymous defaulted open; want fail-closed false")
+	}
 
 	if got := res.Origin["fx.refresh_interval_seconds"]; got != SourceEnv {
 		t.Fatalf("origin fx.refresh_interval_seconds = %q, want %q", got, SourceEnv)

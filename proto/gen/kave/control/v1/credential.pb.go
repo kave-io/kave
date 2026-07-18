@@ -31,6 +31,7 @@ const (
 	CredentialSource_CREDENTIAL_SOURCE_OAUTH       CredentialSource = 3 // Tier 3: ephemeral via OAuth
 	CredentialSource_CREDENTIAL_SOURCE_STS         CredentialSource = 4 // Tier 3: ephemeral via cloud STS
 	CredentialSource_CREDENTIAL_SOURCE_PASSTHROUGH CredentialSource = 5 // Tier 4: no stored secret
+	CredentialSource_CREDENTIAL_SOURCE_ENV         CredentialSource = 6 // Process environment variable; secret_ref carries only its name
 )
 
 // Enum value maps for CredentialSource.
@@ -42,6 +43,7 @@ var (
 		3: "CREDENTIAL_SOURCE_OAUTH",
 		4: "CREDENTIAL_SOURCE_STS",
 		5: "CREDENTIAL_SOURCE_PASSTHROUGH",
+		6: "CREDENTIAL_SOURCE_ENV",
 	}
 	CredentialSource_value = map[string]int32{
 		"CREDENTIAL_SOURCE_UNSPECIFIED": 0,
@@ -50,6 +52,7 @@ var (
 		"CREDENTIAL_SOURCE_OAUTH":       3,
 		"CREDENTIAL_SOURCE_STS":         4,
 		"CREDENTIAL_SOURCE_PASSTHROUGH": 5,
+		"CREDENTIAL_SOURCE_ENV":         6,
 	}
 )
 
@@ -589,14 +592,15 @@ const file_kave_control_v1_credential_proto_rawDesc = "" +
 	"\n" +
 	"account_id\x18\x03 \x01(\tR\taccountId\x12\x14\n" +
 	"\x05label\x18\x04 \x01(\tR\x05label\x129\n" +
-	"\x06status\x18\x05 \x01(\x0e2!.kave.control.v1.CredentialStatusR\x06statusJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\x06cursor*\xd2\x01\n" +
+	"\x06status\x18\x05 \x01(\x0e2!.kave.control.v1.CredentialStatusR\x06statusJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x05limitR\x06cursor*\xed\x01\n" +
 	"\x10CredentialSource\x12!\n" +
 	"\x1dCREDENTIAL_SOURCE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCREDENTIAL_SOURCE_ENCRYPTED\x10\x01\x12\x1f\n" +
 	"\x1bCREDENTIAL_SOURCE_VAULT_REF\x10\x02\x12\x1b\n" +
 	"\x17CREDENTIAL_SOURCE_OAUTH\x10\x03\x12\x19\n" +
 	"\x15CREDENTIAL_SOURCE_STS\x10\x04\x12!\n" +
-	"\x1dCREDENTIAL_SOURCE_PASSTHROUGH\x10\x05*\xb9\x01\n" +
+	"\x1dCREDENTIAL_SOURCE_PASSTHROUGH\x10\x05\x12\x19\n" +
+	"\x15CREDENTIAL_SOURCE_ENV\x10\x06*\xb9\x01\n" +
 	"\x10CredentialStatus\x12!\n" +
 	"\x1dCREDENTIAL_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CREDENTIAL_STATUS_ACTIVE\x10\x01\x12\x1d\n" +

@@ -1,0 +1,375 @@
+syntax = "proto3";
+
+package kave.kernel.v2;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/kave-io/kave/proto/gen/kave/kernel/v2;kernelv2";
+
+// KernelService is Kave V2's complete initial control and exact-consumption
+// surface. Provider invocation admission/settlement stays internal to the
+// gateway so an application cannot forge provider usage.
+service KernelService {
+  rpc Apply(ApplyRequest) returns (ApplyResponse);
+  rpc GetState(GetStateRequest) returns (State);
+  rpc IssueServiceKey(IssueServiceKeyRequest) returns (IssuedServiceKey);
+  rpc RevokeServiceKey(RevokeServiceKeyRequest) returns (google.protobuf.Empty);
+  rpc PutSecret(PutSecretRequest) returns (SecretMetadata);
+  rpc RevokeSecret(RevokeSecretRequest) returns (google.protobuf.Empty);
+  rpc SyncLimits(SyncLimitsRequest) returns (SyncLimitsResponse);
+  rpc Consume(ConsumeRequest) returns (ConsumeResponse);
+  rpc GetLimitStatus(GetLimitStatusRequest) returns (GetLimitStatusResponse);
+  rpc QueryUsage(QueryUsageRequest) returns (QueryUsageResponse);
+  rpc QueryInvocations(QueryInvocationsRequest) returns (QueryInvocationsResponse);
+  rpc QueryAuditEvents(QueryAuditEventsRequest) returns (QueryAuditEventsResponse);
+}
+
+message NamespaceSpec {
+  string account = 1;
+  string application = 2;
+  string environment = 3;
+}
+
+message Scope {
+  string tenant = 1;
+  string actor = 2;
+  string bill_to = 3;
+  string session = 4;
+  string feature = 5;
+}
+
+message RouteSpec {
+  string name = 1;
+  string provider = 2;
+  string base_url = 3;
+  string secret = 4;
+  repeated string allowed_models = 5;
+  string default_model = 6;
+  int64 pricing_revision = 7;
+  repeated ModelPrice pricing = 8;
+}
+
+message ModelPrice {
+  string model = 1;
+  int64 input_nanos_per_million_tokens = 2;
+  int64 output_nanos_per_million_tokens = 3;
+}
+
+enum AgentKind {
+  AGENT_KIND_UNSPECIFIED = 0;
+  AGENT_KIND_LLM = 1;
+  AGENT_KIND_EMBEDDING = 2;
+}
+
+message AgentSpec {
+  string name = 1;
+  AgentKind kind = 2;
+  string route = 3;
+  bool enabled = 4;
+}
+
+enum LimitWindow {
+  LIMIT_WINDOW_UNSPECIFIED = 0;
+  LIMIT_WINDOW_ALL_TIME = 1;
+  LIMIT_WINDOW_DAY = 2;
+  LIMIT_WINDOW_MONTH = 3;
+}
+
+message LimitSelector {
+  string tenant = 1;
+  string actor = 2;
+  string bill_to = 3;
+  string agent = 4;
+  string model = 5;
+  string feature = 6;
+}
+
+message LimitSpec {
+  string key = 1;
+  string metric = 2;
+  LimitSelector selector = 3;
+  LimitWindow window = 4;
+  int64 hard_cap = 5;
+  optional int64 soft_cap = 6;
+  bool enabled = 7;
+}
+
+message Manifest {
+  NamespaceSpec namespace = 1;
+  repeated RouteSpec routes = 2;
+  repeated AgentSpec agents = 3;
+  repeated LimitSpec limits = 4;
+}
+
+message ApplyRequest {
+  Manifest manifest = 1;
+  bool dry_run = 2;
+  bool prune = 3;
+  int64 expected_revision = 4;
+  string idempotency_key = 5;
+}
+
+enum ChangeKind {
+  CHANGE_KIND_UNSPECIFIED = 0;
+  CHANGE_KIND_CREATE = 1;
+  CHANGE_KIND_UPDATE = 2;
+  CHANGE_KIND_DELETE = 3;
+  CHANGE_KIND_UNCHANGED = 4;
+}
+
+message Change {
+  ChangeKind kind = 1;
+  string resource_kind = 2;
+  string name = 3;
+  repeated string fields = 4;
+}
+
+message ApplyResponse {
+  string namespace_id = 1;
+  int64 revision = 2;
+  bool applied = 3;
+  repeated Change changes = 4;
+}
+
+message GetStateRequest {
+  string namespace_id = 1;
+}
+
+message State {
+  string namespace_id = 1;
+  int64 revision = 2;
+  Manifest manifest = 3;
+}
+
+message IssueServiceKeyRequest {
+  string namespace_id = 1;
+  string name = 2;
+  repeated string operations = 3;
+  repeated string allowed_agents = 4;
+  bool can_assert_scope = 5;
+  int64 expires_at_ms = 6;
+  string idempotency_key = 7;
+  // Recipient-generated, non-secret 144-bit lookup component encoded as
+  // exactly 24 unpadded base64url characters.
+  string lookup_prefix = 8;
+  // SHA-256 of the complete canonical raw key. Raw key material is never sent.
+  bytes secret_hash = 9;
+}
+
+message IssuedServiceKey {
+  string id = 1;
+  string name = 2;
+  string prefix = 3;
+  reserved 4;
+  int64 created_at_ms = 5;
+  int64 expires_at_ms = 6;
+  bool created = 7;
+}
+
+message RevokeServiceKeyRequest {
+  string id = 1;
+  string reason = 2;
+}
+
+enum SecretSource {
+  SECRET_SOURCE_UNSPECIFIED = 0;
+  SECRET_SOURCE_ENCRYPTED = 1;
+  SECRET_SOURCE_EXTERNAL = 2;
+}
+
+message PutSecretRequest {
+  string namespace_id = 1;
+  string name = 2;
+  oneof value {
+    bytes plaintext = 3;
+    string external_uri = 4;
+  }
+  bool validate = 5;
+  string idempotency_key = 6;
+}
+
+message SecretMetadata {
+  string id = 1;
+  string name = 2;
+  SecretSource source = 3;
+  int64 version = 4;
+  string status = 5;
+  int64 updated_at_ms = 6;
+}
+
+message RevokeSecretRequest {
+  string id = 1;
+  string reason = 2;
+}
+
+message SyncLimitsRequest {
+  string namespace_id = 1;
+  string owner = 2;
+  int64 revision = 3;
+  repeated LimitSpec limits = 4;
+  string idempotency_key = 5;
+}
+
+message SyncLimitsResponse {
+  int64 revision = 1;
+  int32 created = 2;
+  int32 updated = 3;
+  int32 disabled = 4;
+}
+
+message ConsumeRequest {
+  string agent = 1;
+  string model = 2;
+  Scope scope = 3;
+  string metric = 4;
+  int64 units = 5;
+  string idempotency_key = 6;
+}
+
+enum DecisionStatus {
+  DECISION_STATUS_UNSPECIFIED = 0;
+  DECISION_STATUS_ADMITTED = 1;
+  DECISION_STATUS_REJECTED = 2;
+}
+
+message LimitViolation {
+  string limit_id = 1;
+  string limit_key = 2;
+  string metric = 3;
+  int64 used = 4;
+  int64 requested = 5;
+  int64 hard_cap = 6;
+  int64 reset_at_ms = 7;
+}
+
+message LimitWarning {
+  string limit_id = 1;
+  string limit_key = 2;
+  int64 used = 3;
+  int64 soft_cap = 4;
+  int64 reset_at_ms = 5;
+}
+
+message ConsumeResponse {
+  string invocation_id = 1;
+  DecisionStatus status = 2;
+  bool replayed = 3;
+  repeated LimitWarning warnings = 4;
+  repeated LimitViolation violations = 5;
+}
+
+// LimitExceededDetail is attached to a RESOURCE_EXHAUSTED Connect error so
+// SDKs can expose errors.Is plus structured limit status without parsing text.
+message LimitExceededDetail {
+  string invocation_id = 1;
+  repeated LimitViolation violations = 2;
+}
+
+message GetLimitStatusRequest {
+  Scope scope = 1;
+  string agent = 2;
+  string model = 3;
+  string metric = 4;
+}
+
+message LimitStatus {
+  string limit_id = 1;
+  string limit_key = 2;
+  string metric = 3;
+  int64 used = 4;
+  int64 reserved = 5;
+  int64 hard_cap = 6;
+  optional int64 soft_cap = 7;
+  int64 reset_at_ms = 8;
+}
+
+message GetLimitStatusResponse {
+  repeated LimitStatus limits = 1;
+}
+
+message QueryUsageRequest {
+  Scope scope = 1;
+  string agent = 2;
+  string metric = 3;
+  int64 from_ms = 4;
+  int64 to_ms = 5;
+  int32 page_size = 6;
+  string page_token = 7;
+}
+
+message UsageEntry {
+  string id = 1;
+  string invocation_id = 2;
+  string metric = 3;
+  int64 units = 4;
+  int64 cost_nano_usd = 5;
+  string provider = 6;
+  string model = 7;
+  int32 attempt = 8;
+  string event_kind = 9;
+  int64 created_at_ms = 10;
+  int64 request_count = 11;
+  int64 input_tokens = 12;
+  int64 output_tokens = 13;
+  int64 cache_read_tokens = 14;
+  int64 cache_write_tokens = 15;
+  int64 reasoning_tokens = 16;
+  bool estimated = 17;
+}
+
+message QueryUsageResponse {
+  repeated UsageEntry entries = 1;
+  string next_page_token = 2;
+}
+
+message QueryInvocationsRequest {
+  Scope scope = 1;
+  string agent = 2;
+  DecisionStatus status = 3;
+  int64 from_ms = 4;
+  int64 to_ms = 5;
+  int32 page_size = 6;
+  string page_token = 7;
+}
+
+message Invocation {
+  string id = 1;
+  string agent = 2;
+  string model = 3;
+  Scope scope = 4;
+  DecisionStatus decision = 5;
+  string status = 6;
+  string idempotency_key = 7;
+  int64 created_at_ms = 8;
+  int64 settled_at_ms = 9;
+}
+
+message QueryInvocationsResponse {
+  repeated Invocation invocations = 1;
+  string next_page_token = 2;
+}
+
+message QueryAuditEventsRequest {
+  string event_kind = 1;
+  int64 from_ms = 2;
+  int64 to_ms = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message AuditEvent {
+  string id = 1;
+  string event_kind = 2;
+  string actor_kind = 3;
+  string actor_id = 4;
+  string resource_kind = 5;
+  string resource_id = 6;
+  string outcome = 7;
+  map<string, string> metadata = 8;
+  int64 created_at_ms = 9;
+}
+
+message QueryAuditEventsResponse {
+  repeated AuditEvent events = 1;
+  string next_page_token = 2;
+}

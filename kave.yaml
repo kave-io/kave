@@ -128,15 +128,16 @@ connectors:
 # 6. Credentials
 # =============================================================================
 # Outbound secrets. Each entry is a named reference — never a plaintext value.
-# Kave supports four sources:
+# Kave supports three declarative sources:
 #
 #   env         → value read from an environment variable
-#   file        → value read from a file (with mode check)
-#   vault       → value fetched from an external secret manager
+#   vault or vault_ref → value fetched from an external secret manager
 #   passthrough → no stored secret; daemon forwards caller's credential
 #
 # The `encrypted` source (stored inside Kave, wrapped with a master key) is
 # created via `kave credential create --source encrypted`, NOT declared here.
+# `file`, `oauth`, and `sts` are not implemented by the V1 runtime and are
+# rejected during planning.
 
 credentials:
   - name: oai-primary
@@ -162,13 +163,6 @@ credentials:
     label: primary
     source: vault
     ref: kv/data/kave/github-prod#token
-
-  - name: postgres-local
-    connector: postgres
-    label: primary
-    source: file
-    file: ~/.kave/secrets/pg-local.txt
-    mode: "0600"
 
   - name: caller-openai
     connector: openai

@@ -12,8 +12,8 @@ import (
 	"github.com/kave-io/kave/core/pkg/keyring"
 	"github.com/kave-io/kave/core/store"
 	controlv1 "github.com/kave-io/kave/proto/gen/kave/control/v1"
-	infraCrypto "github.com/kave-io/kave/server/internal/infra/crypto"
 	"github.com/kave-io/kave/server/internal/daemon"
+	infraCrypto "github.com/kave-io/kave/server/internal/infra/crypto"
 	serverauth "github.com/kave-io/kave/server/ops/auth"
 	"go.yaml.in/yaml/v3"
 	"google.golang.org/grpc"
@@ -890,21 +890,27 @@ func protoToCredential(c *controlv1.ConnectorCredential) *control.ConnectorCrede
 		RevokedBy:     c.RevokedBy,
 		RevokeReason:  c.RevokeReason,
 	}
+	// Protobuf carries the response-safe flat representation. Reconstruct the
+	// structured reference fields for internal consumers; this never decrypts
+	// or introduces secret material.
+	_ = model.NormalizeSourceFields()
 	return model
 }
 
 func credentialSourceFromProto(s controlv1.CredentialSource) string {
 	switch s {
+	case controlv1.CredentialSource_CREDENTIAL_SOURCE_ENV:
+		return control.CredSourceEnv
 	case controlv1.CredentialSource_CREDENTIAL_SOURCE_ENCRYPTED:
-		return "encrypted"
+		return control.CredSourceEncrypted
 	case controlv1.CredentialSource_CREDENTIAL_SOURCE_VAULT_REF:
-		return "vault_ref"
+		return control.CredSourceVaultRef
 	case controlv1.CredentialSource_CREDENTIAL_SOURCE_OAUTH:
-		return "oauth"
+		return control.CredSourceOAuth
 	case controlv1.CredentialSource_CREDENTIAL_SOURCE_STS:
-		return "sts"
+		return control.CredSourceSTS
 	case controlv1.CredentialSource_CREDENTIAL_SOURCE_PASSTHROUGH:
-		return "passthrough"
+		return control.CredSourcePassthrough
 	default:
 		return ""
 	}

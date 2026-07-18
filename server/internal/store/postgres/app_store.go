@@ -1620,16 +1620,8 @@ func (p *PostgresAppStore) GetCredential(ctx context.Context, id string) (*contr
 }
 
 func (p *PostgresAppStore) StoreCredential(ctx context.Context, c *control.ConnectorCredential) error {
-	sourceType := c.SourceType
-	if sourceType == "" && c.Source != "" {
-		sourceType = string(c.Source)
-	}
-	secretRef := c.SecretRef
-	if secretRef == "" && (sourceType == string(control.CredentialSourceEnv) || c.Source == control.CredentialSourceEnv) {
-		secretRef = c.EnvVar
-	}
-	if secretRef == "" && (sourceType == string(control.CredentialSourceVault) || c.Source == control.CredentialSourceVault) {
-		secretRef = c.VaultRef
+	if err := c.NormalizeSourceFields(); err != nil {
+		return fmt.Errorf("postgres: normalize credential source: %w", err)
 	}
 	_, err := p.pool.Exec(ctx, `
 		INSERT INTO credentials (
@@ -1642,6 +1634,7 @@ func (p *PostgresAppStore) StoreCredential(ctx context.Context, c *control.Conne
 			source_type = excluded.source_type,
 			label = excluded.label,
 			description = excluded.description,
+			source_type = excluded.source_type,
 			encrypted_blob = excluded.encrypted_blob,
 			key_hash = excluded.key_hash,
 			wrapping_key_id = excluded.wrapping_key_id,
@@ -1650,7 +1643,7 @@ func (p *PostgresAppStore) StoreCredential(ctx context.Context, c *control.Conne
 			status = excluded.status,
 			updated_at = excluded.updated_at
 	`, c.ID, c.ProjectID, c.EnvID, c.ConnectorType, c.AccountID, c.Label, c.Description,
-		sourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID, secretRef, c.SecretVersion,
+		c.SourceType, c.EncryptedBlob, c.KeyHash, c.WrappingKeyID, c.SecretRef, c.SecretVersion,
 		c.Status, c.Version, ptrToTime(c.ExpiresAt), ptrToTime(c.RotatedAt), c.RotatedBy,
 		c.CreatedBy, toTime(c.CreatedAt), toTime(c.UpdatedAt))
 	return err
@@ -1803,29 +1796,20 @@ func scanPostgresCredential(scanner postgresScanner) (*control.ConnectorCredenti
 	c.CreatedAt = createdAt.UnixMilli()
 	c.UpdatedAt = updatedAt.UnixMilli()
 	c.RevokedAt = timeToMillisPtr(revokedAt)
-	hydratePostgresCredentialSource(&c)
+	if err := hydratePostgresCredentialSource(&c); err != nil {
+		return nil, err
+	}
 	return &c, nil
 }
 
-func hydratePostgresCredentialSource(c *control.ConnectorCredential) {
+func hydratePostgresCredentialSource(c *control.ConnectorCredential) error {
 	if c == nil {
-		return
+		return nil
 	}
-	if c.Source == "" && c.SourceType != "" {
-		c.Source = control.CredentialSource(c.SourceType)
+	if err := c.NormalizeSourceFields(); err != nil {
+		return fmt.Errorf("postgres: hydrate credential %q: %w", c.ID, err)
 	}
-	switch c.Source {
-	case control.CredentialSourceEnv:
-		c.EnvVar = c.SecretRef
-	case control.CredentialSourceVault:
-		c.VaultRef = c.SecretRef
-	case control.CredentialSourceEncrypted:
-		// credresolve.Resolve reads cred.Encrypted.Ciphertext; reconstruct it
-		// from the flat encrypted_blob column persisted by StoreCredential.
-		if len(c.EncryptedBlob) > 0 {
-			c.Encrypted = &control.EncryptedBlob{Ciphertext: c.EncryptedBlob, KeyID: c.WrappingKeyID}
-		}
-	}
+	return nil
 }
 
 // ── Transaction ───────────────────────────────────────────────────────────────

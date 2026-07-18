@@ -242,6 +242,26 @@ func TestPipeline_AfterError_OverridesHandlerResult(t *testing.T) {
 	}
 }
 
+func TestPipeline_AllAfterHooksRunAndErrorsAreJoined(t *testing.T) {
+	var log []string
+	firstErr := errors.New("first cleanup failed")
+	secondErr := errors.New("second cleanup failed")
+	a := newRecorder("A", &log)
+	b := newRecorder("B", &log)
+	c := newRecorder("C", &log)
+	a.afterFn = func(_ context.Context, _ *Action, _ *Result) error { return firstErr }
+	c.afterFn = func(_ context.Context, _ *Action, _ *Result) error { return secondErr }
+
+	result, err := New(a, b, c).Execute(context.Background(), testAction(), okHandler([]byte("good")))
+	if result != nil {
+		t.Fatalf("expected nil result when cleanup fails, got: %v", result)
+	}
+	if !errors.Is(err, firstErr) || !errors.Is(err, secondErr) {
+		t.Fatalf("joined error = %v, want both cleanup errors", err)
+	}
+	assertLog(t, log, []string{"A.Before", "B.Before", "C.Before", "C.After", "B.After", "A.After"})
+}
+
 func TestPipeline_BeforeMutatesAction(t *testing.T) {
 	var log []string
 	a := newRecorder("A", &log)
@@ -524,7 +544,7 @@ func TestPipeline_BothHandlerAndAfterFail(t *testing.T) {
 	assertLog(t, log, want)
 }
 
-func TestPipeline_AfterHooksStopOnFirstError_OthersSkipped(t *testing.T) {
+func TestPipeline_AfterHooksContinueAfterError(t *testing.T) {
 	var log []string
 	a := newRecorder("A", &log)
 	b := newRecorder("B", &log)
@@ -548,14 +568,12 @@ func TestPipeline_AfterHooksStopOnFirstError_OthersSkipped(t *testing.T) {
 		t.Fatalf("expected 'b-after-failed' error, got: %v", err)
 	}
 
-	// After hooks run in reverse: C.After first (succeeds), B.After (fails and stops), A.After skipped.
-	// So C.After IS called.
+	// After hooks run in reverse and every hook runs even after B fails.
 	if !cAfterCalled {
 		t.Fatal("C.After should have been called")
 	}
 
-	// Log should show: A.Before, B.Before, C.Before, handler, C.After, B.After (stops here, A.After skipped)
-	want := []string{"A.Before", "B.Before", "C.Before", "handler", "C.After", "B.After"}
+	want := []string{"A.Before", "B.Before", "C.Before", "handler", "C.After", "B.After", "A.After"}
 	assertLog(t, log, want)
 }
 

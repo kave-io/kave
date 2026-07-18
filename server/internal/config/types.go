@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"strings"
 	"time"
 )
@@ -22,6 +23,7 @@ type Config struct {
 	GRPC     GRPCConfig     `mapstructure:"grpc"`
 	FX       FXConfig       `mapstructure:"fx"`
 	Security SecurityConfig `mapstructure:"security"`
+	V2       V2Config       `mapstructure:"v2"`
 	Postgres PostgresConfig `mapstructure:"postgres"`
 	Storage  StorageConfig  `mapstructure:"storage"`
 	Ollama   OllamaConfig   `mapstructure:"ollama"`
@@ -124,6 +126,28 @@ type SecurityConfig struct {
 	TokenTTL          time.Duration `mapstructure:"token_ttl"`
 	Vault             *VaultConfig  `mapstructure:"vault"`
 	Casbin            *CasbinConfig `mapstructure:"casbin"`
+}
+
+// V2Config enables the compact kernel alongside V1 during migration. V2 uses
+// a dedicated least-privilege Postgres login; schema-owner credentials are
+// accepted only by the one-shot `kave-server v2-migrate` command and never by
+// the serving process.
+type V2Config struct {
+	Enabled              bool                   `mapstructure:"enabled"`
+	RuntimeDSN           string                 `mapstructure:"runtime_dsn"`
+	RuntimeRole          string                 `mapstructure:"runtime_role"`
+	MasterKey            string                 `mapstructure:"master_key"`
+	MasterDecryptionKeys []string               `mapstructure:"master_decryption_keys"`
+	SecretIdempotencyKey string                 `mapstructure:"secret_idempotency_key"`
+	TransportSecurity    string                 `mapstructure:"transport_security"`
+	ProviderEgress       V2ProviderEgressConfig `mapstructure:"provider_egress"`
+}
+
+// V2ProviderEgressConfig permits only exact private/loopback IP exceptions.
+// Public provider IPs need no entry. Hostnames and CIDRs are intentionally not
+// accepted so local/self-hosted access cannot accidentally enable a subnet.
+type V2ProviderEgressConfig struct {
+	AllowedPrivateIPs []string `mapstructure:"allowed_private_ips"`
 }
 
 type CasbinConfig struct {
@@ -491,6 +515,39 @@ func (c *Config) Validate() error {
 	if !validAppKinds[c.Storage.Defaults.App.Kind] {
 		return fmt.Errorf("invalid storage.defaults.app.kind %q", c.Storage.Defaults.App.Kind)
 	}
+	if c.V2.Enabled && (c.V2.RuntimeDSN == "" || c.V2.RuntimeRole == "") {
+		return fmt.Errorf("v2 requires an explicit dedicated runtime_dsn and non-privileged runtime_role")
+	}
+	if c.V2.Enabled {
+		switch c.V2.TransportSecurity {
+		case "tls_terminated", "private_network", "development":
+		default:
+			return fmt.Errorf("v2.transport_security must be tls_terminated, private_network, or development")
+		}
+		if c.V2.MasterKey == "" && (len(c.V2.MasterDecryptionKeys) > 0 || c.V2.SecretIdempotencyKey != "") {
+			return fmt.Errorf("v2 secret keyring settings require master_key")
+		}
+		if len(c.V2.MasterDecryptionKeys) > 0 && c.V2.SecretIdempotencyKey == "" {
+			return fmt.Errorf("v2 master-key rotation requires master_key and a stable secret_idempotency_key")
+		}
+		seenProviderIPs := make(map[netip.Addr]struct{}, len(c.V2.ProviderEgress.AllowedPrivateIPs))
+		for i, raw := range c.V2.ProviderEgress.AllowedPrivateIPs {
+			if raw == "" || strings.TrimSpace(raw) != raw {
+				return fmt.Errorf("v2.provider_egress.allowed_private_ips[%d] must be a clean exact IP literal", i)
+			}
+			address, err := netip.ParseAddr(raw)
+			if err != nil || address.Zone() != "" || address.Unmap() != address || address.String() != raw {
+				return fmt.Errorf("v2.provider_egress.allowed_private_ips[%d] must be a canonical exact IP literal, not a hostname or CIDR", i)
+			}
+			if (!address.IsPrivate() && !address.IsLoopback()) || isKnownProviderMetadataAddress(address) {
+				return fmt.Errorf("v2.provider_egress.allowed_private_ips[%d] is not an eligible loopback or private address", i)
+			}
+			if _, duplicate := seenProviderIPs[address]; duplicate {
+				return fmt.Errorf("v2.provider_egress.allowed_private_ips[%d] is duplicated", i)
+			}
+			seenProviderIPs[address] = struct{}{}
+		}
+	}
 	validSpanKinds := map[string]bool{"duckdb": true, "postgres": true, "clickhouse": true}
 	if !validSpanKinds[c.Storage.Defaults.Span.Kind] {
 		return fmt.Errorf("invalid storage.defaults.span.kind %q", c.Storage.Defaults.Span.Kind)
@@ -505,6 +562,15 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func isKnownProviderMetadataAddress(address netip.Addr) bool {
+	switch address.String() {
+	case "100.100.100.200", "168.63.129.16", "169.254.169.254", "169.254.170.2", "192.0.0.192", "fd00:ec2::254", "fd20:ce::254":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Config) String() string {

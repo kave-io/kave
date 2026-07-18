@@ -13,6 +13,7 @@ import (
 
 var ErrPassthrough = errors.New("passthrough credential")
 var ErrSourceDisabled = errors.New("credential source disabled")
+var ErrUnsupportedSource = errors.New("unsupported credential source")
 
 // VaultClient resolves external secret references.
 type VaultClient interface {
@@ -31,28 +32,32 @@ func Resolve(ctx context.Context, cred *controlmodel.ConnectorCredential, vault 
 	if cred == nil {
 		return "", fmt.Errorf("credential is nil")
 	}
-	source := cred.Source
-	if source == "" {
-		source = controlmodel.CredentialSource(cred.SourceType)
+	normalized := *cred
+	if err := normalized.NormalizeSourceFields(); err != nil {
+		return "", fmt.Errorf("normalize credential source: %w", err)
 	}
+	source := normalized.Source
 	if source == "" {
 		return "", fmt.Errorf("credential %q has no source", cred.ID)
 	}
 	switch source {
 	case controlmodel.CredentialSourceEnv:
-		if cred.EnvVar == "" {
-			return "", fmt.Errorf("env var name missing")
+		if normalized.EnvVar == "" {
+			return "", fmt.Errorf("credential %q: env var name missing", cred.ID)
 		}
-		val := os.Getenv(cred.EnvVar)
+		val := os.Getenv(normalized.EnvVar)
 		if val == "" {
-			return "", fmt.Errorf("env var unset")
+			return "", fmt.Errorf("credential %q: env var %q is unset", cred.ID, normalized.EnvVar)
 		}
 		return val, nil
-	case controlmodel.CredentialSourceVault:
+	case controlmodel.CredentialSourceVaultRef:
+		if normalized.VaultRef == "" {
+			return "", fmt.Errorf("credential %q: vault reference missing", cred.ID)
+		}
 		if vault == nil {
 			return "", ErrSourceDisabled
 		}
-		return vault.Resolve(ctx, cred.VaultRef)
+		return vault.Resolve(ctx, normalized.VaultRef)
 	case controlmodel.CredentialSourcePassthrough:
 		return "", ErrPassthrough
 	case controlmodel.CredentialSourceEncrypted:
@@ -60,19 +65,19 @@ func Resolve(ctx context.Context, cred *controlmodel.ConnectorCredential, vault 
 		if err != nil {
 			return "", err
 		}
-		if cred.Encrypted == nil || len(cred.Encrypted.Ciphertext) == 0 {
-			return "", fmt.Errorf("encrypted credential missing blob")
+		if normalized.Encrypted == nil || len(normalized.Encrypted.Ciphertext) == 0 {
+			return "", fmt.Errorf("credential %q: encrypted credential missing blob", cred.ID)
 		}
 		aes, err := infraCrypto.NewAES(key)
 		if err != nil {
 			return "", err
 		}
-		plain, err := aes.Decrypt(cred.Encrypted.Ciphertext, []byte(cred.ID))
+		plain, err := aes.Decrypt(normalized.Encrypted.Ciphertext, []byte(cred.ID))
 		if err != nil {
 			return "", err
 		}
 		return string(plain), nil
 	default:
-		return "", fmt.Errorf("unsupported credential source %q", source)
+		return "", fmt.Errorf("%w %q for credential %q", ErrUnsupportedSource, source, cred.ID)
 	}
 }

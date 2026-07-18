@@ -7,12 +7,18 @@
 
 ## Status
 
-Kave is pre-v1. The core architecture pass is complete; Plan 13 is the next testing pass.
+Kave is pre-v1. The existing V1 control/runtime platform remains available
+while the pre-release V2 kernel is developed beside it. V2 is currently a
+Postgres-only, machine-to-machine admission, provider-gateway, secrets, usage,
+and audit kernel with a Connect control API. Its wire and persistence contracts
+may still change until V2 is released; upgrade the V2 server and SDK together.
 
 ## What Is Here
 
 Kave provides:
 
+- A compact V2 kernel for namespace isolation, scoped machine credentials,
+  atomic limits, provider routing, usage, and audit evidence.
 - Runtime tracing for runs, actions, spans, and costs.
 - Control-plane APIs for agents, policies, credentials, budgets, RBAC, and audit logs.
 - A framework/model gateway for LLM and tool traffic.
@@ -44,6 +50,7 @@ cd dashboard && bun run dev
 
 ## Documentation
 
+- V2 operator guide: `docs/v2-operations.md`
 - Architecture decisions: `docs/design/`
 - Remaining plans: `docs/plans/`
 - External docs repo: https://github.com/kave-io/kave-docs

@@ -57,6 +57,7 @@ func (ev *egressVisitor) Visit(n ast.Node) ast.Visitor {
 			filePath := pos.Filename
 			allowedPaths := []string{
 				"/server/internal/gateway/transport.go",
+				"/server/internal/v2/gateway/transport.go",
 				"/core/fx/frankfurter.go",
 				"/server/ops/auth/credresolve/vault.go",
 				"/server/ops/fx/service.go",

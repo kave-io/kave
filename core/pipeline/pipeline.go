@@ -67,12 +67,15 @@ func (p *Pipeline) Execute(ctx context.Context, action *runtime.Action, handler 
 
 	result, handlerErr := handler(ctx, action)
 
+	var afterErr error
 	for i := len(p.stages) - 1; i >= 0; i-- {
-		if err = p.stages[i].After(ctx, action, result); err != nil {
-			// errors.Join(nil, afterErr) == afterErr, so when handler succeeded
-			// behaviour is unchanged. When both fail, both errors are preserved.
-			return nil, errors.Join(handlerErr, err)
-		}
+		// Every stage must unwind even when another cleanup/settlement stage
+		// fails. In particular, observability failure must never suppress usage
+		// settlement by an earlier stage in the pipeline.
+		afterErr = errors.Join(afterErr, p.stages[i].After(ctx, action, result))
+	}
+	if afterErr != nil {
+		return nil, errors.Join(handlerErr, afterErr)
 	}
 
 	return result, handlerErr

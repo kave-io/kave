@@ -120,7 +120,9 @@ func Load(opts LoadOpts) (*LoadResult, error) {
 	}
 
 	if !hasOriginPath(result.Origin, "security.allow_anonymous") {
-		result.Config.Security.AllowAnonymous = true
+		// Empty/new installations fail closed. Anonymous V1 compatibility is an
+		// explicit, temporary operator choice rather than a hidden default.
+		result.Config.Security.AllowAnonymous = false
 	}
 	if !hasOriginPath(result.Origin, "security.allow_legacy_tokens") {
 		result.Config.Security.AllowLegacyTokens = false
