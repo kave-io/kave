@@ -66,13 +66,25 @@ jobs:
       - name: Check generated contracts
         run: make generate-check
 
-      - name: Reject protobuf breaking changes
+      - name: Reject V2 protobuf breaking changes
         if: github.event_name == 'pull_request'
-        run: buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main"
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          if git cat-file -e "$base:proto/kave/kernel/v2/kernel.proto" 2>/dev/null; then
+            buf breaking --against ".git#ref=$base"
+          else
+            echo "No V2 protobuf baseline exists yet; allowing the one-time V1 retirement."
+          fi
 
-      - name: Reject protobuf breaking changes on direct pushes
+      - name: Reject V2 protobuf breaking changes on direct pushes
         if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-        run: buf breaking --against ".git#ref=${{ github.event.before }}"
+        run: |
+          base="${{ github.event.before }}"
+          if git cat-file -e "$base:proto/kave/kernel/v2/kernel.proto" 2>/dev/null; then
+            buf breaking --against ".git#ref=$base"
+          else
+            echo "No V2 protobuf baseline exists yet; allowing the one-time V1 retirement."
+          fi
 
       - name: Vet and lint
         run: |
