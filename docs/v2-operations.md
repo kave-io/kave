@@ -308,10 +308,12 @@ gh attestation verify kave-server_*.tar.gz --repo kave-io/kave
 ```
 
 Resolve the published image to a digest, then verify that exact digest rather
-than trusting a local tag:
+than trusting a local tag. The same signed multi-architecture digest is
+published to both GHCR and Docker Hub:
 
 ```sh
 image=ghcr.io/kave-io/kave
+# Docker Hub mirror: image=alijulaeerad/kave
 digest="$(docker buildx imagetools inspect "$image:$version" --format '{{json .Manifest.Digest}}' | tr -d '"')"
 cosign verify \
   --certificate-identity "https://github.com/kave-io/kave/.github/workflows/release.yml@refs/tags/$version" \

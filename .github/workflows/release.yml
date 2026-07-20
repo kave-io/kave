@@ -13,8 +13,8 @@ concurrency:
 
 env:
   GOTOOLCHAIN: auto
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
+  DOCKERHUB_IMAGE: alijulaeerad/kave
 
 jobs:
   verify:
@@ -195,11 +195,15 @@ jobs:
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and publish the multi-architecture image
+      - name: Build and publish the multi-registry image
         id: image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -211,25 +215,36 @@ jobs:
           build-args: |
             VERSION=${{ github.ref_name }}
             COMMIT=${{ github.sha }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:candidate-${{ github.sha }}
+          tags: |
+            ${{ env.GHCR_IMAGE }}:candidate-${{ github.sha }}
+            ${{ env.DOCKERHUB_IMAGE }}:candidate-${{ github.sha }}
 
       - name: Sign and smoke-test the immutable image
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
+          DOCKERHUB_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
           DIGEST: ${{ steps.image.outputs.digest }}
         run: |
-          cosign sign --yes "$IMAGE@$DIGEST"
+          cosign sign --yes "$GHCR_IMAGE@$DIGEST"
+          cosign sign --yes "$DOCKERHUB_IMAGE@$DIGEST"
           cosign verify \
             --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            "$IMAGE@$DIGEST"
-          docker run --rm --platform linux/amd64 "$IMAGE@$DIGEST" version
+            "$GHCR_IMAGE@$DIGEST"
+          cosign verify \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$DOCKERHUB_IMAGE@$DIGEST"
+          docker run --rm --platform linux/amd64 "$GHCR_IMAGE@$DIGEST" version
 
-      - name: Promote the verified version image
+      - name: Promote the verified version images
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
+          DOCKERHUB_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
           DIGEST: ${{ steps.image.outputs.digest }}
-        run: docker buildx imagetools create --tag "$IMAGE:$GITHUB_REF_NAME" "$IMAGE@$DIGEST"
+        run: |
+          docker buildx imagetools create --tag "$GHCR_IMAGE:$GITHUB_REF_NAME" "$GHCR_IMAGE@$DIGEST"
+          docker buildx imagetools create --tag "$DOCKERHUB_IMAGE:$GITHUB_REF_NAME" "$DOCKERHUB_IMAGE@$DIGEST"
 
       - name: Publish the verified GitHub release
         env:
