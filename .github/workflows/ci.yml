@@ -46,6 +46,8 @@ jobs:
 
       - name: Install Go analysis and generation tools
         run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes ripgrep
           mkdir -p "$RUNNER_TEMP/go-tools"
           echo "$RUNNER_TEMP/go-tools" >> "$GITHUB_PATH"
           export GOBIN="$RUNNER_TEMP/go-tools"
