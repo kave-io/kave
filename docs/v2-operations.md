@@ -309,7 +309,8 @@ gh attestation verify kave-server_*.tar.gz --repo kave-io/kave
 
 Resolve the published image to a digest, then verify that exact digest rather
 than trusting a local tag. The same signed multi-architecture digest is
-published to both GHCR and Docker Hub:
+published to GHCR and mirrored publicly to Docker Hub. GHCR access follows the
+`kave-io` organization package visibility:
 
 ```sh
 image=ghcr.io/kave-io/kave

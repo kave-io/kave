@@ -3,7 +3,6 @@ name: release
 on:
   push:
     tags: ["v2.*"]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,24 +17,7 @@ env:
   DOCKERHUB_IMAGE: alijulaeerad/kave
 
 jobs:
-  package-visibility:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Make the GHCR package public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            --method PATCH \
-            "/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/kave" \
-            --field visibility=public
-
   verify:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -150,7 +132,6 @@ jobs:
         run: docker compose down --volumes --remove-orphans
 
   publish:
-    if: github.event_name == 'push'
     needs: [verify]
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -266,15 +247,6 @@ jobs:
         run: |
           docker buildx imagetools create --tag "$GHCR_IMAGE:$GITHUB_REF_NAME" "$GHCR_IMAGE@$DIGEST"
           docker buildx imagetools create --tag "$DOCKERHUB_IMAGE:$GITHUB_REF_NAME" "$DOCKERHUB_IMAGE@$DIGEST"
-
-      - name: Make the GHCR package public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            --method PATCH \
-            "/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/kave" \
-            --field visibility=public
 
       - name: Publish the verified GitHub release
         env:
