@@ -1,7 +1,0 @@
-# The server uses CGO through DuckDB and sqlite3, so the runtime image must
-# include glibc. distroless/static is only safe for the pure-Go CLI image.
-FROM gcr.io/distroless/base-debian12
-COPY kave-server /usr/local/bin/kave-server
-EXPOSE 18080 19090
-VOLUME ["/data"]
-ENTRYPOINT ["/usr/local/bin/kave-server"]

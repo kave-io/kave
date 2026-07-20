@@ -2,409 +2,210 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
+	"errors"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/kave-io/kave/core/bus"
-	corefx "github.com/kave-io/kave/core/fx"
-	controlmodel "github.com/kave-io/kave/core/model/control"
-	"github.com/kave-io/kave/core/pipeline"
-	"github.com/kave-io/kave/core/store"
-	appaudit "github.com/kave-io/kave/server/app/audit"
-	appcontrol "github.com/kave-io/kave/server/app/control"
-	appfx "github.com/kave-io/kave/server/app/fx"
-	appruntime "github.com/kave-io/kave/server/app/runtime"
-	"github.com/kave-io/kave/server/internal/config"
-	"github.com/kave-io/kave/server/internal/daemon"
-	"github.com/kave-io/kave/server/internal/gateway"
-	appcasbin "github.com/kave-io/kave/server/internal/infra/casbin"
-	"github.com/kave-io/kave/server/internal/logsink"
-	storeimpl "github.com/kave-io/kave/server/internal/store"
-	serverauth "github.com/kave-io/kave/server/ops/auth"
-	"github.com/kave-io/kave/server/ops/auth/credresolve"
-	"github.com/kave-io/kave/server/ops/budget"
-	"github.com/kave-io/kave/server/ops/cost"
-	"github.com/kave-io/kave/server/ops/fx"
-	"github.com/kave-io/kave/server/ops/policy"
-	"github.com/kave-io/kave/server/ops/trace"
-	connectport "github.com/kave-io/kave/server/port/connect"
-	portgrpc "github.com/kave-io/kave/server/port/grpc"
+	v2kernel "github.com/kave-io/kave/server/internal/v2"
+	"github.com/kave-io/kave/server/internal/v2/health"
+	"github.com/kave-io/kave/server/internal/v2/observability"
+	v2postgres "github.com/kave-io/kave/server/internal/v2/postgres"
 	"github.com/kave-io/kave/server/ui"
-	"net"
 )
 
 var buildVersion = "dev"
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "--version", "version":
-			fmt.Printf("kave-server %s\n", buildVersion)
-			return
-		case "healthz":
-			fmt.Println("ok")
-			return
-		}
+	if err := run(os.Args[1:], os.Stdout); err != nil {
+		slog.Error("kave server stopped", "error", err)
+		os.Exit(1)
 	}
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+func run(args []string, stdout io.Writer) error {
+	command := "serve"
+	if len(args) > 0 {
+		command = args[0]
+	}
+	if len(args) > 1 {
+		return fmt.Errorf("%s accepts no positional arguments", command)
+	}
+	switch command {
+	case "--version", "version":
+		fmt.Fprintf(stdout, "kave-server %s\n", buildVersion)
+		return nil
+	case "healthz":
+		return runHealthProbe(stdout, os.Getenv)
+	case "migrate":
+		return runV2Migrate()
+	case "bootstrap":
+		return runV2Bootstrap()
+	case "serve":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return runServer(ctx, stdout)
+	default:
+		return fmt.Errorf("unknown command %q (expected serve, migrate, bootstrap, healthz, or version)", command)
+	}
+}
 
-	// Load config from YAML + environment
-	loadRes, err := config.Load(config.LoadOpts{StartDir: "."})
+func runServer(signalCtx context.Context, stdout io.Writer) error {
+	cfg, err := loadRuntimeConfig(os.Getenv)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		return fmt.Errorf("load runtime config: %w", err)
 	}
-	cfg := loadRes.Config
+	if err := v2kernel.ValidateTransportSecurity(cfg.TransportSecurity, cfg.Address); err != nil {
+		return fmt.Errorf("validate HTTP transport boundary: %w", err)
+	}
 
-	storeManager, err := storeimpl.NewManager(ctx, cfg.Storage, cfg.Postgres)
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	slog.SetDefault(logger)
+	startupCtx, startupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer startupCancel()
+	pool, err := v2kernel.OpenRuntimePool(startupCtx, cfg.PostgresDSN, cfg.PostgresRole)
 	if err != nil {
-		log.Fatalf("create stores: %v", err)
+		return fmt.Errorf("open runtime database: %w", err)
 	}
-	defer storeManager.Close()
-	appStore := storeManager.AppStore()
-	if err := appStore.Migrate(ctx); err != nil {
-		log.Fatalf("app store migrations: %v", err)
-	}
-	costService, err := cost.NewService(ctx, appStore)
-	if err != nil {
-		log.Fatalf("create cost service: %v", err)
-	}
-	fxService := fx.NewService(appStore, time.Duration(cfg.FX.RefreshIntervalSeconds)*time.Second)
-	if err := fxService.Load(ctx); err != nil {
-		log.Fatalf("load fx rates: %v", err)
-	}
-	if err := fxService.EnsureFresh(ctx); err != nil {
-		log.Fatalf("refresh fx rates: %v", err)
-	}
-	fxService.Start(context.Background())
-	// core/fx.Service is used by the FX gRPC server (core/fx uses Frankfurter directly).
-	corefxService := corefx.NewService(appStore, 0) // 0 → default IRT/USD rate
-	if err := corefxService.Load(ctx); err != nil {
-		log.Printf("warn: core fx load failed (rates may be stale): %v", err)
-	}
-	corefxService.StartRefresh(context.Background())
-	if err := storeManager.Migrate(ctx); err != nil {
-		log.Fatalf("span store migrations: %v", err)
-	}
+	defer pool.Close()
 
-	authTokens, err := serverauth.NewTokenManager(cfg.Security.EncryptionKey, cfg.Security.SessionTTL, cfg.Security.TokenTTL)
-	if err != nil {
-		log.Fatalf("create auth tokens: %v", err)
-	}
-	var vaultResolver *credresolve.VaultResolver
-	if cfg.Security.Vault != nil && cfg.Security.Vault.Addr != "" && cfg.Security.Vault.Mount != "" {
-		vaultResolver = &credresolve.VaultResolver{
-			Addr:  cfg.Security.Vault.Addr,
-			Token: cfg.Security.Vault.Token,
-			Mount: cfg.Security.Vault.Mount,
+	metrics := observability.New(func() observability.PoolStats {
+		stats := pool.Stat()
+		return observability.PoolStats{
+			Acquired: stats.AcquiredConns(), Idle: stats.IdleConns(), Total: stats.TotalConns(), Max: stats.MaxConns(),
 		}
-	}
-
-	eventBus := bus.New()
-	log.SetFlags(0)
-	log.SetOutput(logsink.New(os.Stderr, eventBus))
-
-	controlServer := appcontrol.New(appStore, eventBus)
-	runtimeServer := appruntime.New(appStore, storeManager, eventBus)
-	auditServer := appaudit.New(storeManager.AuditStore())
-
-	daemonState := daemon.New(config.LoadOpts{StartDir: "."}, loadRes, appStore, storeManager, fxService, costService, eventBus, buildVersion)
-
-	grpcServer := portgrpc.New(
-		controlServer,
-		runtimeServer,
-		auditServer,
-		daemonState,
-		authTokens,
-		portgrpc.NewAuthUnaryInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
-		portgrpc.NewAuthStreamInterceptor(appStore, authTokens, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens),
-	)
-
-	// Build the casbin engine when Security.Casbin is configured. Nil disables
-	// authorization enforcement (auth/policy interceptors fall through gracefully).
-	var casbinEngine appcasbin.Casbin
-	if cfg.Security.Casbin != nil {
-		casbinEngine, err = appcasbin.NewEnforcer(appcasbin.Config{
-			CasbinModelPath:  cfg.Security.Casbin.ModelPath,
-			DatabaseDSN:      cfg.Security.Casbin.DatabaseDSN,
-			SuperAdminBypass: cfg.Security.Casbin.SuperAdminBypass,
-		})
-		if err != nil {
-			log.Fatalf("casbin enforcer: %v", err)
-		}
-	}
-
-	// Create pipeline interceptors in order: auth → policy → budget → trace.
-	authInterceptor := serverauth.NewInterceptor(casbinEngine, cfg.Security.AllowAnonymous, cfg.Security.AllowLegacyTokens)
-	policyInterceptor := policy.New(appStore, casbinEngine)
-	budgetInterceptor := budget.New(appStore, costService)
-	traceInterceptor := trace.New(storeManager, costService, eventBus)
-
-	p := pipeline.New(authInterceptor, policyInterceptor, budgetInterceptor, traceInterceptor)
-
-	// Resolve optional encryption key for credential storage
-	var encKey []byte
-	if cfg.Security.EncryptionKey != "" {
-		encKey, err = hex.DecodeString(cfg.Security.EncryptionKey)
-		if err != nil || len(encKey) != 32 {
-			log.Fatalf("security.encryption_key must be a 64-char hex string (32 bytes)")
-		}
-	}
-
-	// Seed default workspace, policy, and agent
-	seedDefaults(context.Background(), appStore)
-
-	// Check for permissive environments on public bind
-	bindAddr := cfg.Server.Addr()
-	if err := checkPermissivePublicBind(context.Background(), appStore, bindAddr); err != nil {
-		log.Fatalf("startup check failed: %v", err)
-	}
-	if isPermissivePublicBind(bindAddr) && os.Getenv("KAVE_ALLOW_PERMISSIVE_PUBLIC") == "1" {
-		log.Printf("warn: KAVE_ALLOW_PERMISSIVE_PUBLIC=1 is set — permissive environments will be accessible from the public network")
-	}
-
-	// Register FX gRPC service (wraps core/fx.Service).
-	appfx.New(corefxService).Register(grpcServer.GRPC())
-
-	go func() {
-		if err := grpcServer.ListenAndServe(cfg.GRPC.Addr()); err != nil {
-			log.Fatalf("grpc server: %v", err)
-		}
-	}()
-
-	// Create and register framework gateway
-	gatewayServer := gateway.New(appStore, encKey, p, gateway.NewRegistryWithConnectors(gatewayConnectorConfigs(cfg.Connectors)), cfg.Security.AllowAnonymous, vaultResolver)
-	mux := http.NewServeMux()
-	gatewayServer.RegisterRoutes(mux)
-	connectport.Register(mux, controlServer, runtimeServer, auditServer, appcontrol.NewDaemonService(daemonState))
-
-	if plan, err := daemonState.BuildPlan(context.Background()); err != nil {
-		log.Fatalf("build apply plan: %v", err)
-	} else if _, err := daemonState.Apply(context.Background(), plan, false); err != nil {
-		log.Fatalf("apply config resources: %v", err)
-	}
-	if err := daemonState.StartWatch(context.Background()); err != nil {
-		log.Printf("warn: config watch disabled: %v", err)
-	}
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGHUP)
-	go func() {
-		for range sigCh {
-			if _, err := daemonState.Reload(context.Background()); err != nil {
-				log.Printf("warn: daemon reload failed: %v", err)
-				continue
-			}
-			log.Printf("info: daemon config reloaded")
-		}
-	}()
-
-	// Register health check endpoint
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		now := time.Now().UnixMilli()
-		fmt.Fprintf(w, `{"status":"ok","checked_at_ms":%d}`, now)
 	})
+	lifecycleCtx, stopLifecycle := context.WithCancel(context.Background())
+	defer stopLifecycle()
+	mux := http.NewServeMux()
+	if err := v2kernel.Register(lifecycleCtx, mux, pool, v2kernel.Config{
+		MasterKey:                       cfg.MasterKey,
+		MasterDecryptionKeys:            cfg.MasterDecryptionKeys,
+		SecretIdempotencyKey:            cfg.SecretIdempotencyKey,
+		RuntimeRole:                     cfg.PostgresRole,
+		ProviderEgressAllowedPrivateIPs: cfg.ProviderEgressAllowedPrivateIPs,
+		Metrics:                         metrics,
+	}); err != nil {
+		return fmt.Errorf("assemble runtime kernel: %w", err)
+	}
 
+	health.New(cfg.ReadinessTimeout, []health.Dependency{
+		{Name: "postgres_role_migrations", Check: func(ctx context.Context) error {
+			return v2postgres.RuntimeReadiness(ctx, pool, cfg.PostgresRole)
+		}},
+		{Name: "secret_keyring", Check: func(context.Context) error {
+			// Register constructed the complete keyring and failed startup if any
+			// key was invalid. It is immutable for this process lifetime.
+			return nil
+		}},
+	}, metrics, logger).Register(mux)
+	mux.Handle("GET /metrics", metrics.Handler())
+	mux.Handle("HEAD /metrics", metrics.Handler())
 	mux.Handle("/", ui.Handler())
 
-	// Start HTTP server
-	addr := cfg.Server.Addr()
-	printBanner(addr, cfg.GRPC.Addr())
-
-	server := &http.Server{
-		Addr:        addr,
-		Handler:     mux,
-		ReadTimeout: 30 * time.Second,
-		// WriteTimeout is intentionally 0 (no timeout) to support streaming
-		// responses from the framework gateway which can run for minutes.
-		IdleTimeout: 120 * time.Second,
-	}
-
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server error: %v", err)
-	}
-}
-
-func gatewayConnectorConfigs(connectors []config.ConnectorConfig) []gateway.ConnectorConfig {
-	out := make([]gateway.ConnectorConfig, 0, len(connectors))
-	for _, connector := range connectors {
-		out = append(out, gateway.ConnectorConfig{
-			Name:    connector.Name,
-			Enabled: connector.Enabled,
-			Config:  connector.Config,
-		})
-	}
-	return out
-}
-
-// seedDefaults ensures the default project, policy, and agent exist.
-// All defaults are permissive — event mode: trace everything, no auth or budget limits.
-func seedDefaults(ctx context.Context, app store.AppStore) {
-	now := time.Now().UnixMilli()
-
-	if o, _ := app.GetOrg(ctx, "default"); o == nil {
-		_ = app.CreateOrg(ctx, &controlmodel.Organization{
-			ID: "default", Name: "Default", Slug: "default", Plan: "free",
-			CreatedAt: now, UpdatedAt: now,
-		})
-	}
-
-	// Default local user + membership. On self-host they are invisible — the
-	// dashboard hides the Org/Users/Members screens while AllowAnonymous=true.
-	// Cloud populates real users and makes these UI surfaces visible.
-	if u, _ := app.GetUserByEmail(ctx, "default", "local@kave.local"); u == nil {
-		_ = app.CreateUser(ctx, &controlmodel.User{
-			ID: "default", OrgID: "default", Email: "local@kave.local",
-			Name: "Local", Status: "active",
-			CreatedAt: now, UpdatedAt: now,
-		})
-		_ = app.AddMember(ctx, &controlmodel.Membership{
-			ID: "default", OrgID: "default", UserID: "default",
-			Role: "admin", CreatedAt: now,
-		})
-	}
-
-	if p, _ := app.GetProject(ctx, "default"); p == nil {
-		_ = app.CreateProject(ctx, &controlmodel.Project{
-			ID: "default", OrgID: "default", Name: "Default", Slug: "default",
-			Description: "Auto-created default project",
-			CreatedAt:   now, UpdatedAt: now,
-		})
-	}
-
-	// Seed default environment record BEFORE policy
-	env, _ := app.GetEnvironmentBySlug(ctx, "default", "default")
-	if env == nil {
-		if err := app.CreateEnvironment(ctx, &controlmodel.Environment{
-			ID:        "default",
-			ProjectID: "default",
-			Name:      "default",
-			Slug:      "default",
-			Type:      "dev",
-			TrustMode: controlmodel.TrustPermissive, // dev env defaults to permissive for ergonomics
-			CreatedAt: now,
-			UpdatedAt: now,
-		}); err != nil {
-			fmt.Printf("warn: seed default environment: %v\n", err)
-		}
-	}
-
-	if pol, _ := app.GetPolicy(ctx, "default"); pol == nil {
-		_ = app.CreatePolicy(ctx, &controlmodel.PolicyRecord{
-			ID: "default", ProjectID: "default", EnvID: "default",
-			Name:              "Default Policy",
-			Description:       "Permissive — traces everything, no auth or budget limits",
-			AllowedTypes:      []string{"*"},
-			AllowedConnectors: []string{"*"},
-			AllowedMethods:    []string{"*"},
-			TraceInput:        true,
-			TraceOutput:       true,
-			RetentionDays:     30,
-			Mode:              "enforce",
-			Status:            "active",
-			CreatedAt:         now, UpdatedAt: now,
-		})
-	}
-
-	if ag, _ := app.GetAgentByName(ctx, "default", "default"); ag == nil {
-		policyID := "default"
-		_ = app.CreateAgent(ctx, &controlmodel.Agent{
-			ID:          "default",
-			ProjectID:   "default",
-			EnvID:       "default",
-			Name:        "default",
-			Description: "Default permissive local agent",
-			PolicyID:    &policyID,
-			Status:      controlmodel.AgentStatusActive,
-			Metadata:    map[string]any{},
-			CreatedBy:   "system",
-			UpdatedBy:   "system",
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		})
-	}
-}
-
-// isPermissivePublicBind returns true if the bind address is not loopback.
-func isPermissivePublicBind(addr string) bool {
-	// Extract host from addr (could be "host:port" or just ":port")
-	host := addr
-	if idx := strings.LastIndex(addr, ":"); idx >= 0 {
-		host = addr[:idx]
-	}
-	// Empty host or "0.0.0.0" or "::" means public bind
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		return true
-	}
-	// Check if it's a loopback address
-	ip := net.ParseIP(host)
-	return ip != nil && !ip.IsLoopback()
-}
-
-// checkPermissivePublicBind ensures no permissive env is exposed to public bind without override.
-func checkPermissivePublicBind(ctx context.Context, app store.AppStore, bindAddr string) error {
-	// If bind is loopback, always allowed
-	if !isPermissivePublicBind(bindAddr) {
-		return nil
-	}
-
-	// Public bind: check if any environment is permissive
-	result, err := app.ListEnvironments(ctx, "", store.Page{Limit: 500})
+	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
-		return err
+		return fmt.Errorf("listen on %s: %w", cfg.Address, err)
 	}
+	server := &http.Server{
+		Handler:           metrics.HTTPMiddleware(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// Provider responses can stream for minutes. Shutdown supplies the
+		// bounded drain deadline instead of truncating successful responses.
+		WriteTimeout:   0,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+	serveErrors := make(chan error, 1)
+	go func() {
+		serveErrors <- server.Serve(listener)
+	}()
+	printRuntimeBanner(stdout, listener.Addr().String())
+	logger.Info("kave runtime ready", "address", listener.Addr().String(), "version", buildVersion)
 
-	var permissiveEnvs []string
-	for _, env := range result.Items {
-		if env.TrustMode == controlmodel.TrustPermissive {
-			permissiveEnvs = append(permissiveEnvs, env.Name)
+	select {
+	case err := <-serveErrors:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
+		return fmt.Errorf("serve HTTP: %w", err)
+	case <-signalCtx.Done():
 	}
 
-	// If there are permissive envs and override is not set, refuse to start
-	if len(permissiveEnvs) > 0 && os.Getenv("KAVE_ALLOW_PERMISSIVE_PUBLIC") != "1" {
-		return fmt.Errorf(
-			"cannot start: permissive environments [%s] are exposed to public bind %q without KAVE_ALLOW_PERMISSIVE_PUBLIC=1 override. Set this env var to allow public access to permissive envs (dev/sandbox only)",
-			strings.Join(permissiveEnvs, ", "),
-			bindAddr,
-		)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	shutdownErr := server.Shutdown(shutdownCtx)
+	shutdownCancel()
+	if shutdownErr != nil {
+		shutdownErr = errors.Join(shutdownErr, server.Close())
 	}
+	// Active HTTP requests are drained before telemetry workers and Postgres
+	// are stopped, so a final settlement is not racing pool closure.
+	stopLifecycle()
+	serveErr := <-serveErrors
+	if errors.Is(serveErr, http.ErrServerClosed) {
+		serveErr = nil
+	}
+	return errors.Join(shutdownErr, serveErr)
+}
 
+const defaultHealthURL = "http://127.0.0.1:8080/readyz"
+
+func runHealthProbe(stdout io.Writer, getenv func(string) string) error {
+	endpoint := defaultHealthURL
+	if configured := getenv("KAVE_HEALTH_URL"); configured != "" {
+		endpoint = configured
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+		parsed.User != nil || parsed.Fragment != "" || parsed.RawQuery != "" || parsed.Path != "/readyz" || parsed.RawPath != "" {
+		return errors.New("KAVE_HEALTH_URL must be an absolute loopback HTTP(S) /readyz URL without credentials, query, or fragment")
+	}
+	probeIP := net.ParseIP(parsed.Hostname())
+	if probeIP == nil || !probeIP.IsLoopback() {
+		return errors.New("KAVE_HEALTH_URL must target a loopback IP address")
+	}
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("create health request: %w", err)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("runtime health request: %w", err)
+	}
+	_, copyErr := io.Copy(io.Discard, io.LimitReader(response.Body, 4<<10))
+	closeErr := response.Body.Close()
+	if copyErr != nil || closeErr != nil {
+		return errors.Join(copyErr, closeErr)
+	}
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("runtime is not ready: HTTP %d", response.StatusCode)
+	}
+	fmt.Fprintln(stdout, "ready")
 	return nil
 }
 
-// printBanner prints the startup banner with connection instructions.
-func printBanner(addr, grpcAddr string) {
-	host := addr
-	if strings.HasPrefix(addr, ":") {
-		host = "localhost" + addr
+func printRuntimeBanner(w io.Writer, address string) {
+	host := address
+	if strings.HasPrefix(host, "[::]") || strings.HasPrefix(host, "0.0.0.0") {
+		_, port, err := net.SplitHostPort(host)
+		if err == nil {
+			host = net.JoinHostPort("localhost", port)
+		}
 	}
-	grpcHost := grpcAddr
-	if strings.HasPrefix(grpcAddr, ":") {
-		grpcHost = "localhost" + grpcAddr
-	}
-	base := "http://" + host
-	fmt.Printf(`
-  ┌─────────────────────────────────────────────────────┐
-  │  kave  ready                                        │
-  │                                                     │
-  │  dashboard  → %s                 │
-  │  grpc       → %s                 │
-  │                                                     │
-  │  point your AI at the framework gateway             │
-  │                                                     │
-  │                                                     │
-  │  kave watch   →  tail traces in your terminal       │
-  └─────────────────────────────────────────────────────┘
-
-`, base, grpcHost)
+	fmt.Fprintf(w, "kave %s ready on http://%s\n", buildVersion, host)
 }

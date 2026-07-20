@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -13,98 +16,187 @@ env:
   GOTOOLCHAIN: auto
 
 jobs:
-  fmt-vet:
+  quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.work
           cache: true
-      - run: make fmt
-      - name: Verify no formatting drift
+          cache-dependency-path: |
+            core/go.sum
+            proto/gen/go.sum
+            server/go.sum
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.10
+      - uses: bufbuild/buf-setup-action@a47c93e0b1648d5651a065437926377d060baa99 # v1.50.0
+        with:
+          version: "1.69.0"
+
+      - name: Install dashboard dependencies
+        working-directory: dashboard
         run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "gofmt produced changes — commit them:"
-            git --no-pager diff
-            exit 1
-          fi
-      - run: make vet
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
 
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.work
-          cache: true
-      - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
-      - run: make lint
-      - run: make lint-arch
+      - name: Install Go analysis and generation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes ripgrep
+          mkdir -p "$RUNNER_TEMP/go-tools"
+          echo "$RUNNER_TEMP/go-tools" >> "$GITHUB_PATH"
+          export GOBIN="$RUNNER_TEMP/go-tools"
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
+          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          go install github.com/zricethezav/gitleaks/v8@v8.30.1
 
-  test-unit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.work
-          cache: true
-      - run: make test-unit
+      - name: Check formatting and protobuf policy
+        run: |
+          make surface-check
+          make fmt-check
+          buf lint
 
-  test-integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.work
-          cache: true
-      - run: make test-integration
+      - name: Check generated contracts
+        run: make generate-check
 
-  test-contracts:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.work
-          cache: true
-      - run: make test-contracts
-
-  buf:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: bufbuild/buf-action@v1
-        with:
-          setup_only: true
-      - run: buf lint
-      - run: buf format --diff --exit-code
-      - name: Breaking change check (vs main)
+      - name: Reject V2 protobuf breaking changes
         if: github.event_name == 'pull_request'
-        run: buf breaking --against "https://github.com/${{ github.repository }}.git#branch=main"
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          if git cat-file -e "$base:proto/kave/kernel/v2/kernel.proto" 2>/dev/null; then
+            buf breaking --against ".git#ref=$base"
+          else
+            echo "No V2 protobuf baseline exists yet; allowing the one-time V1 retirement."
+          fi
 
-  dashboard:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - working-directory: dashboard
-        run: bun install --frozen-lockfile
-      - working-directory: dashboard
-        run: bun run build
+      - name: Reject V2 protobuf breaking changes on direct pushes
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        run: |
+          base="${{ github.event.before }}"
+          if git cat-file -e "$base:proto/kave/kernel/v2/kernel.proto" 2>/dev/null; then
+            buf breaking --against ".git#ref=$base"
+          else
+            echo "No V2 protobuf baseline exists yet; allowing the one-time V1 retirement."
+          fi
 
-  build:
-    needs: [test-unit, lint]
+      - name: Vet and lint
+        run: |
+          make vet
+          make lint
+
+      - name: Unit and race tests
+        run: KAVE_PLAYWRIGHT_USE_BUNDLED=1 make test test-e2e
+
+      - name: Scan secrets and dependencies
+        run: make security-check
+
+      - name: Build production binary
+        run: make dashboard-build-check build-server
+
+      - name: Upload server binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: kave-server-linux-amd64
+          path: dist/kave-server
+          if-no-files-found: error
+
+  postgres:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      KAVE_TEST_V2_POSTGRES_ADMIN_DSN: postgres://postgres@127.0.0.1:5432/postgres?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.work
           cache: true
-      - uses: oven-sh/setup-bun@v2
-      - run: make build
+          cache-dependency-path: |
+            core/go.sum
+            proto/gen/go.sum
+            server/go.sum
+
+      - name: Create isolated test databases
+        run: |
+          psql "$KAVE_TEST_V2_POSTGRES_ADMIN_DSN" --set ON_ERROR_STOP=1 <<'SQL'
+          CREATE DATABASE kave_store;
+          CREATE DATABASE kave_kernel;
+          SQL
+
+      - name: Race-test PostgreSQL stores and runtime-role invariants
+        working-directory: server
+        env:
+          KAVE_TEST_V2_POSTGRES_DSN: postgres://postgres@127.0.0.1:5432/kave_store?sslmode=disable
+        run: go test -race -count=1 -timeout=15m ./internal/v2/postgres
+
+      - name: Race-test fresh-database kernel acceptance
+        working-directory: server
+        env:
+          KAVE_TEST_V2_POSTGRES_DSN: postgres://postgres@127.0.0.1:5432/kave_kernel?sslmode=disable
+        run: go test -race -count=1 -timeout=8m ./internal/v2 -run '^TestKernelPostgres_'
+
+  image:
+    needs: [quality, postgres]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Generate ephemeral Compose keys
+        run: |
+          master_key="$(openssl rand -hex 32)"
+          idempotency_key="$(openssl rand -hex 32)"
+          echo "::add-mask::$master_key"
+          echo "::add-mask::$idempotency_key"
+          echo "KAVE_RUNTIME_MASTER_KEY=$master_key" >> "$GITHUB_ENV"
+          echo "KAVE_RUNTIME_SECRET_IDEMPOTENCY_KEY=$idempotency_key" >> "$GITHUB_ENV"
+
+      - name: Validate and build the production package
+        env:
+          KAVE_IMAGE_TAG: ci
+          KAVE_BUILD_VERSION: ci
+          KAVE_BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          docker compose config --quiet
+          docker compose build
+
+      - name: Verify the minimal runtime and packaged stack
+        env:
+          KAVE_IMAGE_TAG: ci
+          KAVE_BUILD_VERSION: ci
+          KAVE_BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          docker run --rm kave:ci version
+          user="$(docker image inspect kave:ci --format '{{.Config.User}}')"
+          test -n "$user"
+          test "$user" != root
+          test "$user" != 0
+          test "$user" != 0:0
+          docker compose up --no-build --wait
+          curl --fail --silent --show-error http://127.0.0.1:8080/livez
+          curl --fail --silent --show-error http://127.0.0.1:8080/readyz
+          curl --fail --silent --show-error http://127.0.0.1:8080/metrics >/dev/null
+
+      - name: Tear down the packaged stack
+        if: always()
+        env:
+          KAVE_IMAGE_TAG: ci
+        run: docker compose down --volumes --remove-orphans

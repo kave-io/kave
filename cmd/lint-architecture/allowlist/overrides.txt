@@ -1,5 +1,0 @@
-# B-allow inline overrides (// allow:Bx <reason> comments in code)
-# Format: <file>:<line> : <rule> : <reason>
-# Auto-generated from inline // allow: comments; see lint_test.go for sync check
-
-(none currently)

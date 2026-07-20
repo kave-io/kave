@@ -1,5 +1,0 @@
-# B2-no-tickers-in-core
-# Approved time.NewTicker / time.AfterFunc usages in core
-# Format: <package-or-file> : <reason>
-
-core/fx/service.go : FX refresh ticker is a control-plane maintenance loop, not an agent action scheduler

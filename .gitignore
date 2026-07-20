@@ -1,66 +1,30 @@
-# ── Go ────────────────────────────────────────────────────────────────────────
-bin/
-dist/
+/dist/
+/vendor/
+/go.work.sum
 *.exe
 *.test
 *.out
-coverage.txt
-coverage.html
-/vendor/
+*.coverprofile
 
-# go workspace sum — generated, not committed
-go.work.sum
-
-# ── Environment ───────────────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
 *.local
-
-# ── Secrets ───────────────────────────────────────────────────────────────────
 *.pem
 *.key
 *.p12
-secrets/
-kave.yaml.local
+/secrets/
+/.kave/
+/data/
+/pgdata/
+.codex
+.claude/
 
-# ── Build artifacts ───────────────────────────────────────────────────────────
-server/server
-server/kave-server
-cli/kave
-cli/kave-cli
-build/
-
-# ── Database / storage ────────────────────────────────────────────────────────
-*.db
-*.sqlite
-*.sqlite3
-data/
-pgdata/
-clickhouse-data/
-
-# ── Node / Dashboard ──────────────────────────────────────────────────────────
 node_modules/
-dashboard/.nuxt/
-dashboard/.output/
 dashboard/dist/
-.pnpm-store/
+dashboard/playwright-report/
+dashboard/test-results/
 
-# ── Python SDK ────────────────────────────────────────────────────────────────
-sdk/python/__pycache__/
-sdk/python/*.egg-info/
-sdk/python/dist/
-sdk/python/.venv/
-sdk/python/venv/
-
-# ── TypeScript SDK ────────────────────────────────────────────────────────────
-sdk/typescript/node_modules/
-sdk/typescript/dist/
-
-# ── Docs (moved to kave-io/kave-docs) ─────────────────────────────────────────
-cli/docs/
-
-# ── IDE ───────────────────────────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
@@ -68,26 +32,5 @@ cli/docs/
 .DS_Store
 Thumbs.db
 
-# ── Test / CI artifacts ───────────────────────────────────────────────────────
-testdata/generated/
-*.coverprofile
-
-# ── Docker ────────────────────────────────────────────────────────────────────
-deploy/.env
-
-# ── Kave local dev ────────────────────────────────────────────────────────────
-.kave/
-kave-data/
-.codex
-.claude
-*.duckdb
-*.duckdb.wal
+server/kave-server
 server/tmp/
-gen-docs
-/kave
-
-# Generated dashboard RPC clients are committed with the dashboard app.
-!dashboard/src/gen/
-!dashboard/src/gen/kave/
-!dashboard/src/gen/kave/**/
-!dashboard/src/gen/kave/**/*.ts

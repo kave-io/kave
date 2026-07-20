@@ -4,208 +4,53 @@ project_name: kave
 
 before:
   hooks:
-    # Dashboard must be built before server binary (//go:embed all:dist)
     - make dashboard-build
-    - ./scripts/package-compose.sh {{ .Tag }}
 
 builds:
-  - id: server
+  - id: kave-server
     dir: server
     main: .
     binary: kave-server
     env:
-      - CGO_ENABLED=1
-    goos: [linux]
-    goarch: [amd64, arm64]
-    ldflags:
-      - -s -w -X main.buildVersion={{.Version}}
-    overrides:
-      - goos: linux
-        goarch: arm64
-        env:
-          - CGO_ENABLED=1
-          - CC=aarch64-linux-gnu-gcc
-          - CXX=aarch64-linux-gnu-g++
-
-  - id: cli
-    dir: cli
-    main: .
-    binary: kave
-    env:
       - CGO_ENABLED=0
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
-    ignore:
-      - goos: windows
-        goarch: arm64
+      - GOWORK=off
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
     ldflags:
-      - -s -w
-      - -X github.com/kave-io/kave/cli/internal/version.Version={{.Version}}
-      - -X github.com/kave-io/kave/cli/internal/version.Commit={{.Commit}}
-      - -X github.com/kave-io/kave/cli/internal/version.BuildDate={{.Date}}
+      - -s -w -X main.buildVersion={{ .Tag }}
 
 archives:
-  - id: server
-    builds: [server]
-    name_template: "kave-server_{{.Version}}_{{.Os}}_{{.Arch}}"
-    formats: [tar.gz]
-
-  - id: cli
-    builds: [cli]
-    name_template: "kave_{{.Version}}_{{.Os}}_{{.Arch}}"
-    formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+  - id: kave-server
+    ids:
+      - kave-server
+    formats:
+      - tar.gz
+    name_template: "kave-server_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: checksums.txt
   algorithm: sha256
-
-signs:
-  - artifacts: checksum
-    cmd: cosign
-    env:
-      - COSIGN_EXPERIMENTAL=1
-    args:
-      - sign-blob
-      - --output-signature=${signature}
-      - --output-certificate=${certificate}
-      - ${artifact}
-    output: true
 
 sboms:
   - artifacts: archive
     documents:
       - "{{ .ArtifactName }}.sbom.spdx.json"
 
-nfpms:
-  - id: server
-    builds: [server]
-    package_name: kave-server
-    vendor: kave-io
-    homepage: https://kave.io
-    maintainer: Kave <hello@kave.io>
-    description: "Kave — Control Plane for AI Agents (daemon)"
-    license: Apache-2.0
-    formats: [deb, rpm]
-    contents:
-      - src: deploy/nfpm/kave-server.service
-        dst: /usr/lib/systemd/system/kave-server.service
-        type: config
-    scripts:
-      postinstall: deploy/nfpm/server-postinstall.sh
-      preremove: deploy/nfpm/server-preremove.sh
-
-  - id: cli
-    builds: [cli]
-    package_name: kave
-    vendor: kave-io
-    homepage: https://kave.io
-    maintainer: Kave <hello@kave.io>
-    description: "Kave — Control Plane for AI Agents (CLI)"
-    license: Apache-2.0
-    formats: [deb, rpm]
-
-dockers:
-  - id: kave-server-amd64
-    ids: [server]
-    image_templates:
-      - kave-io/kave-server:{{.Version}}-amd64
-      - kave-io/kave-server:latest-amd64
-    dockerfile: deploy/docker/Dockerfile.server
-    use: buildx
-    build_flag_templates:
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title=kave-server
-      - --label=org.opencontainers.image.version={{.Version}}
-      - --label=org.opencontainers.image.source=https://github.com/kave-io/kave
-      - --label=org.opencontainers.image.revision={{.Commit}}
-      - --label=org.opencontainers.image.created={{.Date}}
-
-  - id: kave-server-arm64
-    ids: [server]
-    image_templates:
-      - kave-io/kave-server:{{.Version}}-arm64
-      - kave-io/kave-server:latest-arm64
-    dockerfile: deploy/docker/Dockerfile.server
-    use: buildx
-    goarch: arm64
-    build_flag_templates:
-      - --platform=linux/arm64
-      - --label=org.opencontainers.image.title=kave-server
-      - --label=org.opencontainers.image.version={{.Version}}
-      - --label=org.opencontainers.image.source=https://github.com/kave-io/kave
-      - --label=org.opencontainers.image.revision={{.Commit}}
-      - --label=org.opencontainers.image.created={{.Date}}
-
-  - id: kave-cli-amd64
-    ids: [cli]
-    image_templates:
-      - kave-io/kave-cli:{{.Version}}-amd64
-      - kave-io/kave-cli:latest-amd64
-    dockerfile: deploy/docker/Dockerfile.cli
-    use: buildx
-    build_flag_templates:
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title=kave-cli
-      - --label=org.opencontainers.image.version={{.Version}}
-      - --label=org.opencontainers.image.source=https://github.com/kave-io/kave
-      - --label=org.opencontainers.image.revision={{.Commit}}
-      - --label=org.opencontainers.image.created={{.Date}}
-
-  - id: kave-cli-arm64
-    ids: [cli]
-    image_templates:
-      - kave-io/kave-cli:{{.Version}}-arm64
-      - kave-io/kave-cli:latest-arm64
-    dockerfile: deploy/docker/Dockerfile.cli
-    use: buildx
-    goarch: arm64
-    build_flag_templates:
-      - --platform=linux/arm64
-      - --label=org.opencontainers.image.title=kave-cli
-      - --label=org.opencontainers.image.version={{.Version}}
-      - --label=org.opencontainers.image.source=https://github.com/kave-io/kave
-      - --label=org.opencontainers.image.revision={{.Commit}}
-      - --label=org.opencontainers.image.created={{.Date}}
-
-docker_manifests:
-  - name_template: kave-io/kave-server:{{.Version}}
-    image_templates:
-      - kave-io/kave-server:{{.Version}}-amd64
-      - kave-io/kave-server:{{.Version}}-arm64
-
-  - name_template: kave-io/kave-server:latest
-    image_templates:
-      - kave-io/kave-server:latest-amd64
-      - kave-io/kave-server:latest-arm64
-
-  - name_template: kave-io/kave-cli:{{.Version}}
-    image_templates:
-      - kave-io/kave-cli:{{.Version}}-amd64
-      - kave-io/kave-cli:{{.Version}}-arm64
-
-  - name_template: kave-io/kave-cli:latest
-    image_templates:
-      - kave-io/kave-cli:latest-amd64
-      - kave-io/kave-cli:latest-arm64
-
-docker_signs:
-  - artifacts: all
+signs:
+  - artifacts: checksum
     cmd: cosign
-    env:
-      - COSIGN_EXPERIMENTAL=1
+    signature: "${artifact}.sigstore.json"
     args:
-      - sign
+      - sign-blob
       - --yes
+      - --bundle=${signature}
       - ${artifact}
-
-release:
-  extra_files:
-    - glob: ./dist/kave-compose_*.tar.gz
-    - glob: ./dist/compose.yml
-    - glob: ./scripts/install.sh
+    output: true
 
 changelog:
   sort: asc
@@ -214,17 +59,12 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^chore:"
-      - Merge pull request
-      - Merge branch
+      - "^Merge "
 
-# TODO(homebrew): enable after kave-io/homebrew-tap exists and has a first user.
-# brews:
-#   - name: kave
-#     repository:
-#       owner: kave-io
-#       name: homebrew-tap
-#     directory: Formula
-#     homepage: https://kave.io
-#     description: Control plane for AI agents
-#     license: Apache-2.0
-#     template: deploy/homebrew/kave.rb.tmpl
+release:
+  # Keep every artifact non-public until the container has also been signed
+  # and smoke-tested. The release workflow publishes this draft last.
+  draft: true
+  use_existing_draft: true
+  replace_existing_artifacts: true
+  prerelease: auto

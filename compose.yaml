@@ -1,0 +1,84 @@
+name: kave-dev
+
+services:
+  postgres:
+    image: postgres:18@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
+    environment:
+      POSTGRES_DB: kave
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kave"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - kave-postgres:/var/lib/postgresql
+      - kave-postgres-socket:/var/run/postgresql
+      - ./deploy/postgres/init.sql:/docker-entrypoint-initdb.d/10-kave-roles.sql:ro
+
+  migrate:
+    image: kave:${KAVE_IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        VERSION: ${KAVE_BUILD_VERSION:-dev}
+        COMMIT: ${KAVE_BUILD_COMMIT:-unknown}
+    command: ["migrate"]
+    environment:
+      # A shared Unix socket keeps this local stack within Kave's rule that
+      # every non-local database connection must use TLS.
+      KAVE_MIGRATION_POSTGRES_DSN: "postgres://postgres@/kave?host=/var/run/postgresql&sslmode=disable"
+      KAVE_MIGRATION_OWNER_ROLE: kave_owner
+      KAVE_RUNTIME_POSTGRES_ROLE: kave_runtime
+    volumes:
+      - kave-postgres-socket:/var/run/postgresql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  kave:
+    image: kave:${KAVE_IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        VERSION: ${KAVE_BUILD_VERSION:-dev}
+        COMMIT: ${KAVE_BUILD_COMMIT:-unknown}
+    environment:
+      KAVE_SERVER_ADDR: 0.0.0.0:8080
+      KAVE_RUNTIME_POSTGRES_DSN: "postgres://kave_runtime@/kave?host=/var/run/postgresql&sslmode=disable"
+      KAVE_RUNTIME_POSTGRES_ROLE: kave_runtime
+      KAVE_RUNTIME_MASTER_KEY: ${KAVE_RUNTIME_MASTER_KEY:?set KAVE_RUNTIME_MASTER_KEY to 32 random bytes encoded as hex or base64}
+      KAVE_RUNTIME_SECRET_IDEMPOTENCY_KEY: ${KAVE_RUNTIME_SECRET_IDEMPOTENCY_KEY:?set KAVE_RUNTIME_SECRET_IDEMPOTENCY_KEY to a different 32-byte key}
+      # Docker port forwarding requires an unspecified container bind. The
+      # published host port remains loopback-only in this developer stack.
+      KAVE_RUNTIME_TRANSPORT_SECURITY: tls_terminated
+    volumes:
+      - kave-postgres-socket:/var/run/postgresql:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+volumes:
+  kave-postgres:
+  kave-postgres-socket:

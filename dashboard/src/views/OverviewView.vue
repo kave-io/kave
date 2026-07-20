@@ -1,140 +1,176 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useDashboardOverview } from '@/composables/api/useOverview'
-import { envId, projectId } from '@/stores/workspace'
-import { asNumber, fmtMoney } from '@/lib/format'
-import { KIcon, KBtn, KBadge, KCard, KSparkline, KLiveStream, KEmptyState } from '@/components/kv'
+import MetricCard from '@/components/MetricCard.vue'
+import PageHeader from '@/components/PageHeader.vue'
+import StatusPanel from '@/components/StatusPanel.vue'
+import UsageChart from '@/components/UsageChart.vue'
+import { useResource } from '@/composables/useResource'
+import { bucketUsage, rejectionRate, summarizeUsage } from '@/lib/analytics'
+import { contextRevision, currentRange, currentScope, hasReportingScope } from '@/lib/context'
+import {
+  formatCompactInteger,
+  formatNanoUsd,
+  formatRelativeTime,
+  humanize,
+  shortId,
+} from '@/lib/format'
+import { kernel } from '@/lib/kernel'
 
-const router = useRouter()
-const currency = 'USD'
+const resource = useResource(async () => {
+  if (!hasReportingScope.value) return undefined
+  const range = currentRange()
+  const scope = currentScope()
+  const [usage, invocations] = await Promise.all([
+    kernel.queryUsage(scope, range),
+    kernel.queryInvocations(scope, range),
+  ])
+  return { range, usage, invocations }
+}, [contextRevision])
 
-const overviewQuery = useDashboardOverview({ projectId, envId, recentLimit: 12 })
-const overview = computed(() => overviewQuery.data.value)
-
-const stats = computed(() => {
-  const data = overview.value
-  return [
-    { label: 'Runs', value: String(data?.total_runs ?? 0), delta: 'aggregate RPC', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.total_runs ?? 0] },
-    { label: 'Active runs', value: String(data?.active_runs ?? 0), delta: data?.active_runs ? 'in progress' : 'none active', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.active_runs ?? 0] },
-    { label: 'Spend', value: fmtMoney(data?.spend.total ?? '0', currency), delta: 'reported by daemon', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,asNumber(data?.spend.total)] },
-    { label: 'Blocked runs', value: String(data?.blocked_runs ?? 0), delta: data?.blocked_runs ? 'needs review' : 'none', up: (data?.blocked_runs ?? 0) === 0, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.blocked_runs ?? 0] },
-    { label: 'Errors', value: String(data?.failed_runs ?? 0), delta: data?.failed_runs ? 'failed runs' : 'none', up: (data?.failed_runs ?? 0) === 0, spark: [0,0,0,0,0,0,0,0,0,0,0,data?.failed_runs ?? 0] },
-    { label: 'Tokens', value: `${(((data?.total_input_tokens ?? 0) + (data?.total_output_tokens ?? 0)) / 1000).toFixed(1)}k`, delta: 'input + output', up: true, spark: [0,0,0,0,0,0,0,0,0,0,0,(data?.total_input_tokens ?? 0) + (data?.total_output_tokens ?? 0)] },
-  ]
-})
-
-const recentBlocks = computed(() => (overview.value?.recent_attention_runs ?? [])
-  .map(r => ({
-    agent: r.agent_id || 'unknown agent',
-    reason: r.error_message || r.status,
-    policy: r.policy_id || 'no policy',
-    when: new Date(r.updated_at || r.started_at).toISOString(),
-  })))
-
-const spendByProvider = computed(() => {
-  const entries = Object.entries(overview.value?.spend.by_connector ?? {}).map(([name, total]) => ({ name, cost: asNumber(total) }))
-  const max = entries.reduce((acc, item) => Math.max(acc, item.cost), 0)
-  return entries.map(item => ({ ...item, share: max > 0 ? item.cost / max : 0 })).slice(0, 6)
-})
-
-const topAgents = computed(() => overview.value?.top_agents ?? [])
+const totals = computed(() => summarizeUsage(resource.data.value?.usage.items ?? []))
+const deniedRate = computed(() => rejectionRate(resource.data.value?.invocations.items ?? []))
+const buckets = computed(() =>
+  resource.data.value
+    ? bucketUsage(resource.data.value.usage.items, resource.data.value.range)
+    : [],
+)
+const partial = computed(
+  () =>
+    Boolean(resource.data.value?.usage.nextPageToken) ||
+    Boolean(resource.data.value?.invocations.nextPageToken),
+)
 </script>
 
 <template>
-  <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 16px;">
-    <div class="page-h">
-      <div>
-        <h1>Command Center</h1>
-        <p>Local daemon · project <code class="mono" style="color: var(--text-muted);">default</code> / env <code class="mono" style="color: var(--text-muted);">dev</code></p>
-      </div>
-      <div class="toolbar">
-        <KBtn icon="terminal" size="sm">Setup guide</KBtn>
-        <KBtn variant="primary" icon="plus" size="sm">New agent</KBtn>
-      </div>
-    </div>
-
-    <section :style="{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }">
-      <div v-for="s in stats" :key="s.label" class="stat">
-        <div class="label">{{ s.label }}</div>
-        <div class="val">{{ s.value }}</div>
-        <div :class="['delta', s.up ? 'up' : 'down']">{{ s.delta }}</div>
-        <KSparkline :data="s.spark" :color="s.up ? 'var(--accent)' : 'var(--warning)'" />
-      </div>
-    </section>
-
-    <section class="responsive-grid responsive-grid-wide">
-      <KCard title="Live activity" subtitle="Streaming spans, policy decisions, cost events" flush>
-        <template #action>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <KBadge tone="success" dot="live">Live</KBadge>
-            <KBtn variant="ghost" size="sm" iconRight="arrow-up-right" @click="router.push('/monitor')">Open monitor</KBtn>
-          </div>
-        </template>
-        <KLiveStream :limit="9" compact />
-      </KCard>
-
-      <KCard title="Needs attention" subtitle="Recent policy blocks" flush>
-        <div
-          v-for="(b, i) in recentBlocks"
-          :key="i"
-          :style="{
-            display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '11px 16px',
-            borderBottom: i < recentBlocks.length - 1 ? '1px solid var(--border-soft)' : '0',
-          }"
+  <div class="page-stack">
+    <PageHeader
+      eyebrow="Observe"
+      title="Operations overview"
+      description="Settled usage and admission decisions for one exact tenant and billing boundary."
+    >
+      <template #actions>
+        <button
+          type="button"
+          class="button button-secondary"
+          :disabled="resource.loading.value"
+          @click="resource.reload"
         >
-          <KIcon name="circle-slash" :size="16" :style="{ color: 'var(--warning)', marginTop: '1px' }" />
-          <div style="min-width: 0; flex: 1;">
-            <div style="font-size: 13px; font-weight: 500;">{{ b.agent }}</div>
-            <div style="font-size: 12px; color: var(--text-dim); margin-top: 1px;">{{ b.reason }}</div>
-            <div style="font-size: 11px; color: var(--text-faint); margin-top: 4px; font-family: var(--font-mono);">{{ b.policy }} · {{ b.when }}</div>
-          </div>
-        </div>
-        <KEmptyState v-if="recentBlocks.length === 0" icon="shield-check" title="No blocked or failed runs">
-          When policy or budget blocks happen, they will appear here.
-        </KEmptyState>
-      </KCard>
-    </section>
+          Refresh
+        </button>
+      </template>
+    </PageHeader>
 
-    <section class="responsive-grid">
-      <KCard title="Spend by provider" subtitle="Last 24h" flush>
-        <div style="padding: 4px 16px 14px;">
-          <div
-            v-for="p in spendByProvider"
-            :key="p.name"
-            class="provider-spend-row"
-            :style="{ padding: '10px 0', display: 'grid', gridTemplateColumns: '120px 1fr 80px', alignItems: 'center', gap: '12px' }"
-          >
-            <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);">{{ p.name }}</span>
-            <div class="prog"><div class="fill" :style="{ width: (p.share * 100) + '%' }" /></div>
-            <span style="text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;">{{ fmtMoney(p.cost, currency) }}</span>
-          </div>
-        </div>
-        <KEmptyState v-if="spendByProvider.length === 0" icon="wallet" title="No spend recorded">
-          Cost data will appear after proxied LLM calls are metered.
-        </KEmptyState>
-      </KCard>
+    <StatusPanel
+      v-if="!hasReportingScope"
+      title="Reporting scope required"
+      message="Set an opaque tenant and bill-to reference in the top bar before querying the usage ledger."
+      tone="warning"
+    />
+    <StatusPanel
+      v-else-if="resource.loading.value && !resource.data.value"
+      title="Loading operations"
+      message="Reading canonical usage and invocation records from Kave."
+      busy
+    />
+    <StatusPanel
+      v-else-if="resource.error.value"
+      title="Overview unavailable"
+      :message="resource.error.value.message"
+      tone="error"
+      @retry="resource.reload"
+    >
+      <template #action>Try again</template>
+    </StatusPanel>
 
-      <KCard title="Top agents by spend" subtitle="This month" flush>
-        <table class="tbl">
-          <thead><tr><th>Agent</th><th class="num">Runs</th><th class="num">Spend</th></tr></thead>
-          <tbody>
-            <tr v-for="a in topAgents" :key="a.agent_id" @click="router.push('/agents')">
-              <td>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <KIcon name="bot" :size="14" :style="{ color: 'var(--text-dim)' }" />
-                  <span style="font-weight: 500;">{{ a.agent_name || a.agent_id }}</span>
-                </div>
-              </td>
-              <td class="num mono" style="font-size: 12px;">{{ a.run_count }}</td>
-              <td class="num">{{ fmtMoney(a.spend, currency) }}</td>
-            </tr>
-            <tr v-if="topAgents.length === 0"><td colspan="3">
-              <KEmptyState icon="bot" title="No agents yet">Create an agent or apply config resources to populate this table.</KEmptyState>
-            </td></tr>
-          </tbody>
-        </table>
-      </KCard>
-    </section>
+    <template v-else-if="resource.data.value">
+      <div v-if="partial" class="notice notice-warning" role="status">
+        Metrics cover the first 200 canonical rows. Open Analytics to page through the complete
+        interval.
+      </div>
+
+      <section class="metric-grid" aria-label="Usage totals">
+        <MetricCard
+          label="Requests"
+          :value="formatCompactInteger(totals.requests)"
+          detail="settled provider calls"
+        />
+        <MetricCard
+          label="Tokens"
+          :value="formatCompactInteger(totals.inputTokens + totals.outputTokens)"
+          :detail="`${formatCompactInteger(totals.inputTokens)} in · ${formatCompactInteger(totals.outputTokens)} out`"
+        />
+        <MetricCard
+          label="Cost"
+          :value="formatNanoUsd(totals.costNanoUsd)"
+          :detail="
+            totals.estimatedRows ? `${totals.estimatedRows} estimated row(s)` : 'provider reported'
+          "
+          :tone="totals.estimatedRows ? 'warning' : 'default'"
+        />
+        <MetricCard
+          label="Rejected"
+          :value="`${deniedRate.toFixed(1)}%`"
+          :detail="`${resource.data.value.invocations.items.length} decisions loaded`"
+          :tone="deniedRate > 10 ? 'danger' : deniedRate > 0 ? 'warning' : 'good'"
+        />
+      </section>
+
+      <section class="panel chart-panel">
+        <header class="panel-header">
+          <div>
+            <h2>Usage cadence</h2>
+            <p>Settled requests across the selected interval</p>
+          </div>
+          <span class="live-indicator"><i /> Ledger</span>
+        </header>
+        <UsageChart :buckets="buckets" value="requests" />
+      </section>
+
+      <section class="panel">
+        <header class="panel-header">
+          <div>
+            <h2>Recent invocations</h2>
+            <p>Admission and settlement state, newest first</p>
+          </div>
+        </header>
+        <div v-if="resource.data.value.invocations.items.length" class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Invocation</th>
+                <th>Agent</th>
+                <th>Model</th>
+                <th>Decision</th>
+                <th>Status</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="invocation in resource.data.value.invocations.items.slice(0, 12)"
+                :key="invocation.id"
+              >
+                <td class="mono" :title="invocation.id">{{ shortId(invocation.id) }}</td>
+                <td>{{ invocation.agent || '—' }}</td>
+                <td class="mono">{{ invocation.model || '—' }}</td>
+                <td>
+                  <span class="status-badge" :class="humanize(String(invocation.decision))">{{
+                    humanize(String(invocation.decision))
+                  }}</span>
+                </td>
+                <td>{{ humanize(invocation.status) }}</td>
+                <td :title="String(invocation.createdAtMs)">
+                  {{ formatRelativeTime(invocation.createdAtMs) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="panel-empty">
+          <strong>No invocations</strong>
+          <span>No decisions matched this scope and interval.</span>
+        </div>
+      </section>
+    </template>
   </div>
 </template>
