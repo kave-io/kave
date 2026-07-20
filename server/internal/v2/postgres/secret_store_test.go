@@ -95,6 +95,20 @@ INSERT INTO kave_v2.service_keys (
 	if !replay.Replayed || replay.ID != first.ID || replay.Version != 1 {
 		t.Fatalf("replay = %+v, first = %+v", replay, first)
 	}
+	routeID := ids.New("rte")
+	if err := runner.WithScope(ctx, scope, func(ctx context.Context, db v2postgres.DBTX) error {
+		_, err := db.Exec(ctx, `
+INSERT INTO kave_v2.provider_routes (
+    id, account_id, namespace_id, name, provider, base_url, secret_id,
+    model_policy, pricing, status, last_validated_at, validated_secret_version, validated_model
+) VALUES ($1, $2, $3, 'openai', 'openai', 'https://api.openai.com/v1', $4,
+          '{"allowed_models":["gpt-safe"],"default_model":"gpt-safe"}',
+          '{"models":{"gpt-safe":{}}}', 'active', transaction_timestamp(), 1, 'gpt-safe')
+`, routeID, accountID, namespaceID, first.ID)
+		return err
+	}); err != nil {
+		t.Fatalf("seed validated route: %v", err)
+	}
 	conflict := request
 	conflict.Plaintext = []byte("different")
 	if _, err := store.PutSecret(ctx, conflict); !errors.Is(err, corev2.ErrIdempotencyConflict) {
@@ -108,6 +122,19 @@ INSERT INTO kave_v2.service_keys (
 	}
 	if rotated.ID != first.ID || rotated.Version != 2 {
 		t.Fatalf("rotated = %+v", rotated)
+	}
+	var routeStatus string
+	var routeValidatedAt *time.Time
+	if err := runner.WithScope(ctx, scope, func(ctx context.Context, db v2postgres.DBTX) error {
+		return db.QueryRow(ctx, `
+SELECT status, last_validated_at FROM kave_v2.provider_routes
+WHERE account_id = $1 AND namespace_id = $2 AND id = $3
+`, accountID, namespaceID, routeID).Scan(&routeStatus, &routeValidatedAt)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if routeStatus != "invalid" || routeValidatedAt != nil {
+		t.Fatalf("route after secret rotation = status %q validated_at %v", routeStatus, routeValidatedAt)
 	}
 
 	var ciphertext []byte

@@ -1,3 +1,0 @@
--- No-op for the SQLite app store: trace spans are persisted through the
--- analytical span store backends. This migration exists to keep the numbered
--- migration chain aligned across backends.

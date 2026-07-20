@@ -1,5 +1,6 @@
 // Package authctx carries the already-authenticated V2 service-key identity.
-// It is intentionally separate from V1's human/session/agent identity model.
+// It intentionally contains only the service-key identity needed by the
+// tenant-scoped kernel.
 package authctx
 
 import (

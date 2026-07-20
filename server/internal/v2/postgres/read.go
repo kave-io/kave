@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -69,7 +70,7 @@ WHERE account_id = $1 AND id = $2
 		if err != nil {
 			return err
 		}
-		result.Manifest.Routes = activeManifestRoutes(state)
+		result.Manifest.Routes = manifestRoutes(state)
 		result.Manifest.Agents = manifestAgents(state)
 		result.Manifest.Limits = operatorManifestLimits(state)
 		return nil
@@ -77,10 +78,10 @@ WHERE account_id = $1 AND id = $2
 	return result, err
 }
 
-func activeManifestRoutes(state *applyState) []corev2.RouteSpec {
+func manifestRoutes(state *applyState) []corev2.RouteSpec {
 	routes := make([]corev2.RouteSpec, 0, len(state.routes))
 	for _, route := range state.routes {
-		if route.status != "active" {
+		if route.status == "archived" {
 			continue
 		}
 		routes = append(routes, corev2.RouteSpec{
@@ -98,10 +99,6 @@ func manifestAgents(state *applyState) []corev2.AgentSpec {
 	agents := make([]corev2.AgentSpec, 0, len(state.agents))
 	for _, agent := range state.agents {
 		if agent.status == "archived" {
-			continue
-		}
-		route, ok := state.routes[agent.routeName]
-		if !ok || route.status != "active" {
 			continue
 		}
 		agents = append(agents, corev2.AgentSpec{
@@ -423,6 +420,132 @@ LIMIT $15
 	return result, err
 }
 
+func (s *ReadStore) ListTenants(ctx context.Context, req corev2.ListTenantsRequest) (corev2.ListTenantsResult, error) {
+	if err := req.Validate(); err != nil {
+		return corev2.ListTenantsResult{}, err
+	}
+	cursor, err := decodeTenantCursor(req.Page.Token, tenantQueryFingerprint(req))
+	if err != nil {
+		return corev2.ListTenantsResult{}, err
+	}
+	result := corev2.ListTenantsResult{Tenants: make([]corev2.TenantSummary, 0, req.Page.EffectiveSize())}
+	err = s.runner.withScope(ctx, readScope(req.Caller), pgx.ReadCommitted, func(txCtx context.Context, db DBTX) error {
+		if err := requireActiveReadNamespace(txCtx, db, req.Caller); err != nil {
+			return err
+		}
+		rows, err := db.Query(txCtx, `
+WITH activity AS (
+    SELECT tenant_ref, billing_ref, MAX(created_at) AS last_seen_at,
+           COUNT(*)::BIGINT AS invocation_count
+    FROM kave_v2.invocations
+    WHERE account_id = $1 AND namespace_id = $2
+      AND tenant_ref IS NOT NULL AND billing_ref IS NOT NULL
+      AND created_at >= $3 AND created_at < $4
+    GROUP BY tenant_ref, billing_ref
+), canonical_usage AS (
+    SELECT i.tenant_ref, i.billing_ref,
+           COALESCE(SUM(CASE
+             WHEN i.kind = 'provider' THEN u.request_count
+             WHEN i.kind = 'consume' AND u.metric = 'requests' THEN u.quantity
+             ELSE 0
+           END), 0)::BIGINT AS request_count,
+           COALESCE(SUM(CASE
+             WHEN i.kind = 'provider' THEN u.cost_nanos
+             WHEN i.kind = 'consume' AND u.metric = 'cost_nano_usd' THEN u.quantity
+             ELSE 0
+           END), 0)::BIGINT AS cost_nano_usd
+    FROM kave_v2.usage_entries AS u
+    JOIN kave_v2.invocations AS i
+      ON i.account_id = u.account_id AND i.namespace_id = u.namespace_id AND i.id = u.invocation_id
+    WHERE u.account_id = $1 AND u.namespace_id = $2
+      AND i.tenant_ref IS NOT NULL AND i.billing_ref IS NOT NULL
+      AND u.occurred_at >= $3 AND u.occurred_at < $4
+      AND (
+        (i.kind = 'consume' AND u.event_kind = 'consume'
+         AND u.limit_id IS NULL AND u.usage_detail->>'entry_role' = 'logical')
+        OR
+        (i.kind = 'provider' AND u.event_kind = 'settlement'
+         AND u.limit_id IS NULL AND u.dedupe_key LIKE 'usage:%')
+      )
+    GROUP BY i.tenant_ref, i.billing_ref
+), limit_pairs AS (
+    SELECT DISTINCT tenant_ref, billing_ref
+    FROM kave_v2.limits
+    WHERE account_id = $1 AND namespace_id = $2
+      AND tenant_ref IS NOT NULL AND billing_ref IS NOT NULL
+      AND enabled AND superseded_at IS NULL
+      AND (effective_from IS NULL OR effective_from <= $5)
+      AND (effective_to IS NULL OR effective_to > $5)
+), pairs AS (
+    SELECT tenant_ref, billing_ref FROM activity
+    UNION
+    SELECT tenant_ref, billing_ref FROM limit_pairs
+), summaries AS (
+    SELECT p.tenant_ref, p.billing_ref, a.last_seen_at,
+           COALESCE(a.invocation_count, 0)::BIGINT AS invocation_count,
+           COALESCE(u.request_count, 0)::BIGINT AS request_count,
+           COALESCE(u.cost_nano_usd, 0)::BIGINT AS cost_nano_usd,
+           (
+             SELECT COUNT(*)::INTEGER
+             FROM kave_v2.limits AS l
+             WHERE l.account_id = $1 AND l.namespace_id = $2
+               AND l.enabled AND l.superseded_at IS NULL
+               AND (l.effective_from IS NULL OR l.effective_from <= $5)
+               AND (l.effective_to IS NULL OR l.effective_to > $5)
+               AND (
+                 (l.tenant_ref = p.tenant_ref AND (l.billing_ref IS NULL OR l.billing_ref = p.billing_ref))
+                 OR
+                 (l.billing_ref = p.billing_ref AND (l.tenant_ref IS NULL OR l.tenant_ref = p.tenant_ref))
+               )
+           ) AS active_limits
+    FROM pairs AS p
+    LEFT JOIN activity AS a USING (tenant_ref, billing_ref)
+    LEFT JOIN canonical_usage AS u USING (tenant_ref, billing_ref)
+)
+SELECT tenant_ref, billing_ref, last_seen_at, invocation_count,
+       request_count, cost_nano_usd, active_limits
+FROM summaries
+WHERE ($6 OR (tenant_ref, billing_ref) > ($7, $8))
+ORDER BY tenant_ref ASC, billing_ref ASC
+LIMIT $9
+`, req.Caller.AccountID, req.Caller.NamespaceID, req.Range.From.UTC(), req.Range.To.UTC(), s.now().UTC(),
+			!cursor.Valid, cursor.Tenant, cursor.BillTo, req.Page.EffectiveSize()+1)
+		if err != nil {
+			return fmt.Errorf("v2 postgres: list tenant summaries: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var summary corev2.TenantSummary
+			var lastSeen sql.NullTime
+			if err := rows.Scan(&summary.Tenant, &summary.BillTo, &lastSeen,
+				&summary.InvocationCount, &summary.RequestCount, &summary.CostNanoUSD,
+				&summary.ActiveLimits); err != nil {
+				return fmt.Errorf("v2 postgres: scan tenant summary: %w", err)
+			}
+			if lastSeen.Valid {
+				value := lastSeen.Time.UTC()
+				summary.LastSeenAt = &value
+			}
+			if summary.ActiveLimits > 0 {
+				summary.Status = corev2.TenantStatusActive
+			} else {
+				summary.Status = corev2.TenantStatusObserved
+			}
+			result.Tenants = append(result.Tenants, summary)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return corev2.ListTenantsResult{}, err
+	}
+	if len(result.Tenants) > req.Page.EffectiveSize() {
+		last := result.Tenants[req.Page.EffectiveSize()-1]
+		result.Tenants = result.Tenants[:req.Page.EffectiveSize()]
+		result.NextPageToken, err = encodeTenantCursor(last.Tenant, last.BillTo, tenantQueryFingerprint(req))
+	}
+	return result, err
+}
+
 func (s *ReadStore) QueryAuditEvents(ctx context.Context, req corev2.QueryAuditEventsRequest) (corev2.QueryAuditEventsResult, error) {
 	if err := req.Validate(); err != nil {
 		return corev2.QueryAuditEventsResult{}, err
@@ -514,6 +637,42 @@ type readCursor struct {
 	Time    time.Time `json:"-"`
 }
 
+type tenantCursor struct {
+	Version int        `json:"v"`
+	Tenant  corev2.Ref `json:"t"`
+	BillTo  corev2.Ref `json:"b"`
+	Query   string     `json:"q"`
+	Valid   bool       `json:"-"`
+}
+
+func encodeTenantCursor(tenant, billTo corev2.Ref, query string) (string, error) {
+	raw, err := json.Marshal(tenantCursor{Version: 1, Tenant: tenant, BillTo: billTo, Query: query})
+	if err != nil {
+		return "", fmt.Errorf("v2 postgres: encode tenant cursor: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
+func decodeTenantCursor(token, query string) (tenantCursor, error) {
+	if token == "" {
+		return tenantCursor{}, nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil || len(raw) > corev2.MaxReadPageToken {
+		return tenantCursor{}, fmt.Errorf("%w: page_token is invalid", corev2.ErrInvalidArgument)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var cursor tenantCursor
+	if err := decoder.Decode(&cursor); err != nil || ensureJSONEOF(decoder) != nil ||
+		cursor.Version != 1 || cursor.Query != query || cursor.Tenant.Validate("cursor.tenant", true) != nil ||
+		cursor.BillTo.Validate("cursor.bill_to", true) != nil {
+		return tenantCursor{}, fmt.Errorf("%w: page_token does not belong to this query", corev2.ErrInvalidArgument)
+	}
+	cursor.Valid = true
+	return cursor, nil
+}
+
 func encodeReadCursor(createdAt time.Time, id, query string) (string, error) {
 	cursor := readCursor{Version: 1, Micros: createdAt.UTC().UnixMicro(), ID: id, Query: query}
 	raw, err := json.Marshal(cursor)
@@ -583,11 +742,22 @@ func auditQueryFingerprint(req corev2.QueryAuditEventsRequest) string {
 		strconv.FormatInt(req.Range.From.UTC().UnixMilli(), 10), strconv.FormatInt(req.Range.To.UTC().UnixMilli(), 10))
 }
 
+func tenantQueryFingerprint(req corev2.ListTenantsRequest) string {
+	return queryFingerprint("tenants", string(req.Caller.AccountID), string(req.Caller.NamespaceID),
+		strconv.FormatInt(req.Range.From.UTC().UnixMilli(), 10), strconv.FormatInt(req.Range.To.UTC().UnixMilli(), 10))
+}
+
 func safeAuditMetadata(raw []byte) map[string]string {
+	if len(raw) == 0 || len(raw) > 64<<10 {
+		return nil
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var values map[string]any
 	if err := decoder.Decode(&values); err != nil || len(values) == 0 {
+		return nil
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil
 	}
 	keys := make([]string, 0, len(values))
@@ -612,6 +782,9 @@ func safeAuditMetadata(raw []byte) map[string]string {
 			continue
 		}
 		if len(value) <= 512 && !strings.ContainsAny(value, "\x00\r\n") {
+			if auditCredentialValue.MatchString(value) {
+				value = "[redacted]"
+			}
 			metadata[key] = value
 		}
 	}
@@ -621,13 +794,34 @@ func safeAuditMetadata(raw []byte) map[string]string {
 	return metadata
 }
 
+var auditCredentialValue = regexp.MustCompile(`(?i)(?:\bbearer[ \t]+\S+|\bkv2_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}\b|\bsk-[A-Za-z0-9_-]{12,}\b)`)
+
 func safeAuditKey(key string) bool {
 	if key == "" || len(key) > 64 || strings.ContainsAny(key, "\x00\r\n") {
 		return false
 	}
-	lower := strings.ToLower(key)
-	for _, forbidden := range []string{"secret", "token", "credential", "plaintext", "ciphertext", "raw_key", "password"} {
-		if strings.Contains(lower, forbidden) {
+	// Compact separators before matching so spellings such as x-api-key,
+	// api_key, auth.header, and APIKey cannot evade the boundary. This is a
+	// final reporting guard: audit writers must still avoid persisting secrets.
+	compact := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		default:
+			return -1
+		}
+	}, key)
+	for _, forbidden := range []string{
+		"secret", "token", "credential", "plaintext", "ciphertext",
+		"rawkey", "password", "passwd", "passphrase", "authorization",
+		"authentication", "apikey", "accesskey", "privatekey", "masterkey",
+		"encryptionkey", "signingkey", "clientkey", "providerkey", "cookie",
+		"bearer", "oauth", "jwt", "signature", "header", "prompt",
+		"requestbody", "responsebody",
+	} {
+		if strings.Contains(compact, forbidden) {
 			return false
 		}
 	}

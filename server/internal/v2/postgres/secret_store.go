@@ -47,12 +47,6 @@ func (s *SecretStore) PutSecret(ctx context.Context, req corev2.PutSecretRequest
 	if err := req.ValidateRequest(); err != nil {
 		return corev2.SecretMetadata{}, err
 	}
-	if req.Validate {
-		// Provider validation must be implemented by a provider-specific
-		// validator outside this database transaction. Never claim success when
-		// only ciphertext persistence was checked.
-		return corev2.SecretMetadata{}, corev2.ErrSecretValidationUnavailable
-	}
 	if s == nil || s.runner == nil || s.mac == nil {
 		return corev2.SecretMetadata{}, corev2.ErrSecretIdempotencyUnavailable
 	}
@@ -144,6 +138,16 @@ ON CONFLICT (account_id, namespace_id, name) DO UPDATE SET
 			if err != nil {
 				return fmt.Errorf("v2 postgres: persist secret: %w", err)
 			}
+			if _, err := db.Exec(txCtx, `
+UPDATE kave_v2.provider_routes
+SET status = CASE WHEN status = 'archived' THEN status ELSE 'invalid' END,
+    last_validated_at = NULL, validated_secret_version = NULL,
+    validated_model = NULL, validation_evidence = '{}'::jsonb,
+    revision = revision + 1
+WHERE account_id = $1 AND namespace_id = $2 AND secret_id = $3
+`, req.Caller.AccountID, req.NamespaceID, secretID); err != nil {
+				return fmt.Errorf("v2 postgres: invalidate routes after secret write: %w", err)
+			}
 
 			details := secretAuditDetails{
 				RequestHash: requestHash, ID: secretID, Name: req.Name, Source: req.Source(),
@@ -210,6 +214,16 @@ WHERE account_id = $1 AND namespace_id = $2 AND id = $3
 					return fmt.Errorf("v2 postgres: inspect secret revoke: %w", err)
 				}
 				return nil
+			}
+			if _, err := db.Exec(txCtx, `
+UPDATE kave_v2.provider_routes
+SET status = CASE WHEN status = 'archived' THEN status ELSE 'invalid' END,
+    last_validated_at = NULL, validated_secret_version = NULL,
+    validated_model = NULL, validation_evidence = '{}'::jsonb,
+    revision = revision + 1
+WHERE account_id = $1 AND namespace_id = $2 AND secret_id = $3
+`, req.Caller.AccountID, req.Caller.NamespaceID, req.ID); err != nil {
+				return fmt.Errorf("v2 postgres: invalidate routes after secret revoke: %w", err)
 			}
 			details, _ := json.Marshal(map[string]any{"reason": req.Reason})
 			serviceKeyID := string(req.Caller.ServiceKeyID)
@@ -304,10 +318,9 @@ func secretRequestMAC(mac SecretIdempotencyMAC, req corev2.PutSecretRequest) (st
 		Source      corev2.SecretSource `json:"source"`
 		Plaintext   []byte              `json:"plaintext,omitempty"`
 		ExternalURI string              `json:"external_uri,omitempty"`
-		Validate    bool                `json:"validate"`
 	}{
 		NamespaceID: req.NamespaceID, Name: req.Name, Source: req.Source(),
-		Plaintext: req.Plaintext, ExternalURI: req.ExternalURI, Validate: req.Validate,
+		Plaintext: req.Plaintext, ExternalURI: req.ExternalURI,
 	})
 	if err != nil {
 		return "", fmt.Errorf("v2 postgres: encode secret idempotency request: %w", err)

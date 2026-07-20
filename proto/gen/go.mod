@@ -1,17 +1,8 @@
 module github.com/kave-io/kave/proto/gen
 
-go 1.26.1
+go 1.26.5
 
 require (
 	connectrpc.com/connect v1.19.1
-	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
-)
-
-require (
-	go.opentelemetry.io/otel v1.41.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
 )

@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -146,6 +148,123 @@ func TestParseAndAuthenticateRawServiceKey(t *testing.T) {
 			t.Fatalf("ParseServiceKey(%q) error = %v, want invalid", malformed, err)
 		}
 	}
+}
+
+func TestServiceKeyUsageTrackerBoundsHotKeyWritesUnderConcurrency(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var writes atomic.Int32
+	written := make(chan struct{}, 8)
+	tracker := newServiceKeyUsageTracker(ctx, func(context.Context, ServiceKeyIdentity, time.Time) error {
+		writes.Add(1)
+		written <- struct{}{}
+		return nil
+	}, ServiceKeyUsageTrackingOptions{Interval: time.Hour, QueueSize: 8, MaxKeys: 16})
+	identity := ServiceKeyIdentity{AccountID: "account/acme", NamespaceID: "namespace/prod", ServiceKeyID: "key/hot"}
+	now := time.Date(2026, time.July, 19, 12, 0, 0, 0, time.UTC)
+
+	var group sync.WaitGroup
+	for range 2_000 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			tracker.record(identity, now)
+		}()
+	}
+	group.Wait()
+	select {
+	case <-written:
+	case <-time.After(time.Second):
+		t.Fatal("sampled usage event was not written")
+	}
+	if got := writes.Load(); got != 1 {
+		t.Fatalf("writes for 2,000 same-key requests = %d, want 1", got)
+	}
+}
+
+func TestRepeatedAuthenticationChecksRevocationEveryTimeButSamplesWrites(t *testing.T) {
+	t.Parallel()
+	const (
+		prefix = "A1b2C3d4E5f6G7h8I9j0K1l2"
+		rawKey = "kv2_" + prefix + ".AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	)
+	digest := sha256.Sum256([]byte(rawKey))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var queries atomic.Int32
+	var writes atomic.Int32
+	written := make(chan struct{}, 2)
+	tracker := newServiceKeyUsageTracker(ctx, func(context.Context, ServiceKeyIdentity, time.Time) error {
+		writes.Add(1)
+		written <- struct{}{}
+		return nil
+	}, ServiceKeyUsageTrackingOptions{Interval: time.Hour, QueueSize: 16, MaxKeys: 16})
+	authenticator := &ServiceKeyAuthenticator{
+		now: func() time.Time { return time.Date(2026, time.July, 19, 12, 0, 0, 0, time.UTC) },
+		queryRow: func(context.Context, string, ...any) pgx.Row {
+			queries.Add(1)
+			return serviceKeyRow(digest[:], "active", nil)
+		},
+		recordUsed: tracker.record,
+	}
+
+	var group sync.WaitGroup
+	for range 1_000 {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			if _, err := authenticator.AuthenticateRaw(context.Background(), rawKey); err != nil {
+				t.Errorf("AuthenticateRaw(): %v", err)
+			}
+		}()
+	}
+	group.Wait()
+	select {
+	case <-written:
+	case <-time.After(time.Second):
+		t.Fatal("sampled write did not complete")
+	}
+	if got := queries.Load(); got != 1_000 {
+		t.Fatalf("revocation lookups = %d, want 1000", got)
+	}
+	if got := writes.Load(); got != 1 {
+		t.Fatalf("last-used writes = %d, want 1", got)
+	}
+}
+
+func TestServiceKeyUsageTrackerIsBoundedAndNeverBlocksAuthenticationPath(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	release := make(chan struct{})
+	tracker := newServiceKeyUsageTracker(ctx, func(context.Context, ServiceKeyIdentity, time.Time) error {
+		<-release
+		return errors.New("telemetry unavailable")
+	}, ServiceKeyUsageTrackingOptions{Interval: time.Hour, QueueSize: 1, MaxKeys: 2})
+	now := time.Now().UTC()
+
+	done := make(chan struct{})
+	go func() {
+		for i := range 10_000 {
+			tracker.record(ServiceKeyIdentity{
+				AccountID: "account/acme", NamespaceID: "namespace/prod", ServiceKeyID: string(rune('a' + i%26)),
+			}, now)
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("usage sampling blocked while telemetry worker was unavailable")
+	}
+	tracker.mu.Lock()
+	tracked := len(tracker.next)
+	tracker.mu.Unlock()
+	if tracked > 2 || len(tracker.events) > 1 {
+		t.Fatalf("tracker bounds = keys:%d queue:%d, want <=2/<=1", tracked, len(tracker.events))
+	}
+	close(release)
 }
 
 func serviceKeyRow(hash []byte, status string, expiresAt *time.Time) pgx.Row {

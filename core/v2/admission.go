@@ -26,7 +26,7 @@ const (
 
 	// OperationApply is retained as a source-compatible name for manifest
 	// reconciliation. Its persisted capability is the narrow "config.apply",
-	// not the V1-style namespace-root "apply" authority.
+	// not the namespace-root configuration authority.
 	OperationApply = OperationConfigApply
 )
 

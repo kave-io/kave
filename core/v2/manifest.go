@@ -56,9 +56,12 @@ type RouteSpec struct {
 // provider-cost limits. Nano-USD per million tokens keeps all accounting in
 // integers while retaining sub-cent precision.
 type ModelPrice struct {
-	Model                       Ref   `json:"model"`
-	InputNanosPerMillionTokens  int64 `json:"input_nanos_per_million_tokens"`
-	OutputNanosPerMillionTokens int64 `json:"output_nanos_per_million_tokens"`
+	Model                           Ref   `json:"model"`
+	InputNanosPerMillionTokens      int64 `json:"input_nanos_per_million_tokens"`
+	OutputNanosPerMillionTokens     int64 `json:"output_nanos_per_million_tokens"`
+	CacheReadNanosPerMillionTokens  int64 `json:"cache_read_nanos_per_million_tokens,omitempty"`
+	CacheWriteNanosPerMillionTokens int64 `json:"cache_write_nanos_per_million_tokens,omitempty"`
+	ReasoningNanosPerMillionTokens  int64 `json:"reasoning_nanos_per_million_tokens,omitempty"`
 }
 
 // LimitSelector uses fixed admission-critical columns. Empty fields are
@@ -229,7 +232,9 @@ func (r RouteSpec) validate() error {
 		if err := price.Model.Validate("route.pricing.model", true); err != nil {
 			return err
 		}
-		if price.InputNanosPerMillionTokens < 0 || price.OutputNanosPerMillionTokens < 0 {
+		if price.InputNanosPerMillionTokens < 0 || price.OutputNanosPerMillionTokens < 0 ||
+			price.CacheReadNanosPerMillionTokens < 0 || price.CacheWriteNanosPerMillionTokens < 0 ||
+			price.ReasoningNanosPerMillionTokens < 0 {
 			return invalid("route.pricing", "token prices must not be negative")
 		}
 		if _, exists := pricedModels[price.Model]; exists {

@@ -220,6 +220,30 @@ func TestGatewayStreamsSSEAndCapturesTerminalUsage(t *testing.T) {
 	}
 }
 
+func TestGatewayChargesConservativelyWhenProviderReportsAnotherModel(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"model":"unvalidated-model","usage":{"prompt_tokens":7,"completion_tokens":2}}`)
+	}))
+	defer upstream.Close()
+	store := &fakeProviderStore{grant: provider.Grant{
+		InvocationID: "ivk_model", AttemptNo: 1, AccountID: "account/acme", NamespaceID: "namespace/prod", ServiceKeyID: "key/runtime",
+		AgentID: "agt_1", RouteID: "rte_1", Provider: "openai", BaseURL: upstream.URL,
+		Model: "gpt-safe", Credential: []byte("key"), Price: &provider.Price{InputNanosPerMillionTokens: 1, OutputNanosPerMillionTokens: 1},
+	}}
+	handler, _ := newWithTransport(&fakeAuthenticator{identity: gatewayIdentity()}, store, http.DefaultTransport, nil)
+	mux := http.NewServeMux()
+	_ = Register(mux, handler)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, scopedRequest(t, "/v2/agents/a/openai/responses", `{"model":"gpt-safe","max_output_tokens":8,"input":"hello"}`))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+	if len(store.completes) != 1 || !store.completes[0].Uncertain || store.completes[0].Usage.Reported || store.completes[0].Usage.Model != "gpt-safe" {
+		t.Fatalf("settlement = %#v", store.completes)
+	}
+}
+
 func TestGatewayRejectsBeforeStoreOnMissingOrDuplicateScope(t *testing.T) {
 	for name, mutate := range map[string]func(*http.Request){
 		"missing invocation": func(r *http.Request) { r.Header.Del(HeaderInvocationKey) },
@@ -349,14 +373,14 @@ func TestTailCaptureRetainsEnd(t *testing.T) {
 }
 
 func TestCalculateCostRounding(t *testing.T) {
-	cost, ok := provider.CalculateCost(provider.Price{InputNanosPerMillionTokens: 1, OutputNanosPerMillionTokens: 1}, 1, 0)
+	cost, ok := provider.CalculateUsageCost(provider.Price{InputNanosPerMillionTokens: 1, OutputNanosPerMillionTokens: 1}, provider.Usage{InputTokens: 1})
 	if !ok || cost != 1 {
 		t.Fatalf("cost = %d, %v", cost, ok)
 	}
-	if _, ok := provider.CalculateCost(provider.Price{InputNanosPerMillionTokens: math.MaxInt64}, math.MaxInt64, 0); ok {
+	if _, ok := provider.CalculateUsageCost(provider.Price{InputNanosPerMillionTokens: math.MaxInt64}, provider.Usage{InputTokens: math.MaxInt64}); ok {
 		t.Fatal("overflowing cost was accepted")
 	}
-	if _, ok := provider.CalculateCost(provider.Price{InputNanosPerMillionTokens: 1}, -1, 0); ok {
+	if _, ok := provider.CalculateUsageCost(provider.Price{InputNanosPerMillionTokens: 1}, provider.Usage{InputTokens: -1}); ok {
 		t.Fatal("negative token usage was accepted")
 	}
 }

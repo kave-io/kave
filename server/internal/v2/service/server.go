@@ -20,6 +20,7 @@ type Server struct {
 	apply     *corev2.ApplyService
 	keys      *corev2.ServiceKeyService
 	secrets   *corev2.SecretService
+	routes    *corev2.ProviderRouteActivationService
 	limits    *corev2.LimitSyncService
 	reads     *corev2.ReadService
 }
@@ -36,6 +37,10 @@ func WithServiceKeys(service *corev2.ServiceKeyService) Option {
 
 func WithSecrets(service *corev2.SecretService) Option {
 	return func(server *Server) { server.secrets = service }
+}
+
+func WithProviderRouteActivation(service *corev2.ProviderRouteActivationService) Option {
+	return func(server *Server) { server.routes = service }
 }
 
 func WithLimitSync(service *corev2.LimitSyncService) Option {
@@ -96,11 +101,13 @@ func connectError(ctx context.Context, err error, decision corev2.Decision) erro
 		return connect.NewError(connect.CodeAlreadyExists, err)
 	case errors.Is(err, corev2.ErrRevisionConflict):
 		return connect.NewError(connect.CodeAborted, err)
+	case errors.Is(err, corev2.ErrProviderActivationStale):
+		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, corev2.ErrSecretNotFound), errors.Is(err, corev2.ErrServiceKeyNotFound),
-		errors.Is(err, corev2.ErrNamespaceNotFound):
+		errors.Is(err, corev2.ErrNamespaceNotFound), errors.Is(err, corev2.ErrProviderRouteNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, corev2.ErrSecretEncryptionUnavailable),
-		errors.Is(err, corev2.ErrSecretValidationUnavailable),
+		errors.Is(err, corev2.ErrProviderValidationFailed),
 		errors.Is(err, corev2.ErrLimitOwnershipConflict):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, corev2.ErrLimitExceeded):

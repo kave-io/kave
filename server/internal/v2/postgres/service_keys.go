@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,28 +57,54 @@ type serviceKeyRecord struct {
 type queryRowFunc func(context.Context, string, ...any) pgx.Row
 type markServiceKeyUsedFunc func(context.Context, ServiceKeyIdentity, time.Time) error
 
+const (
+	defaultServiceKeyUsageInterval = 5 * time.Minute
+	defaultServiceKeyUsageQueue    = 1024
+	defaultServiceKeyUsageKeys     = 8192
+	serviceKeyUsageWriteTimeout    = 5 * time.Second
+)
+
+// ServiceKeyUsageTrackingOptions bounds last-used telemetry independently of
+// authentication. Revocation is still checked by the lookup on every request;
+// only the non-security-critical last_used_at write is sampled and moved off
+// the request path.
+type ServiceKeyUsageTrackingOptions struct {
+	Interval  time.Duration
+	QueueSize int
+	MaxKeys   int
+	OnUpdate  func(error)
+}
+
 // ServiceKeyAuthenticator performs the only database lookup allowed before
 // the account and namespace RLS scope is known. The raw token is compared in
 // process and is never sent to Postgres.
 type ServiceKeyAuthenticator struct {
-	queryRow queryRowFunc
-	markUsed markServiceKeyUsedFunc
-	now      func() time.Time
+	queryRow   queryRowFunc
+	recordUsed func(ServiceKeyIdentity, time.Time)
+	now        func() time.Time
 }
 
 func NewServiceKeyAuthenticator(pool *pgxpool.Pool) (*ServiceKeyAuthenticator, error) {
+	return NewServiceKeyAuthenticatorWithUsageTracking(context.Background(), pool, ServiceKeyUsageTrackingOptions{})
+}
+
+// NewServiceKeyAuthenticatorWithUsageTracking ties the bounded telemetry
+// worker to a serving lifecycle context. Cancel that context only after HTTP
+// shutdown has drained active requests.
+func NewServiceKeyAuthenticatorWithUsageTracking(ctx context.Context, pool *pgxpool.Pool, options ServiceKeyUsageTrackingOptions) (*ServiceKeyAuthenticator, error) {
 	if pool == nil {
 		return nil, ErrNilPool
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	runner, err := NewScopedRunner(pool)
 	if err != nil {
 		return nil, err
 	}
-	return &ServiceKeyAuthenticator{
-		queryRow: pool.QueryRow,
-		markUsed: func(ctx context.Context, identity ServiceKeyIdentity, usedAt time.Time) error {
-			return runner.WithScope(ctx, Scope{AccountID: identity.AccountID, NamespaceID: identity.NamespaceID}, func(txCtx context.Context, db DBTX) error {
-				tag, err := db.Exec(txCtx, `
+	markUsed := func(ctx context.Context, identity ServiceKeyIdentity, usedAt time.Time) error {
+		return runner.WithScope(ctx, Scope{AccountID: identity.AccountID, NamespaceID: identity.NamespaceID}, func(txCtx context.Context, db DBTX) error {
+			tag, err := db.Exec(txCtx, `
 UPDATE kave_v2.service_keys AS service_key
 SET last_used_at = $4
 WHERE service_key.account_id = $1
@@ -85,6 +112,7 @@ WHERE service_key.account_id = $1
   AND service_key.id = $3
   AND service_key.status = 'active'
   AND (service_key.expires_at IS NULL OR service_key.expires_at > $4)
+	AND (service_key.last_used_at IS NULL OR service_key.last_used_at <= $4 - INTERVAL '5 minutes')
   AND EXISTS (
       SELECT 1 FROM kave_v2.namespaces AS namespace
       WHERE namespace.account_id = service_key.account_id
@@ -92,17 +120,17 @@ WHERE service_key.account_id = $1
         AND namespace.status = 'active'
   )
 `, identity.AccountID, identity.NamespaceID, identity.ServiceKeyID, usedAt)
-				if err != nil {
-					return fmt.Errorf("v2 postgres: mark service key used: %w", err)
-				}
-				if tag.RowsAffected() != 1 {
-					return ErrInvalidServiceKey
-				}
-				return nil
-			})
-		},
-		now: time.Now,
-	}, nil
+			if err != nil {
+				return fmt.Errorf("v2 postgres: mark service key used: %w", err)
+			}
+			if tag.RowsAffected() > 1 {
+				return errors.New("v2 postgres: service-key usage update affected multiple rows")
+			}
+			return nil
+		})
+	}
+	tracker := newServiceKeyUsageTracker(ctx, markUsed, options)
+	return &ServiceKeyAuthenticator{queryRow: pool.QueryRow, recordUsed: tracker.record, now: time.Now}, nil
 }
 
 // ParseServiceKey extracts the non-secret lookup prefix from the canonical raw
@@ -169,11 +197,92 @@ func (a *ServiceKeyAuthenticator) Authenticate(ctx context.Context, lookupPrefix
 	if !validHash || !active || !unexpired || !validIdentity {
 		return ServiceKeyIdentity{}, ErrInvalidServiceKey
 	}
-	if a.markUsed != nil {
-		if err := a.markUsed(ctx, record.ServiceKeyIdentity, now); err != nil {
-			return ServiceKeyIdentity{}, err
-		}
+	if a.recordUsed != nil {
+		a.recordUsed(record.ServiceKeyIdentity, now)
 	}
 
 	return record.ServiceKeyIdentity, nil
+}
+
+type serviceKeyUsageEvent struct {
+	identity ServiceKeyIdentity
+	usedAt   time.Time
+}
+
+type serviceKeyUsageTracker struct {
+	mu       sync.Mutex
+	next     map[string]time.Time
+	events   chan serviceKeyUsageEvent
+	interval time.Duration
+	maxKeys  int
+}
+
+func newServiceKeyUsageTracker(ctx context.Context, mark markServiceKeyUsedFunc, options ServiceKeyUsageTrackingOptions) *serviceKeyUsageTracker {
+	interval := options.Interval
+	if interval <= 0 {
+		interval = defaultServiceKeyUsageInterval
+	}
+	queueSize := options.QueueSize
+	if queueSize <= 0 {
+		queueSize = defaultServiceKeyUsageQueue
+	}
+	maxKeys := options.MaxKeys
+	if maxKeys <= 0 {
+		maxKeys = defaultServiceKeyUsageKeys
+	}
+	tracker := &serviceKeyUsageTracker{
+		next: make(map[string]time.Time, min(maxKeys, queueSize)), events: make(chan serviceKeyUsageEvent, queueSize),
+		interval: interval, maxKeys: maxKeys,
+	}
+	go tracker.run(ctx, mark, options.OnUpdate)
+	return tracker
+}
+
+// record is non-blocking. Under overload, authentication succeeds and only a
+// sampled telemetry event is dropped. The map and queue are both hard-bounded.
+func (t *serviceKeyUsageTracker) record(identity ServiceKeyIdentity, now time.Time) {
+	if t == nil || identity.AccountID == "" || identity.NamespaceID == "" || identity.ServiceKeyID == "" {
+		return
+	}
+	key := identity.AccountID + "\x00" + identity.NamespaceID + "\x00" + identity.ServiceKeyID
+	t.mu.Lock()
+	if next, exists := t.next[key]; exists && next.After(now) {
+		t.mu.Unlock()
+		return
+	}
+	if len(t.next) >= t.maxKeys {
+		for existing, next := range t.next {
+			if !next.After(now) {
+				delete(t.next, existing)
+			}
+		}
+	}
+	if len(t.next) >= t.maxKeys {
+		t.mu.Unlock()
+		return
+	}
+	event := serviceKeyUsageEvent{identity: identity, usedAt: now}
+	select {
+	case t.events <- event:
+		t.next[key] = now.Add(t.interval)
+	default:
+		// Do not advance next: a later request may enqueue after pressure drops.
+	}
+	t.mu.Unlock()
+}
+
+func (t *serviceKeyUsageTracker) run(ctx context.Context, mark markServiceKeyUsedFunc, onUpdate func(error)) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event := <-t.events:
+			writeCtx, cancel := context.WithTimeout(ctx, serviceKeyUsageWriteTimeout)
+			err := mark(writeCtx, event.identity, event.usedAt)
+			cancel()
+			if onUpdate != nil {
+				onUpdate(err)
+			}
+		}
+	}
 }

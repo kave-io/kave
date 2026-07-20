@@ -1,425 +1,320 @@
-# Kave V2 operator guide
+# Kave operator guide
 
-Kave V2 runs beside V1 while applications migrate. It is a Postgres-only,
-machine-to-machine kernel: there is no human login, no persistent bootstrap
-HTTP credential, and no automatic schema migration in the serving process.
+Kave is a PostgreSQL-only, machine-to-machine kernel. Its serving process does
+not migrate schemas, mint a standing bootstrap credential, discover config
+files, or fall back to host-local secrets. Configuration is environment-only.
 
-The supported deployment sequence is:
+The supported deployment order is:
 
-1. create separate migration-owner and runtime database roles;
-2. run the terminating `v2-migrate` command;
-3. run the terminating `v2-bootstrap` command once for each initial namespace;
-4. store the resulting admin service key in the application's secret manager;
-5. configure and start the serving process with the runtime role;
-6. replace the bootstrap admin with narrowly capable control, reporting, and
-   workload keys.
+1. create a migration owner and a separate runtime login;
+2. run the terminating `kave-server migrate` job;
+3. run `kave-server bootstrap` once for each initial namespace;
+4. move the generated admin key into a secret manager;
+5. start `kave-server serve` with the runtime login; and
+6. replace the bootstrap admin with narrowly scoped workload and reporting
+   keys.
 
-Do not put a provider key, a Kave service key, a master key, or a database
-password in a manifest, source repository, command argument, or log field.
+Never put a provider credential, service key, encryption key, or database
+password in a manifest, command argument, source repository, or log field.
 
-## PostgreSQL roles and migration
+## Database roles and migration
 
-Use three identities:
-
-- a migration login that exists only in the migration job and can `SET ROLE`;
-- a dedicated `NOLOGIN` V2 schema owner;
-- a direct, dedicated V2 runtime `LOGIN` with no privileged memberships.
-
-For a database named `kave`, an administrator can establish the roles with a
-site-specific password and migration-login name:
+Use a migration login that can `SET ROLE`, a `NOLOGIN` schema owner, and a
+direct runtime `LOGIN` with no privileged memberships. For a database named
+`kave`:
 
 ```sql
-CREATE ROLE kave_v2_owner
+CREATE ROLE kave_owner
   NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS;
 
-CREATE ROLE kave_v2_runtime
+CREATE ROLE kave_runtime
   LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
   NOREPLICATION NOBYPASSRLS PASSWORD '<from secret manager>';
 
-GRANT CREATE ON DATABASE kave TO kave_v2_owner;
-GRANT CONNECT ON DATABASE kave TO kave_v2_runtime;
-GRANT kave_v2_owner TO kave_migrator;
+GRANT CREATE ON DATABASE kave TO kave_owner;
+GRANT CONNECT ON DATABASE kave TO kave_runtime;
+GRANT kave_owner TO kave_migrator;
 ```
 
-The schema owner must remain distinct from the session login and must not be
-able to log in. The runtime role must not own the database, schema, tables, or
-functions; inherit the owner; be a superuser; or have `BYPASSRLS`. Kave checks
-these invariants at runtime startup. It also rejects a runtime connection that
-used `SET ROLE` instead of logging in directly. Verification is exact and
-future-closed: every required DML grant and the
-`kave_v2.lookup_service_key(text)` execution grant must exist, while an
-effective grant on any other V2 table, view, sequence, or function prevents
-startup. Running `v2-migrate` reconverges direct and `PUBLIC` object grants
-before the runtime pool is opened.
+The runtime login must not own the database, schema, tables, sequences, or
+functions. It must not inherit the owner, be a superuser, or have `BYPASSRLS`.
+Kave verifies the login identity, forced-RLS posture, object ownership,
+memberships, and exact grants before serving traffic. Unexpected access fails
+startup.
 
-Run migrations in a terminating job, never in the serving container:
+Run migrations as a terminating deployment job:
 
 ```sh
-export KAVE_V2_MIGRATION_DSN='postgres://kave_migrator:...@db.example/kave?sslmode=verify-full'
-export KAVE_V2_OWNER_ROLE='kave_v2_owner'
-export KAVE_V2_RUNTIME_ROLE='kave_v2_runtime'
-kave-server v2-migrate
+export KAVE_MIGRATION_POSTGRES_DSN='postgres://kave_migrator:...@db.example/kave?sslmode=verify-full'
+export KAVE_MIGRATION_OWNER_ROLE='kave_owner'
+export KAVE_RUNTIME_POSTGRES_ROLE='kave_runtime'
+kave-server migrate
 ```
 
-For a remote database, the DSN must require TLS without a plaintext fallback.
-The command sets the dedicated owner role, applies checksum-pinned embedded
-migrations under an advisory lock, and converges the runtime role to Kave's
-exact table/function grants. The serving process never reads
-`KAVE_V2_MIGRATION_DSN` or the owner role.
+Remote DSNs must require TLS without plaintext fallback. The migration login
+exists only in this job. Run the job before every binary rollout. Embedded
+migrations are checksum-pinned and serialized by an advisory lock; a checksum
+mismatch is a hard failure, not a reason to edit an applied migration.
 
-Run `v2-migrate` for every binary upgrade before rolling out that binary. A
-migration checksum mismatch is a hard failure and must be investigated; do not
-edit an already-applied migration or its registry row.
+## Offline bootstrap
 
-## Offline namespace bootstrap
+Bootstrap uses the verified runtime login and writes a client-generated raw
+service key to a new `0600` file. Kave stores only its lookup prefix and
+one-way verifier. The raw value is never printed or recoverable from
+PostgreSQL.
 
-`v2-bootstrap` uses the verified, least-privilege runtime login. It creates or
-finds one `account + application + environment` namespace, then creates one
-namespace-bound admin key with all six control/reporting capabilities:
-`config.apply`, `secrets.write`, `keys.manage`, `limits.sync`, `usage.read`,
-and `audit.read`. The initial key cannot consume quota, invoke an agent, or
-assert request scopes. Split and replace it during operational handoff.
-
-Prepare an existing operator-owned directory that is not writable by group or
-other users. The final output file must not already exist:
+Prepare an absolute output directory that is not group- or world-writable:
 
 ```sh
 install -d -m 0700 /run/kave-bootstrap
 
-export KAVE_V2_RUNTIME_DSN='postgres://kave_v2_runtime:...@db.example/kave?sslmode=verify-full'
-export KAVE_V2_RUNTIME_ROLE='kave_v2_runtime'
-export KAVE_V2_BOOTSTRAP_ACCOUNT='account/acme'
-export KAVE_V2_BOOTSTRAP_APPLICATION='simorq'
-export KAVE_V2_BOOTSTRAP_ENVIRONMENT='production'
-export KAVE_V2_BOOTSTRAP_KEY_NAME='initial-admin'
-export KAVE_V2_BOOTSTRAP_OUTPUT='/run/kave-bootstrap/initial-admin.key'
+export KAVE_RUNTIME_POSTGRES_DSN='postgres://kave_runtime:...@db.example/kave?sslmode=verify-full'
+export KAVE_RUNTIME_POSTGRES_ROLE='kave_runtime'
+export KAVE_BOOTSTRAP_ACCOUNT='account/acme'
+export KAVE_BOOTSTRAP_APPLICATION='checkout'
+export KAVE_BOOTSTRAP_ENVIRONMENT='production'
+export KAVE_BOOTSTRAP_KEY_NAME='initial-admin'
+export KAVE_BOOTSTRAP_OUTPUT='/run/kave-bootstrap/initial-admin.key'
 
-kave-server v2-bootstrap
+kave-server bootstrap
 ```
 
-The output path must be clean and absolute. Kave reserves it with
-create-exclusive semantics, forces mode `0600`, generates and durably writes
-the raw key followed by one newline, and syncs the file and parent directory
-before submitting its one-way verifier. The raw key never crosses the control
-API or appears on stdout. On success, stdout contains only the namespace ID,
-service-key ID, and output path. Move the file into the application's secret
-manager, verify the stored value, then securely remove the handoff file
-according to local policy.
+The output must not already exist. Kave reserves it with create-exclusive
+semantics, writes and syncs the raw key before mutating the database, and
+syncs the parent directory. On an ambiguous issuance result the durable file
+is retained so the exact idempotent request can be checked. Move it to a
+secret manager, verify the stored value, and remove the handoff file according
+to local policy.
 
-Namespace and key idempotency identifiers are derived from the explicit
-bootstrap inputs. This gives bootstrap the following retry behavior:
-
-- If the output path already exists, bootstrap stops before any database
-  operation and never truncates the file.
-- Reapplying the namespace is safe and non-destructive.
-- A write, sync, or close failure happens before namespace or key mutation and
-  removes the incomplete reservation.
-- An idempotent issuance replay succeeds because the preserved file supplies
-  the same prefix and verifier; `Created == false` does not make its raw value
-  unrecoverable.
-- If issuance returns an error or inconsistent metadata, Kave preserves the
-  durable `0600` output because the commit result may be ambiguous. Test that
-  credential before deciding whether to retry with the same material or issue
-  a deliberately named replacement.
-
-This ordering removes the prior commit-before-delivery crash window. Raw keys
-remain intentionally unrecoverable from Postgres, so loss of the output file
-still requires a replacement and revocation of the inaccessible key.
-
-Bootstrap is not available over HTTP. Do not add a bootstrap bearer token,
-default agent, default namespace, or permissive authentication mode to work
-around an operator error.
-
-### Service-key contract compatibility
-
-The V2 kernel is a new, pre-release contract, so service-key issuance does not
-carry a server-generated compatibility mode. Every V2 issuance client must send
-`lookup_prefix` and the 32-byte `secret_hash`; the former response field 4
-(`raw_key`) is reserved and is never populated. This does not alter the V1
-control API or V1 agent tokens. Upgrade the V2 server and V2 SDK together.
-
-The credential recipient generates the canonical raw key and keeps it. The
-offline bootstrap command performs that client role locally before database
-mutation. Only the key's non-secret 24-character lookup component and SHA-256
-verifier enter `IssueServiceKey`; the serving API neither generates nor returns
-the raw credential, and Postgres cannot recover it. The raw key is later
-presented as a bearer token to Kave's authentication boundary, but it must
-never be sent as issuance payload, returned by a control response, or written
-to logs. An issuance retry supplies the same prefix and verifier and safely
-receives the same metadata.
-
-### Capability model
-
-V2 has no broad persisted `apply` or administrator capability. Grant the
-narrow operations required by each machine identity:
-
-| Capability | Permitted surface |
-| --- | --- |
-| `config.apply` | `Apply` and `GetState` |
-| `secrets.write` | `PutSecret` and `RevokeSecret` |
-| `keys.manage` | `IssueServiceKey` and `RevokeServiceKey` |
-| `limits.sync` | `SyncLimits` |
-| `usage.read` | scoped usage, invocation, and limit-status reads |
-| `audit.read` | namespace audit-event reads |
-| `consume` | exact product-quota consumption and allowed-agent limit status |
-| `invoke` | allowed-agent provider gateway calls and limit status |
-
-`consume` and `invoke` require a non-empty agent allowlist and
-`can_assert_scope`. A scoped `GetLimitStatus` call also requires
-`can_assert_scope`, whether authorized by `usage.read` or a workload
-capability. Agent restrictions are stored as immutable agent IDs, not names.
-Reporting queries remain namespace-bound; usage and invocation reads
-additionally require exact tenant and billing-subject filters.
+Bootstrap grants `config.apply`, `secrets.write`, `keys.manage`,
+`limits.sync`, `usage.read`, and `audit.read`. It cannot consume quota, invoke
+an agent, or assert workload scope. Use it only to provision replacements,
+then revoke it.
 
 ## Serving configuration
 
-Inject sensitive values from the deployment secret manager into `kave.yaml`.
-The configuration loader supports required environment expansion:
+`kave-server` and `kave-server serve` are equivalent. The following variables
+form the complete serving contract:
 
-```yaml
-v2:
-  enabled: true
-  runtime_dsn: "${KAVE_V2_RUNTIME_DSN:?required}"
-  runtime_role: "kave_v2_runtime"
-  transport_security: "tls_terminated"
-  master_key: "${KAVE_V2_MASTER_KEY:?required}"
-  master_decryption_keys: []
-  secret_idempotency_key: "${KAVE_V2_SECRET_IDEMPOTENCY_KEY:?required}"
-  provider_egress:
-    # Empty in production: only globally routable provider IPs are accepted.
-    allowed_private_ips: []
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `KAVE_SERVER_ADDR` | no | HTTP bind; default `127.0.0.1:8080` |
+| `KAVE_RUNTIME_POSTGRES_DSN` | yes | direct runtime-login PostgreSQL DSN |
+| `KAVE_RUNTIME_POSTGRES_ROLE` | yes | exact expected session login |
+| `KAVE_RUNTIME_MASTER_KEY` | yes | active 32-byte encryption key, hex or base64 |
+| `KAVE_RUNTIME_MASTER_DECRYPTION_KEYS` | no | comma-separated previous encryption keys, with no spaces |
+| `KAVE_RUNTIME_SECRET_IDEMPOTENCY_KEY` | yes | independent stable 32-byte idempotency key |
+| `KAVE_RUNTIME_TRANSPORT_SECURITY` | yes | `tls_terminated`, `private_network`, or `development` |
+| `KAVE_RUNTIME_PROVIDER_ALLOWED_PRIVATE_IPS` | no | comma-separated exact private provider IP exceptions |
+| `KAVE_RUNTIME_READINESS_TIMEOUT` | no | dependency timeout, default `3s`, range `1s`–`30s` |
+| `KAVE_RUNTIME_SHUTDOWN_TIMEOUT` | no | request-drain timeout, default `30s`, range `1s`–`5m` |
+
+Example systemd or orchestrator environment:
+
+```sh
+KAVE_SERVER_ADDR=0.0.0.0:8080
+KAVE_RUNTIME_POSTGRES_DSN=postgres://kave_runtime:...@db.example/kave?sslmode=verify-full
+KAVE_RUNTIME_POSTGRES_ROLE=kave_runtime
+KAVE_RUNTIME_MASTER_KEY=<secret-manager injection>
+KAVE_RUNTIME_SECRET_IDEMPOTENCY_KEY=<different secret-manager injection>
+KAVE_RUNTIME_TRANSPORT_SECURITY=tls_terminated
 ```
 
-`runtime_dsn` must log in directly as `runtime_role`. The serving process
-verifies its identity, RLS posture, object ownership, memberships, and exact
-runtime grants before registering V2 routes.
+Transport modes are explicit trust assertions:
 
-Choose the HTTP transport boundary explicitly:
+- `tls_terminated` permits any bind and requires a trusted TLS proxy or service
+  mesh to be the only public path;
+- `private_network` requires a private or loopback IP bind; and
+- `development` requires a loopback bind.
 
-- `tls_terminated`: a trusted proxy or service mesh terminates TLS before Kave;
-- `private_network`: Kave must bind a private or loopback IP;
-- `development`: Kave must bind a loopback IP.
+Service keys are bearer credentials. Do not expose plaintext Kave traffic or
+publish a private/development listener through a public load balancer.
 
-Service keys are bearer credentials. Never expose a `private_network` listener
-through a public load balancer, and never use `development` outside a local
-machine.
+## Encryption-key rotation
 
-### Provider egress boundary
+The active master encrypts new provider secret versions. Previous masters may
+decrypt older versions. The idempotency key authenticates write-only replay
+records and must remain independent and stable.
 
-The V2 provider client does not use `HTTP_PROXY`, `HTTPS_PROXY`, or
-`NO_PROXY`. On every new connection, Kave resolves the provider hostname,
-rejects the complete DNS answer if any address is private, loopback,
-link-local, multicast, unspecified, reserved, documentation/benchmark space,
-or a known instance-metadata address, and dials only the validated IP literal.
-The original hostname remains the HTTP Host and TLS server name. This prevents
-a second resolver lookup from turning an approved hostname into an internal
-destination.
+Rotate in this order:
 
-Production deployments should leave `allowed_private_ips` empty. A local or
-self-hosted provider is an explicit exception using exact canonical IP
-literals, never a hostname, CIDR, or blanket allow-private setting:
+1. add the old master to `KAVE_RUNTIME_MASTER_DECRYPTION_KEYS`;
+2. install the new master as `KAVE_RUNTIME_MASTER_KEY`;
+3. restart and verify existing routes can still be prepared;
+4. write a new version of every encrypted provider secret;
+5. reactivate each route against its new secret version; and
+6. remove the old decryption key only when it is no longer needed.
 
-```yaml
-v2:
-  provider_egress:
-    allowed_private_ips:
-      - "127.0.0.1"
-      - "::1"
-      # Or one exact RFC 1918/IPv6 unique-local address used by the provider.
-```
+Changing the idempotency key makes existing secret-write replay records
+unverifiable.
 
-Only loopback, RFC 1918, and IPv6 unique-local addresses can be excepted.
-Link-local, multicast, unspecified, reserved, and known metadata addresses
-remain forbidden even when listed. Add every exact address returned by a
-multi-address private provider name; a mixed allowed/denied DNS response fails
-closed. Plain HTTP route URLs remain restricted to loopback providers, so a
-private self-hosted provider must normally serve HTTPS.
+## Provisioning and provider activation
 
-## Master keys and provider credentials
+After offline bootstrap has established the namespace and returned its ID,
+provision its runtime configuration in this order:
 
-`master_key` and `secret_idempotency_key` each encode exactly 32 random bytes
-as hex or base64. Use independent values from the first deployment. Kave does
-not generate an OS-keyring key or a host-local fallback. Without a configured
-keyring, encrypted secret writes and encrypted provider invocation cannot
-succeed.
+1. `PutSecret` an encrypted provider credential;
+2. `Apply` a manifest with routes, static agents, and operator limits;
+3. call `ActivateProviderRoute` for each route/model that should receive live
+   traffic;
+4. issue workload keys with only `consume` and/or `invoke`, an explicit agent
+   allowlist, and scope assertion enabled;
+5. issue separate reporting and control keys; and
+6. revoke the bootstrap key.
 
-The local keyring uses envelope encryption. New secret versions use
-`master_key`; `master_decryption_keys` may decrypt versions written under old
-keys. The stable `secret_idempotency_key` authenticates write-only
-idempotency records and must not change during encryption-key rotation.
+An account-scoped bootstrap integration that has authority before a namespace
+exists follows the same invariant explicitly: `Apply` a namespace-only
+manifest, write the encrypted secret into the returned namespace, then `Apply`
+the full route/agent manifest and activate the route. Kave does not persist a
+route with an unresolved secret reference.
 
-Rotate a master key in this order:
+`Apply` is transactional and idempotent. Routes are persisted as invalid until
+activation performs a provider-specific, payload-free live credential/model
+check. The validation result is bound to the exact route revision, secret
+version, and model; concurrent changes make activation stale. Failure records
+bounded evidence and leaves the route unavailable. Provider bodies and
+credentials are never retained in validation evidence.
 
-1. retain the old master in `master_decryption_keys`;
-2. install the new master as `master_key` while leaving
-   `secret_idempotency_key` unchanged;
-3. restart and verify old provider routes still work;
-4. write a new version of each encrypted secret using a fresh request
-   idempotency key, so it is wrapped by the new master;
-5. remove the old decryption key only after every required encrypted secret
-   has been rewritten and verified.
+A route admits only models with successful activation evidence for its exact
+current encrypted-secret version. Evidence is retained per allowed model in a
+bounded route document; a failed revalidation removes that model while leaving
+independently validated models available. Any route-topology, model-policy, or
+credential change clears the complete set and fails closed until reactivation.
 
-If an older deployment implicitly used its sole master as the idempotency
-source, set `secret_idempotency_key` to that old encoded master before the
-first rotation and keep it stable. Changing it makes old secret-write replay
-records unverifiable.
+The built-in adapter supports OpenAI and explicitly configured
+OpenAI-compatible providers. Validation uses an authenticated model lookup.
+The gateway supports Responses, Chat Completions, and Embeddings, including
+streamed responses. It parses reported input, output, cache-read, cache-write,
+and reasoning tokens for immutable settlement. Missing detailed counters are
+zero quantities; an omitted detailed price inherits the corresponding normal
+input/output rate. Malformed, contradictory, or wrong-model usage is treated
+as unreported and settles matching limits at their conservative reservations,
+with estimated provenance, rather than silently undercharging.
 
-Kave persists only ciphertext and a wrapping-key identifier for encrypted
-secrets. External secrets persist only an allowlisted non-secret reference.
-Control reads never return secret values, and manifests contain secret names,
-not plaintext or ciphertext.
+Every allowed model requires a non-negative price snapshot and a positive
+pricing revision. Prices are nano-USD per million tokens. Changing a price
+requires a higher revision so historical usage retains the exact admission
+and settlement snapshot.
 
-## Declarative provisioning with `Apply`
+Kave does not persist prompts or provider responses. Application identities,
+emails, subscriptions, or regulated data do not belong in a manifest. Use
+opaque tenant, actor, billing, session, and feature references at request time.
 
-Use the bootstrap admin key only long enough to establish normal control and
-workload keys. Provision a namespace in this order:
+## Capabilities
 
-1. `PutSecret` for each encrypted provider credential;
-2. `Apply` one manifest containing static provider routes, static agents, and
-   operator-owned limits;
-3. `IssueServiceKey` for each workload, granting only the necessary
-   `consume`/`invoke` operations and explicit agent names;
-4. retain each recipient-generated raw key in that recipient's secret manager;
-5. issue separate replacement keys for configuration, secret administration,
-   key administration, entitlement sync, usage reporting, and audit as the
-   deployment requires, then revoke the bootstrap admin key.
-
-`Apply` is transactional for one namespace and is safe under concurrent
-repetition. Its idempotency key is bound to the full request semantics; reusing
-that key for a different manifest fails. A `dry_run` does not persist an
-idempotency record, so the same stable deployment key may be used for the
-subsequent real write. Use `expected_revision` when an operator must reject a
-stale write. Omitted resources remain untouched unless `prune` is explicitly
-enabled; review the dry-run diff before pruning. Prune archives every omitted
-current operator limit, agent, and route even when it was already explicitly
-disabled. Archived resources are absent from `GetState`; reintroducing the same
-agent name through a later manifest allocates a fresh agent identity. Existing
-service-key allowlists continue to point at the archived ID and do not gain
-authority over the replacement; issue a replacement workload key explicitly.
-By contrast, setting `enabled: false` without pruning preserves the agent ID,
-so a later re-enable also preserves its allowlists. Archiving an operator limit
-releases current ownership of that external key, allowing a later `SyncLimits`
-publisher to claim it without deleting historical generations or counter
-evidence.
-
-Every route must reference an active **encrypted** secret in the same
-namespace. It must declare at least one allowed model, a default model included
-in that allowlist, a positive pricing revision, and exactly one non-negative
-input/output token price for every allowed model. An omitted price or a price
-for a model outside the allowlist rejects the complete `Apply`. Changing price
-values requires a strictly higher pricing revision, allowing immutable usage
-entries to retain the exact snapshot used for admission and settlement.
-
-Agents are static workload definitions, not tenant copies. A service key with
-`consume` or `invoke` must have a non-empty agent allowlist.
-
-The schema can retain an external secret reference, but the built-in V2
-provider gateway currently accepts only the `encrypted` backend. It has no
-implicit environment/Vault resolver. Provider-specific credential validation
-is also not implemented yet: `PutSecret(validate=true)` fails closed instead
-of claiming validation. Until a validator lands, write the encrypted secret
-with validation disabled and perform a scoped provider smoke test before
-activating production traffic.
-
-Application clinics, users, subscriptions, prompts, responses, and PHI do not
-belong in an `Apply` manifest. Pass only pseudonymous tenant/actor/billing
-references at admission or invocation time.
-
-### Public API bounds
-
-V2 rejects oversized input before storage or provider egress. Public limits
-are measured in bytes and are deliberately smaller than some defensive
-database column limits:
-
-| Input | Limit |
+| Capability | Surface |
 | --- | --- |
-| Opaque refs, including tenant, actor, bill-to, session, feature, model, owner, limit key, and idempotency key | 160 bytes; starts alphanumeric, then ASCII letters/digits plus `.`, `_`, `:`, `/`, `@`, `-` |
-| Static names, including application, environment, route, provider, secret, agent, and service-key name | 128 bytes; starts alphanumeric, then path-safe ASCII letters/digits plus `.`, `_`, `-` |
-| Metric | 64 bytes; lowercase ASCII metric syntax |
-| One `Apply` | 128 routes, 128 agents, and 512 limits |
-| Models on one route | 256 allowed-model entries and 256 price entries |
-| One `SyncLimits` | 512 limits |
-| One service key | 1–8 capabilities and at most 64 allowed agents |
-| Encrypted secret plaintext | 64 KiB |
-| External secret URI | 2,048 bytes |
-| Revocation reason | 256 bytes on one line |
-| Reporting | default page 50, maximum page 200, page token 512 bytes, maximum range 366 days |
-| Provider JSON request body | 8 MiB |
+| `config.apply` | `Apply`, `GetState`, and route activation |
+| `secrets.write` | provider secret writes and revocation |
+| `keys.manage` | service-key issuance and revocation |
+| `limits.sync` | entitlement limit synchronization |
+| `usage.read` | tenant, usage, invocation, and limit-status reporting |
+| `audit.read` | namespace audit reporting |
+| `consume` | exact product-quota admission for allowed agents |
+| `invoke` | provider gateway traffic for allowed agents |
 
-Tenant and bill-to are mandatory on every admission, provider invocation,
-usage query, invocation query, and scoped limit-status request. Optional scope
-dimensions must still satisfy the same 160-byte opaque-ref contract.
+`consume` and `invoke` require a non-empty immutable agent-ID allowlist and
+scope assertion. Reporting is namespace-bound. Usage and invocation queries
+also require exact tenant and billing references; tenant summaries expose only
+opaque scope references and aggregate operational values.
 
-## Subscription limits with `SyncLimits`
+For a production console, issue a reporting key with `usage.read` and
+`audit.read`. Add `config.apply` only when manifest inspection is required.
+The console contains no mutation controls, sends keys only to its own origin,
+keeps them in memory by default, optionally uses tab-scoped `sessionStorage`,
+and never uses `localStorage`. Serve it only through HTTPS and protect access
+with the same network or identity boundary used for operational dashboards.
 
-Static, operator-owned limits may live in `Apply`. Dynamic subscription or
-entitlement limits should arrive through `SyncLimits` after the application's
-own transaction commits, normally from an outbox worker.
+## Health, metrics, and logs
 
-Each sync request contains:
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /livez` | process liveness; no dependency checks |
+| `GET /readyz` | runtime role, migrations, database, and keyring readiness |
+| `GET /metrics` | Prometheus text exposition |
 
-- the namespace ID;
-- an opaque owner identifying the publishing source (`operator` is reserved);
-- a strictly monotonic positive source revision;
-- that owner's complete desired limit set;
-- a unique idempotency key bound to the request.
+The image health check runs `kave-server healthz`, which probes `/readyz`.
+`KAVE_HEALTH_URL` may change the scheme or port only; it must remain an exact
+`/readyz` URL on a loopback IP literal and cannot contain credentials, a query,
+or a fragment. Readiness therefore cannot be delegated to an unrelated host.
 
-Omission disables only limits owned by that source. It cannot remove an
-operator limit or another publisher's limit. Repeating the same revision and
-content is safe; an older revision, changed content at the same revision, key
-reuse with different input, or cross-owner key collision fails closed.
+Metrics use fixed outcome, operation, method, status-class, and surface labels.
+Tenant references, keys, invocation IDs, routes, provider request IDs, and
+models never become labels. Readiness responses omit dependency errors. Logs
+are structured JSON and must still be collected as sensitive operational
+data. Restrict `/metrics` to the Prometheus network even though its label
+surface is bounded.
 
-Updating a hard cap, soft cap, or explicit enabled flag keeps the limit's
-accounting identity and active counters. A lower cap can therefore take effect
-immediately without erasing already consumed or reserved units; subsequent
-admission remains blocked until the window resets or the cap again exceeds the
-current total. Changing a selector, metric, or window is intentionally a new
-accounting identity and creates a fresh immutable generation.
+Alert at minimum on sustained readiness failure, authentication-unavailable
+outcomes, admission/accounting failures, uncertain provider settlements,
+provider validation failures, elevated HTTP 5xx rates, and PostgreSQL pool
+exhaustion.
 
-Keep product quota and provider accounting separate. For example,
-`ai_actions` can be a clinic/billing-subject monthly product limit, while
-`requests`, `input_tokens`, `output_tokens`, and `cost_nano_usd` account for
-provider usage. Tenant and billing-subject scopes are mandatory for admission;
-actor, session, model, and feature add narrower dimensions. Temporal retries
-must reuse the logical operation's idempotency key so one product action is
-not counted twice.
+## Provider egress
 
-Do not call Kave from inside the application's database transaction. Commit
-subscription or clinic state first, then publish its materialized limits. A
-Kave outage should delay the outbox item, not roll back application onboarding
-after a remote side effect has already committed.
+Provider requests ignore ambient `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`.
+For every new connection Kave resolves the provider name, rejects the complete
+answer if any address is private, loopback, link-local, multicast,
+unspecified, reserved, documentation/benchmark space, or instance metadata,
+and dials only an approved IP literal while preserving the original HTTP Host
+and TLS server name.
 
-## Usage reporting and estimates
+Production should leave `KAVE_RUNTIME_PROVIDER_ALLOWED_PRIVATE_IPS` empty. A
+self-hosted provider is an explicit exception containing exact canonical
+loopback, RFC 1918, or IPv6 unique-local addresses. CIDRs and blanket
+allow-private flags are unsupported. Link-local, multicast, unspecified,
+reserved, and metadata addresses cannot be excepted. Plain HTTP provider URLs
+are restricted to loopback.
 
-`QueryUsage` returns one canonical row per logical product consumption or
-provider attempt. Internal per-limit reservation and settlement evidence is
-not repeated as billable rows. Provider rows expose request count, input,
-output, cache-read, cache-write and reasoning tokens, nano-USD cost,
-provider/model, and attempt number. When a metric filter is supplied, `metric`
-and `units` project that selected dimension without discarding the complete
-provider counters on the row.
+## Backup, recovery, and upgrades
 
-Treat `estimated: true` as an accounting provenance marker. It means Kave used
-a conservative reservation-derived value because provider usage was missing,
-uncertain, smaller than a safely chargeable reservation, or recovered after an
-expired attempt whose egress may have started. It is not a provider-reported
-exact measurement. `estimated: false` means the row did not require that
-fallback; exact product `Consume` rows are not estimates. Never silently mix
-estimated and exact totals in billing or operator UI—preserve or surface the
-marker.
+Back up PostgreSQL with point-in-time recovery and protect the active master,
+old decryption keys still in use, and the stable idempotency key independently.
+A database backup without its required decryption keys cannot recover provider
+credentials. Raw service keys are intentionally absent from the database and
+must be recovered from each recipient's secret manager or replaced.
 
-## Provider attempt recovery
+For an upgrade:
 
-Provider calls hold conservative quota and budget reservations behind renewable
-leases. A settlement failure leaves those reservations intact and fail-closed.
-After the lease expires, the next provider admission in that namespace first
-reconciles a bounded batch of expired attempts: it releases an attempt that
-provably never began egress, or charges its reserved maximum when egress may
-have begun. The recovery is atomic and namespace-scoped under normal runtime
-RLS; it does not require a global maintenance credential or background reaper.
+1. back up the database and verify key availability;
+2. run the new image's `migrate` job;
+3. start a canary with the runtime role;
+4. require `/readyz` success and inspect bounded metrics;
+5. roll the remaining instances; and
+6. verify route activation and accounting on representative workloads.
 
-Repeated recovery failures indicate an accounting or database problem. Keep
-hard-limit traffic fail-closed, inspect `gateway.recover` audit events and the
-corresponding immutable usage entries, and repair database availability rather
-than manually editing `limit_windows` or deleting ledger rows.
+The serving process never migrates automatically. Rollback is a binary
+decision only when the older binary understands the already-applied schema;
+otherwise restore according to the migration's documented recovery path.
+
+## Verify a release
+
+Release tags publish only versioned archives and images; there is no mutable
+`latest` image. Verify an archive, its Sigstore bundle, and its GitHub build
+provenance before installation:
+
+```sh
+version=v2.0.0
+gh release download "$version" --repo kave-io/kave --dir "kave-$version"
+cd "kave-$version"
+sha256sum --check checksums.txt
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity "https://github.com/kave-io/kave/.github/workflows/release.yml@refs/tags/$version" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  checksums.txt
+gh attestation verify kave-server_*.tar.gz --repo kave-io/kave
+```
+
+Resolve the published image to a digest, then verify that exact digest rather
+than trusting a local tag:
+
+```sh
+image=ghcr.io/kave-io/kave
+digest="$(docker buildx imagetools inspect "$image:$version" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+cosign verify \
+  --certificate-identity "https://github.com/kave-io/kave/.github/workflows/release.yml@refs/tags/$version" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "$image@$digest"
+```

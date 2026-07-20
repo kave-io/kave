@@ -70,6 +70,31 @@ func TestReadPaginationAndRangesAreBounded(t *testing.T) {
 	}
 }
 
+func TestListTenantsRequiresUsageReadAndBoundedRange(t *testing.T) {
+	t.Parallel()
+	req := ListTenantsRequest{Caller: readAdmin(), Range: readRange(), Page: Page{Size: 25}}
+	if err := req.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	req.Caller.Operations = []Operation{OperationAuditRead}
+	if err := req.Validate(); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("audit-only caller error = %v", err)
+	}
+
+	req.Caller = readAdmin()
+	req.Range.From = req.Range.To.Add(-MaxReadRange - time.Millisecond)
+	if err := req.Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("oversized tenant range error = %v", err)
+	}
+
+	req.Range = readRange()
+	req.Page.Size = MaxReadPageSize + 1
+	if err := req.Validate(); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("oversized tenant page error = %v", err)
+	}
+}
+
 func TestGetStateIsNamespaceBound(t *testing.T) {
 	t.Parallel()
 	if err := (GetStateRequest{Caller: readAdmin(), NamespaceID: "nsp_prod"}).Validate(); err != nil {

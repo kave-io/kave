@@ -1,8 +1,6 @@
-go 1.26.1
+go 1.26.5
 
 use (
-	./cli
-	./cmd/lint-architecture
 	./core
 	./proto/gen
 	./server

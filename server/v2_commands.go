@@ -27,11 +27,11 @@ var v2RoleName = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 // to SET ROLE to a dedicated NOLOGIN owner; runtime-role grants are converged
 // while that owner is active.
 func runV2Migrate() error {
-	dsn := os.Getenv("KAVE_V2_MIGRATION_DSN")
-	ownerRole := os.Getenv("KAVE_V2_OWNER_ROLE")
-	runtimeRole := os.Getenv("KAVE_V2_RUNTIME_ROLE")
+	dsn := os.Getenv("KAVE_MIGRATION_POSTGRES_DSN")
+	ownerRole := os.Getenv("KAVE_MIGRATION_OWNER_ROLE")
+	runtimeRole := os.Getenv("KAVE_RUNTIME_POSTGRES_ROLE")
 	if dsn == "" || ownerRole == "" || runtimeRole == "" {
-		return errors.New("KAVE_V2_MIGRATION_DSN, KAVE_V2_OWNER_ROLE, and KAVE_V2_RUNTIME_ROLE are required")
+		return errors.New("KAVE_MIGRATION_POSTGRES_DSN, KAVE_MIGRATION_OWNER_ROLE, and KAVE_RUNTIME_POSTGRES_ROLE are required")
 	}
 	if !v2RoleName.MatchString(ownerRole) || !v2RoleName.MatchString(runtimeRole) || ownerRole == runtimeRole {
 		return errors.New("owner/runtime roles must be distinct lowercase PostgreSQL identifiers")
@@ -64,18 +64,18 @@ func runV2Migrate() error {
 	if err := v2kernel.Prepare(ctx, pool, runtimeRole); err != nil {
 		return err
 	}
-	fmt.Printf("Kave V2 schema migrated; owner=%s runtime=%s\n", ownerRole, runtimeRole)
+	fmt.Printf("Kave schema migrated; owner=%s runtime=%s\n", ownerRole, runtimeRole)
 	return nil
 }
 
 const (
-	v2BootstrapRuntimeDSNEnv  = "KAVE_V2_RUNTIME_DSN"
-	v2BootstrapRuntimeRoleEnv = "KAVE_V2_RUNTIME_ROLE"
-	v2BootstrapAccountEnv     = "KAVE_V2_BOOTSTRAP_ACCOUNT"
-	v2BootstrapApplicationEnv = "KAVE_V2_BOOTSTRAP_APPLICATION"
-	v2BootstrapEnvironmentEnv = "KAVE_V2_BOOTSTRAP_ENVIRONMENT"
-	v2BootstrapKeyNameEnv     = "KAVE_V2_BOOTSTRAP_KEY_NAME"
-	v2BootstrapOutputEnv      = "KAVE_V2_BOOTSTRAP_OUTPUT"
+	v2BootstrapRuntimeDSNEnv  = "KAVE_RUNTIME_POSTGRES_DSN"
+	v2BootstrapRuntimeRoleEnv = "KAVE_RUNTIME_POSTGRES_ROLE"
+	v2BootstrapAccountEnv     = "KAVE_BOOTSTRAP_ACCOUNT"
+	v2BootstrapApplicationEnv = "KAVE_BOOTSTRAP_APPLICATION"
+	v2BootstrapEnvironmentEnv = "KAVE_BOOTSTRAP_ENVIRONMENT"
+	v2BootstrapKeyNameEnv     = "KAVE_BOOTSTRAP_KEY_NAME"
+	v2BootstrapOutputEnv      = "KAVE_BOOTSTRAP_OUTPUT"
 )
 
 type v2BootstrapConfig struct {
@@ -140,7 +140,7 @@ func runV2Bootstrap() error {
 		return err
 	}
 
-	fmt.Printf("Kave V2 bootstrap complete; namespace=%s service_key=%s output=%s\n",
+	fmt.Printf("Kave bootstrap complete; namespace=%s service_key=%s output=%s\n",
 		result.NamespaceID, result.ServiceKeyID, config.OutputPath)
 	return nil
 }
@@ -182,7 +182,7 @@ func loadV2BootstrapConfig(getenv func(string) string) (v2BootstrapConfig, error
 		OutputPath: values[v2BootstrapOutputEnv],
 	}
 	if !v2RoleName.MatchString(config.RuntimeRole) {
-		return v2BootstrapConfig{}, errors.New("KAVE_V2_RUNTIME_ROLE must be a lowercase PostgreSQL identifier")
+		return v2BootstrapConfig{}, errors.New("KAVE_RUNTIME_POSTGRES_ROLE must be a lowercase PostgreSQL identifier")
 	}
 	if err := config.Namespace.Validate(); err != nil {
 		return v2BootstrapConfig{}, fmt.Errorf("invalid V2 bootstrap namespace: %w", err)
@@ -191,13 +191,13 @@ func loadV2BootstrapConfig(getenv func(string) string) (v2BootstrapConfig, error
 		return v2BootstrapConfig{}, err
 	}
 	if !filepath.IsAbs(config.OutputPath) || filepath.Clean(config.OutputPath) != config.OutputPath {
-		return v2BootstrapConfig{}, errors.New("KAVE_V2_BOOTSTRAP_OUTPUT must be a clean absolute path")
+		return v2BootstrapConfig{}, errors.New("KAVE_BOOTSTRAP_OUTPUT must be a clean absolute path")
 	}
 	if len(config.OutputPath) > 4096 || strings.ContainsAny(config.OutputPath, "\r\n") {
-		return v2BootstrapConfig{}, errors.New("KAVE_V2_BOOTSTRAP_OUTPUT must be at most 4096 bytes and contain no line breaks")
+		return v2BootstrapConfig{}, errors.New("KAVE_BOOTSTRAP_OUTPUT must be at most 4096 bytes and contain no line breaks")
 	}
 	if filepath.Dir(config.OutputPath) == config.OutputPath {
-		return v2BootstrapConfig{}, errors.New("KAVE_V2_BOOTSTRAP_OUTPUT must name a file, not a filesystem root")
+		return v2BootstrapConfig{}, errors.New("KAVE_BOOTSTRAP_OUTPUT must name a file, not a filesystem root")
 	}
 	return config, nil
 }

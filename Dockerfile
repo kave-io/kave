@@ -1,90 +1,38 @@
-# syntax=docker/dockerfile:1
-# Full standalone build — produces both server and cli images as named targets.
-# Usage:
-#   docker build --target server -t kave-server .
-#   docker build --target server-arch -t kave-server:arch .
-#   docker build --target cli   -t kave-cli .
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
 
-# ── Stage 1: dashboard ────────────────────────────────────────────────────────
-FROM oven/bun:1.2 AS dashboard
-WORKDIR /build/dashboard
-COPY dashboard/package.json dashboard/bun.lock ./
-RUN bun install --frozen-lockfile
-COPY dashboard/ .
-# vite.config outDir is ../server/ui/dist (relative to dashboard/), so output
-# lands at /build/server/ui/dist inside this stage.
-RUN bun run build
+FROM golang:1.26.5-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e578e8df93995b225dfd0944eb651 AS build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOWORK=off
 
-# ── Stage 2: Go builder ───────────────────────────────────────────────────────
-FROM golang:1.26-bookworm AS builder
-WORKDIR /build
-ARG GOPROXY=https://proxy.golang.org,direct
-ENV GOPROXY=${GOPROXY}
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && \
-    rm -rf /var/lib/apt/lists/*
-
-# Module files (cache layer — invalidated only on dep changes)
 COPY core/go.mod core/go.sum ./core/
-COPY server/go.mod server/go.sum ./server/
-COPY cli/go.mod cli/go.sum ./cli/
 COPY proto/gen/go.mod proto/gen/go.sum ./proto/gen/
-COPY cmd/lint-architecture/go.mod cmd/lint-architecture/go.sum ./cmd/lint-architecture/
+COPY server/go.mod server/go.sum ./server/
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd server && go mod download
 
-# Copy source
 COPY core/ ./core/
+COPY proto/gen/ ./proto/gen/
 COPY server/ ./server/
-COPY cli/ ./cli/
-COPY proto/ ./proto/
-COPY cmd/ ./cmd/
-
-# Dashboard output embedded into the server binary via //go:embed all:dist
-COPY --from=dashboard /build/server/ui/dist ./server/ui/dist
 
 ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd server && go build -trimpath \
+      -ldflags="-s -w -X main.buildVersion=${VERSION}" \
+      -o /out/kave-server .
+
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:aef9602f8710ec12bde19d593fed1f76c708531bb7aba205110f1029786ead7b
+ARG VERSION=dev
 ARG COMMIT=unknown
-ARG BUILD_DATE=unknown
-
-# Server: CGO required (DuckDB + sqlite3 use pre-built static libs linked via cgo)
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    cd server && CGO_ENABLED=1 go build \
-    -ldflags="-s -w -X main.buildVersion=${VERSION}" \
-    -o /out/kave-server .
-
-# CLI: pure Go, no CGO needed
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    cd cli && CGO_ENABLED=0 go build \
-    -ldflags="-s -w \
-      -X github.com/kave-io/kave/cli/internal/version.Version=${VERSION} \
-      -X github.com/kave-io/kave/cli/internal/version.Commit=${COMMIT} \
-      -X github.com/kave-io/kave/cli/internal/version.BuildDate=${BUILD_DATE}" \
-    -o /out/kave .
-
-# ── Stage 3: server image ─────────────────────────────────────────────────────
-# The server uses CGO through DuckDB (C++) and sqlite3, so the runtime image
-# must include glibc AND libstdc++. distroless/cc-debian12 ships both;
-# distroless/static is only safe for the pure-Go CLI image.
-FROM gcr.io/distroless/cc-debian12 AS server
-COPY --from=builder /out/kave-server /usr/local/bin/kave-server
-EXPOSE 18080 19090
-VOLUME ["/data"]
+LABEL org.opencontainers.image.title="Kave" \
+      org.opencontainers.image.description="Tenant-scoped AI admission, accounting, and provider gateway" \
+      org.opencontainers.image.source="https://github.com/kave-io/kave" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.licenses="Apache-2.0"
+COPY --from=build --chown=nonroot:nonroot /out/kave-server /usr/local/bin/kave-server
+USER nonroot:nonroot
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/kave-server", "healthz"]
 ENTRYPOINT ["/usr/local/bin/kave-server"]
-
-# ── Stage 4: server image (Arch Linux runtime) ──────────────────────────────
-# Use this target when you want an Arch-based production image while keeping
-# the same server binary and runtime behavior.
-FROM archlinux:base AS server-arch
-RUN pacman -Syu --noconfirm --needed ca-certificates tzdata && \
-    pacman -Scc --noconfirm && \
-    useradd --create-home --uid 10001 --shell /usr/bin/nologin kave
-COPY --from=builder /out/kave-server /usr/local/bin/kave-server
-USER 10001:10001
-EXPOSE 18080 19090
-VOLUME ["/data"]
-ENTRYPOINT ["/usr/local/bin/kave-server"]
-
-# ── Stage 5: cli image ────────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian12 AS cli
-COPY --from=builder /out/kave /usr/local/bin/kave
-ENTRYPOINT ["/usr/local/bin/kave"]

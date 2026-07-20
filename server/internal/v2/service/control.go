@@ -106,7 +106,7 @@ func (s *Server) PutSecret(ctx context.Context, req *connect.Request[kernelv2.Pu
 	defer clear(req.Msg.GetPlaintext())
 	metadata, err := s.secrets.PutSecret(ctx, corev2.PutSecretRequest{
 		Caller: caller, NamespaceID: corev2.Ref(req.Msg.GetNamespaceId()), Name: corev2.Ref(req.Msg.GetName()),
-		Plaintext: plaintext, ExternalURI: req.Msg.GetExternalUri(), Validate: req.Msg.GetValidate(),
+		Plaintext: plaintext, ExternalURI: req.Msg.GetExternalUri(),
 		IdempotencyKey: corev2.Ref(req.Msg.GetIdempotencyKey()),
 	})
 	if err != nil {
@@ -129,6 +129,32 @@ func (s *Server) RevokeSecret(ctx context.Context, req *connect.Request[kernelv2
 		return nil, connectError(ctx, err, corev2.Decision{})
 	}
 	return connect.NewResponse(&emptypb.Empty{}), nil
+}
+
+func (s *Server) ActivateProviderRoute(ctx context.Context, req *connect.Request[kernelv2.ActivateProviderRouteRequest]) (*connect.Response[kernelv2.ProviderRouteActivation], error) {
+	caller, err := authenticatedCaller(ctx, req != nil && req.Msg != nil)
+	if err != nil {
+		return nil, err
+	}
+	if s == nil || s.routes == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("provider route activation unavailable"))
+	}
+	result, err := s.routes.Activate(ctx, corev2.ActivateProviderRouteRequest{
+		Caller: caller, NamespaceID: corev2.Ref(req.Msg.GetNamespaceId()),
+		Route: corev2.Ref(req.Msg.GetRoute()), Model: corev2.Ref(req.Msg.GetModel()),
+	})
+	if err != nil {
+		return nil, connectError(ctx, err, corev2.Decision{})
+	}
+	response := &kernelv2.ProviderRouteActivation{
+		RouteId: string(result.RouteID), Route: string(result.Route), Provider: string(result.Provider),
+		Model: string(result.Model), Status: result.Status, RouteRevision: result.RouteRevision,
+		SecretVersion: result.SecretVersion, ProviderRequestId: result.ProviderRequestID,
+	}
+	if !result.ValidatedAt.IsZero() {
+		response.ValidatedAtMs = result.ValidatedAt.UnixMilli()
+	}
+	return connect.NewResponse(response), nil
 }
 
 func (s *Server) SyncLimits(ctx context.Context, req *connect.Request[kernelv2.SyncLimitsRequest]) (*connect.Response[kernelv2.SyncLimitsResponse], error) {
@@ -186,9 +212,12 @@ func manifestFromProto(input *kernelv2.Manifest) (corev2.Manifest, error) {
 				return corev2.Manifest{}, errors.New("manifest contains a nil model price")
 			}
 			pricing = append(pricing, corev2.ModelPrice{
-				Model:                       corev2.Ref(price.GetModel()),
-				InputNanosPerMillionTokens:  price.GetInputNanosPerMillionTokens(),
-				OutputNanosPerMillionTokens: price.GetOutputNanosPerMillionTokens(),
+				Model:                           corev2.Ref(price.GetModel()),
+				InputNanosPerMillionTokens:      price.GetInputNanosPerMillionTokens(),
+				OutputNanosPerMillionTokens:     price.GetOutputNanosPerMillionTokens(),
+				CacheReadNanosPerMillionTokens:  price.GetCacheReadNanosPerMillionTokens(),
+				CacheWriteNanosPerMillionTokens: price.GetCacheWriteNanosPerMillionTokens(),
+				ReasoningNanosPerMillionTokens:  price.GetReasoningNanosPerMillionTokens(),
 			})
 		}
 		manifest.Routes = append(manifest.Routes, corev2.RouteSpec{

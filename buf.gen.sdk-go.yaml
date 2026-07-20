@@ -1,0 +1,23 @@
+version: v2
+clean: true
+
+# The standalone Go SDK is a /v2 semantic-import module. Override the source
+# package so protoc-gen-go can place its private copy directly in internal/gen.
+managed:
+  enabled: true
+  override:
+    - file_option: go_package
+      value: github.com/kave-io/go-sdk/v2/internal/gen;kernelv2
+      path: kave/kernel/v2/kernel.proto
+
+plugins:
+  - local: protoc-gen-go
+    out: ../sdk/go/internal/gen
+    opt:
+      - paths=import
+      - module=github.com/kave-io/go-sdk/v2/internal/gen
+  - local: protoc-gen-connect-go
+    out: ../sdk/go/internal/gen
+    opt:
+      - paths=import
+      - module=github.com/kave-io/go-sdk/v2/internal/gen

@@ -224,6 +224,54 @@ type QueryInvocationsResult struct {
 	NextPageToken string
 }
 
+// TenantStatus is operational state inferred from namespace-scoped accounting
+// records. It is not an identity, lifecycle, or customer-record status.
+type TenantStatus string
+
+const (
+	// TenantStatusActive means at least one current limit explicitly targets the
+	// tenant or billing reference.
+	TenantStatusActive TenantStatus = "active"
+	// TenantStatusObserved means activity was seen in the requested interval,
+	// but no current tenant-targeted limit exists.
+	TenantStatusObserved TenantStatus = "observed"
+)
+
+// TenantSummary contains only opaque application-provided scope references and
+// bounded operational aggregates. Kave deliberately does not attach names,
+// email addresses, or any other human identity data to these references.
+type TenantSummary struct {
+	Tenant          Ref
+	BillTo          Ref
+	Status          TenantStatus
+	LastSeenAt      *time.Time
+	InvocationCount int64
+	RequestCount    int64
+	CostNanoUSD     int64
+	ActiveLimits    int32
+}
+
+type ListTenantsRequest struct {
+	Caller Caller
+	Range  TimeRange
+	Page   Page
+}
+
+func (r ListTenantsRequest) Validate() error {
+	if err := authorizeReporting(r.Caller, OperationUsageRead); err != nil {
+		return err
+	}
+	if err := r.Range.validate(); err != nil {
+		return err
+	}
+	return r.Page.Validate()
+}
+
+type ListTenantsResult struct {
+	Tenants       []TenantSummary
+	NextPageToken string
+}
+
 type AuditEvent struct {
 	ID           Ref
 	EventKind    Ref
@@ -289,6 +337,7 @@ type ReadStore interface {
 	GetLimitStatus(context.Context, GetLimitStatusRequest) ([]LimitStatus, error)
 	QueryUsage(context.Context, QueryUsageRequest) (QueryUsageResult, error)
 	QueryInvocations(context.Context, QueryInvocationsRequest) (QueryInvocationsResult, error)
+	ListTenants(context.Context, ListTenantsRequest) (ListTenantsResult, error)
 	QueryAuditEvents(context.Context, QueryAuditEventsRequest) (QueryAuditEventsResult, error)
 }
 
@@ -334,6 +383,16 @@ func (s *ReadService) QueryInvocations(ctx context.Context, req QueryInvocations
 		return QueryInvocationsResult{}, errors.New("kave v2: read store unavailable")
 	}
 	return s.store.QueryInvocations(ctx, req)
+}
+
+func (s *ReadService) ListTenants(ctx context.Context, req ListTenantsRequest) (ListTenantsResult, error) {
+	if err := req.Validate(); err != nil {
+		return ListTenantsResult{}, err
+	}
+	if s == nil || s.store == nil {
+		return ListTenantsResult{}, errors.New("kave v2: read store unavailable")
+	}
+	return s.store.ListTenants(ctx, req)
 }
 
 func (s *ReadService) QueryAuditEvents(ctx context.Context, req QueryAuditEventsRequest) (QueryAuditEventsResult, error) {

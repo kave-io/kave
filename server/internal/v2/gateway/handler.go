@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	coreopenai "github.com/kave-io/kave/core/connectors/llm/openai"
 	corev2 "github.com/kave-io/kave/core/v2"
 	"github.com/kave-io/kave/server/internal/v2/httpapi"
 	v2postgres "github.com/kave-io/kave/server/internal/v2/postgres"
@@ -50,6 +49,7 @@ type Handler struct {
 	auth         httpapi.Authenticator
 	store        provider.Store
 	client       *providerHTTPClient
+	adapters     *provider.Registry
 	logger       *slog.Logger
 	now          func() time.Time
 	renewEvery   time.Duration
@@ -80,6 +80,7 @@ func newWithTransport(auth httpapi.Authenticator, store provider.Store, transpor
 		auth:         auth,
 		store:        store,
 		client:       newProviderHTTPClient(transport),
+		adapters:     provider.DefaultRegistry(),
 		logger:       logger,
 		now:          time.Now,
 		renewEvery:   leaseRenewEvery,
@@ -175,6 +176,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer clear(grant.Credential)
 	w.Header().Set("X-Kave-Invocation-ID", grant.InvocationID)
+	adapter, err := h.adapters.Resolve(grant.Provider, grant.Protocol)
+	if err != nil {
+		h.abort(r.Context(), grant, false)
+		writeError(w, http.StatusServiceUnavailable, "route_unavailable")
+		return
+	}
 
 	document["model"] = grant.Model
 	upstreamBody, err := json.Marshal(document)
@@ -213,7 +220,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "route_unavailable")
 		return
 	}
-	upstream.Header = outboundHeaders(r.Header, grant.Credential, invocationKey)
+	upstream.Header = outboundHeaders(r.Header, invocationKey)
+	if err := adapter.ApplyAuthentication(upstream.Header, grant.Credential); err != nil {
+		h.abort(r.Context(), grant, false)
+		writeError(w, http.StatusServiceUnavailable, "route_unavailable")
+		return
+	}
 	heartbeatResult := make(chan error, 1)
 	go h.heartbeatLease(providerCtx, cancelProvider, grant, heartbeatResult)
 	response, err := h.client.Do(upstream)
@@ -240,25 +252,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	copyErr := copyProviderBody(w, response.Body, capture, stream)
 	cancelProvider()
 	leaseErr := <-heartbeatResult
-	parsed, parseErr := coreopenai.NewConnector(nil).ParseResponse(capture.Bytes(), response.Header.Get("Content-Type"))
-	usage := provider.Usage{Model: grant.Model}
-	if parseErr == nil && parsed != nil && parsed.TokenUsage != nil && validTokenUsage(parsed.TokenUsage.InputTokens, parsed.TokenUsage.OutputTokens, parsed.TokenUsage.CacheRead, parsed.TokenUsage.CacheWrite, parsed.TokenUsage.Reasoning) {
-		usage.InputTokens = int64(parsed.TokenUsage.InputTokens)
-		usage.OutputTokens = int64(parsed.TokenUsage.OutputTokens)
-		usage.CacheReadTokens = int64(parsed.TokenUsage.CacheRead)
-		usage.CacheWriteTokens = int64(parsed.TokenUsage.CacheWrite)
-		usage.ReasoningTokens = int64(parsed.TokenUsage.Reasoning)
-		usage.Reported = true
-		if validProviderModel(parsed.TokenUsage.Model) {
-			usage.Model = parsed.TokenUsage.Model
-		}
+	usage, parseErr := adapter.ParseUsage(capture.Bytes(), response.Header.Get("Content-Type"), grant.Model)
+	// Pricing and route activation are bound to the exact requested model.
+	// Never settle a provider-reported model under a different price snapshot;
+	// aliases or unexpected substitutions fall back to the conservative
+	// reservation until they are configured and activated explicitly.
+	if parseErr == nil && validProviderModel(usage.Model) && usage.Model == grant.Model {
 		if grant.Price != nil {
-			if cost, ok := provider.CalculateCost(*grant.Price, usage.InputTokens, usage.OutputTokens); ok {
+			if cost, ok := provider.CalculateUsageCost(*grant.Price, usage); ok {
 				usage.CostNanos, usage.Currency = cost, "USD"
 			} else {
 				usage.Reported = false
 			}
 		}
+	} else {
+		usage = provider.Usage{Model: grant.Model}
 	}
 	// Provider errors are conservatively treated as potentially billable when
 	// no trustworthy usage was returned. If usage was reported, settle that
@@ -276,15 +284,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if copyErr != nil {
 		h.logger.Warn("v2 provider response copy failed", "invocation_id", grant.InvocationID, "error", copyErr)
 	}
-}
-
-func validTokenUsage(values ...int) bool {
-	for _, value := range values {
-		if value < 0 {
-			return false
-		}
-	}
-	return true
 }
 
 func validProviderModel(model string) bool {
@@ -593,14 +592,13 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func outboundHeaders(in http.Header, credential []byte, invocationKey corev2.Ref) http.Header {
+func outboundHeaders(in http.Header, invocationKey corev2.Ref) http.Header {
 	out := make(http.Header)
 	out.Set("Content-Type", "application/json")
 	out.Set("Accept", "application/json, text/event-stream")
 	if trace := in.Get("Traceparent"); trace != "" && !strings.ContainsAny(trace, "\r\n") {
 		out.Set("Traceparent", trace)
 	}
-	out.Set("Authorization", "Bearer "+strings.TrimPrefix(string(credential), "Bearer "))
 	digest := sha256.Sum256([]byte(invocationKey))
 	out.Set("Idempotency-Key", "kave-"+hex.EncodeToString(digest[:16]))
 	return out

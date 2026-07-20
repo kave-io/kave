@@ -47,13 +47,17 @@ type routePriceDocument struct {
 }
 
 type routeModelPrice struct {
-	InputNanosPerMillionTokens  int64 `json:"input_nanos_per_million_tokens"`
-	OutputNanosPerMillionTokens int64 `json:"output_nanos_per_million_tokens"`
+	InputNanosPerMillionTokens      int64 `json:"input_nanos_per_million_tokens"`
+	OutputNanosPerMillionTokens     int64 `json:"output_nanos_per_million_tokens"`
+	CacheReadNanosPerMillionTokens  int64 `json:"cache_read_nanos_per_million_tokens,omitempty"`
+	CacheWriteNanosPerMillionTokens int64 `json:"cache_write_nanos_per_million_tokens,omitempty"`
+	ReasoningNanosPerMillionTokens  int64 `json:"reasoning_nanos_per_million_tokens,omitempty"`
 }
 
 type resolvedProvider struct {
 	agentID, agentKind, routeID, provider, protocol, baseURL string
 	modelPolicy                                              routeModelPolicy
+	validations                                              routeValidationDocument
 	pricingRevision                                          int64
 	pricing                                                  routePriceDocument
 	secretName, secretBackend, wrappingKeyID                 string
@@ -168,6 +172,9 @@ FOR SHARE
 	model, err := resolveProviderModel(req.RequestedModel, resolved.modelPolicy)
 	if err != nil {
 		return provider.Grant{}, err, nil
+	}
+	if !resolved.validations.validates(model, resolved.secretVersion) {
+		return provider.Grant{}, provider.ErrRouteUnavailable, nil
 	}
 	price := priceForModel(resolved.pricingRevision, resolved.pricing, model)
 	if price == nil {
@@ -372,7 +379,7 @@ WHERE account_id = $1 AND namespace_id = $2 AND id = $3
 	return provider.Grant{
 		InvocationID: invocationID, AttemptNo: attemptNo, AccountID: req.Caller.AccountID, NamespaceID: req.Caller.NamespaceID,
 		ServiceKeyID: req.Caller.ServiceKeyID, AgentID: resolved.agentID, RouteID: resolved.routeID,
-		Provider: resolved.provider, BaseURL: resolved.baseURL, Model: model,
+		Provider: resolved.provider, Protocol: resolved.protocol, BaseURL: resolved.baseURL, Model: model,
 		Credential: credential, Price: price,
 	}, nil, nil
 }
@@ -551,12 +558,12 @@ WHERE account_id = $1 AND namespace_id = $2 AND id = $3
 
 func loadProviderRoute(ctx context.Context, db DBTX, req provider.BeginRequest) (resolvedProvider, error) {
 	var result resolvedProvider
-	var policyJSON, pricingJSON []byte
+	var policyJSON, pricingJSON, validationJSON []byte
 	err := db.QueryRow(ctx, `
 SELECT a.id, a.kind, r.id, r.provider, r.protocol, r.base_url,
        r.model_policy, r.pricing_revision, r.pricing,
        s.name, s.backend, COALESCE(s.ciphertext, ''::bytea),
-       COALESCE(s.wrapping_key_id, ''), s.version
+       COALESCE(s.wrapping_key_id, ''), s.version, r.validation_evidence
 FROM kave_v2.agents a
 JOIN kave_v2.provider_routes r
   ON r.account_id = a.account_id AND r.namespace_id = a.namespace_id AND r.id = a.route_id
@@ -564,11 +571,14 @@ JOIN kave_v2.secrets s
   ON s.account_id = r.account_id AND s.namespace_id = r.namespace_id AND s.id = r.secret_id
 WHERE a.account_id = $1 AND a.namespace_id = $2 AND a.name = $3
   AND a.status = 'active' AND r.status = 'active' AND s.status = 'active'
+  AND r.last_validated_at IS NOT NULL
+  AND r.validated_secret_version = s.version
+  AND r.validated_model IS NOT NULL
 `, req.Caller.AccountID, req.Caller.NamespaceID, req.Agent).Scan(
 		&result.agentID, &result.agentKind, &result.routeID, &result.provider,
 		&result.protocol, &result.baseURL, &policyJSON, &result.pricingRevision,
 		&pricingJSON, &result.secretName, &result.secretBackend, &result.ciphertext,
-		&result.wrappingKeyID, &result.secretVersion,
+		&result.wrappingKeyID, &result.secretVersion, &validationJSON,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return resolvedProvider{}, provider.ErrRouteUnavailable
@@ -583,6 +593,10 @@ WHERE a.account_id = $1 AND a.namespace_id = $2 AND a.name = $3
 		return resolvedProvider{}, provider.ErrRouteUnavailable
 	}
 	if err := json.Unmarshal(pricingJSON, &result.pricing); err != nil {
+		return resolvedProvider{}, provider.ErrRouteUnavailable
+	}
+	result.validations, err = decodeRouteValidationDocument(validationJSON)
+	if err != nil {
 		return resolvedProvider{}, provider.ErrRouteUnavailable
 	}
 	return result, nil
@@ -614,10 +628,19 @@ func priceForModel(revision int64, document routePriceDocument, model string) *p
 		return nil
 	}
 	price, ok := document.Models[model]
-	if !ok || price.InputNanosPerMillionTokens < 0 || price.OutputNanosPerMillionTokens < 0 {
+	if !ok || price.InputNanosPerMillionTokens < 0 || price.OutputNanosPerMillionTokens < 0 ||
+		price.CacheReadNanosPerMillionTokens < 0 || price.CacheWriteNanosPerMillionTokens < 0 ||
+		price.ReasoningNanosPerMillionTokens < 0 {
 		return nil
 	}
-	return &provider.Price{Revision: revision, InputNanosPerMillionTokens: price.InputNanosPerMillionTokens, OutputNanosPerMillionTokens: price.OutputNanosPerMillionTokens}
+	return &provider.Price{
+		Revision:                        revision,
+		InputNanosPerMillionTokens:      price.InputNanosPerMillionTokens,
+		OutputNanosPerMillionTokens:     price.OutputNanosPerMillionTokens,
+		CacheReadNanosPerMillionTokens:  price.CacheReadNanosPerMillionTokens,
+		CacheWriteNanosPerMillionTokens: price.CacheWriteNanosPerMillionTokens,
+		ReasoningNanosPerMillionTokens:  price.ReasoningNanosPerMillionTokens,
+	}
 }
 
 // normalizeProviderCredential accepts one opaque printable-ASCII bearer token.
@@ -702,7 +725,7 @@ func assignProviderReservations(limits []providerLimit, req provider.BeginReques
 			if price == nil || !req.InputBounded || !req.OutputBounded {
 				return fmt.Errorf("%w: pricing and token bounds required", provider.ErrReservationUnavailable)
 			}
-			cost, ok := provider.CalculateCost(*price, req.InputUpperBound, req.OutputUpperBound)
+			cost, ok := provider.CalculateMaximumCost(*price, req.InputUpperBound, req.OutputUpperBound)
 			if !ok {
 				return fmt.Errorf("%w: cost reservation overflow", provider.ErrReservationUnavailable)
 			}
@@ -887,6 +910,11 @@ func (s *ProviderStore) Complete(ctx context.Context, req provider.CompleteReque
 		req.Usage.CacheReadTokens < 0 || req.Usage.CacheWriteTokens < 0 ||
 		req.Usage.ReasoningTokens < 0 || req.Usage.CostNanos < 0 {
 		return fmt.Errorf("%w: provider usage must not be negative", corev2.ErrInvalidArgument)
+	}
+	if req.Usage.CacheReadTokens > req.Usage.InputTokens ||
+		req.Usage.CacheWriteTokens > req.Usage.InputTokens ||
+		req.Usage.ReasoningTokens > req.Usage.OutputTokens {
+		return fmt.Errorf("%w: provider usage token details exceed their totals", corev2.ErrInvalidArgument)
 	}
 	if req.Usage.Currency != "" && req.Usage.Currency != "USD" {
 		return fmt.Errorf("%w: provider usage currency must be USD", corev2.ErrInvalidArgument)

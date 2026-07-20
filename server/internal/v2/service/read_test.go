@@ -13,7 +13,8 @@ import (
 )
 
 type readStoreFake struct {
-	usageRequest corev2.QueryUsageRequest
+	usageRequest  corev2.QueryUsageRequest
+	tenantRequest corev2.ListTenantsRequest
 }
 
 func (*readStoreFake) GetState(_ context.Context, req corev2.GetStateRequest) (corev2.State, error) {
@@ -24,7 +25,11 @@ func (*readStoreFake) GetState(_ context.Context, req corev2.GetStateRequest) (c
 			Routes: []corev2.RouteSpec{{
 				Name: "openai", Provider: "openai", BaseURL: "https://api.openai.com/v1", Secret: "provider-key",
 				AllowedModels: []string{"gpt-safe"}, DefaultModel: "gpt-safe", PricingRevision: 2,
-				Pricing: []corev2.ModelPrice{{Model: "gpt-safe", InputNanosPerMillionTokens: 1, OutputNanosPerMillionTokens: 4}},
+				Pricing: []corev2.ModelPrice{{
+					Model: "gpt-safe", InputNanosPerMillionTokens: 1, OutputNanosPerMillionTokens: 4,
+					CacheReadNanosPerMillionTokens: 2, CacheWriteNanosPerMillionTokens: 3,
+					ReasoningNanosPerMillionTokens: 5,
+				}},
 			}},
 		},
 	}, nil
@@ -53,6 +58,18 @@ func (*readStoreFake) QueryInvocations(context.Context, corev2.QueryInvocationsR
 	return corev2.QueryInvocationsResult{}, nil
 }
 
+func (f *readStoreFake) ListTenants(_ context.Context, req corev2.ListTenantsRequest) (corev2.ListTenantsResult, error) {
+	f.tenantRequest = req
+	lastSeen := time.UnixMilli(1700).UTC()
+	return corev2.ListTenantsResult{
+		Tenants: []corev2.TenantSummary{{
+			Tenant: "clinic/opaque", BillTo: "clinic/opaque", Status: corev2.TenantStatusActive,
+			LastSeenAt: &lastSeen, InvocationCount: 4, RequestCount: 3, CostNanoUSD: 42, ActiveLimits: 2,
+		}},
+		NextPageToken: "tenant-next",
+	}, nil
+}
+
 func (*readStoreFake) QueryAuditEvents(context.Context, corev2.QueryAuditEventsRequest) (corev2.QueryAuditEventsResult, error) {
 	return corev2.QueryAuditEventsResult{}, nil
 }
@@ -72,7 +89,10 @@ func TestReadRPCsPreserveStatePricingAndUsageDimensions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if state.Msg.GetRevision() != 3 || len(state.Msg.GetManifest().GetRoutes()) != 1 ||
-		state.Msg.GetManifest().GetRoutes()[0].GetPricing()[0].GetOutputNanosPerMillionTokens() != 4 {
+		state.Msg.GetManifest().GetRoutes()[0].GetPricing()[0].GetOutputNanosPerMillionTokens() != 4 ||
+		state.Msg.GetManifest().GetRoutes()[0].GetPricing()[0].GetCacheReadNanosPerMillionTokens() != 2 ||
+		state.Msg.GetManifest().GetRoutes()[0].GetPricing()[0].GetCacheWriteNanosPerMillionTokens() != 3 ||
+		state.Msg.GetManifest().GetRoutes()[0].GetPricing()[0].GetReasoningNanosPerMillionTokens() != 5 {
 		t.Fatalf("state = %+v", state.Msg)
 	}
 
@@ -91,6 +111,25 @@ func TestReadRPCsPreserveStatePricingAndUsageDimensions(t *testing.T) {
 	if store.usageRequest.Scope.Tenant != "clinic/opaque" || store.usageRequest.Page.Size != 10 {
 		t.Fatalf("captured usage request = %+v", store.usageRequest)
 	}
+
+	tenants, err := server.ListTenants(ctx, connect.NewRequest(&kernelv2.ListTenantsRequest{
+		FromMs: 1000, ToMs: 2000, PageSize: 10, PageToken: "tenant-cursor",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tenants.Msg.GetTenants()) != 1 || tenants.Msg.GetTenants()[0].GetTenant() != "clinic/opaque" ||
+		tenants.Msg.GetTenants()[0].GetStatus() != "active" || tenants.Msg.GetTenants()[0].GetLastSeenAtMs() != 1700 ||
+		tenants.Msg.GetTenants()[0].GetInvocationCount() != 4 || tenants.Msg.GetTenants()[0].GetRequestCount() != 3 ||
+		tenants.Msg.GetTenants()[0].GetCostNanoUsd() != 42 || tenants.Msg.GetTenants()[0].GetActiveLimits() != 2 ||
+		tenants.Msg.GetNextPageToken() != "tenant-next" {
+		t.Fatalf("tenants = %+v", tenants.Msg)
+	}
+	if !store.tenantRequest.Range.From.Equal(time.UnixMilli(1000)) || !store.tenantRequest.Range.To.Equal(time.UnixMilli(2000)) ||
+		store.tenantRequest.Page.Size != 10 || store.tenantRequest.Page.Token != "tenant-cursor" ||
+		store.tenantRequest.Caller.NamespaceID != "nsp_prod" {
+		t.Fatalf("captured tenant request = %+v", store.tenantRequest)
+	}
 }
 
 func TestUsageRPCRejectsMissingTenantBoundary(t *testing.T) {
@@ -106,5 +145,23 @@ func TestUsageRPCRejectsMissingTenantBoundary(t *testing.T) {
 	}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("code = %v, err=%v", connect.CodeOf(err), err)
+	}
+}
+
+func TestListTenantsRPCRequiresUsageRead(t *testing.T) {
+	t.Parallel()
+	store := &readStoreFake{}
+	server := service.New(nil, service.WithReads(corev2.NewReadService(store)))
+	caller := corev2.Caller{
+		AccountID: "account/acme", NamespaceID: "nsp_prod", ServiceKeyID: "key_auditor",
+		Operations: []corev2.Operation{corev2.OperationAuditRead},
+	}
+	ctx := authctx.WithCaller(context.Background(), caller)
+	_, err := server.ListTenants(ctx, connect.NewRequest(&kernelv2.ListTenantsRequest{FromMs: 1000, ToMs: 2000}))
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, err=%v", connect.CodeOf(err), err)
+	}
+	if store.tenantRequest.Caller.AccountID != "" {
+		t.Fatalf("unauthorized request reached store: %+v", store.tenantRequest)
 	}
 }

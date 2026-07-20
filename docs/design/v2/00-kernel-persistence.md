@@ -1,19 +1,16 @@
-# Kave V2 kernel persistence contract
+# Kave kernel persistence contract
 
-Status: accepted foundation, implemented side-by-side with V1
+Status: accepted and implemented as the default runtime
 
 Scope: `server/internal/v2/postgres`
 
 ## Outcome
 
-Kave V2 persistence is a small, Postgres-only tenant-isolation and accounting
-kernel. It does not reuse the V1 aggregate `AppStore`, migrations, tables, or
-runtime lifecycle RPCs. It is wired side-by-side on the existing HTTP listener
-when `v2.enabled` is true; V1 remains available during migration. The
-authenticated Connect surface implements transactional `Apply`/`GetState`,
+Kave persistence is a small, Postgres-only tenant-isolation and accounting
+kernel. The authenticated Connect surface implements transactional `Apply`/`GetState`,
 service-key and secret administration, `SyncLimits`, exact `Consume`, scoped
-limit status, usage/invocation reporting, and audit reads. The same listener
-also exposes the authenticated OpenAI-compatible V2 gateway for chat
+limit status, usage/invocation reporting, tenant summaries, provider-route
+activation, and audit reads. The same listener also exposes the authenticated OpenAI-compatible gateway for chat
 completions, Responses, and embeddings.
 
 The kernel owns ten domain tables:
@@ -33,7 +30,7 @@ The kernel owns ten domain tables:
 
 ## Boundaries
 
-The V2 kernel does:
+The kernel does:
 
 - isolate account/application/environment namespaces;
 - persist static AI workload definitions and provider routes;
@@ -43,14 +40,14 @@ The V2 kernel does:
 - provide atomic counters for admission reservations and consumption;
 - record logical invocations, provider attempts, usage, and audit evidence.
 
-The V2 kernel does not:
+The kernel does not:
 
 - own Simorq clinics, users, plans, subscriptions, or PHI;
 - persist prompts, responses, retrieved documents, or tool payloads;
 - run agents or schedule provider calls;
 - provide human users, passwords, sessions, memberships, roles, or Casbin;
-- provide SQLite, DuckDB, or ClickHouse implementations;
-- automatically migrate ambiguous V1 workspace/agent records;
+- provide an alternate storage-engine implementation;
+- automatically reinterpret records from retired product models;
 - expose secret values through read models;
 - initiate FX or pricing network refreshes.
 
@@ -86,6 +83,20 @@ input/output token price for every allowed model. Each usage entry stores the
 exact price snapshot used, so changing a route never rewrites historical
 accounting.
 
+Applying a route leaves it unavailable until a provider adapter performs an
+explicit payload-free credential/model probe. Successful activation is bound
+to the route revision, encrypted-secret version, and selected model. A target
+or credential change invalidates that evidence; a concurrent change makes the
+activation stale instead of authorizing a different route. Only bounded status
+and provider request-ID evidence is retained.
+
+Activation evidence is retained per allowed model in a bounded JSON document
+on the route. Runtime admission requires an entry for the selected model and
+the exact current encrypted-secret version. A failed revalidation removes only
+that model; route-topology, model-policy, or credential changes clear the
+complete document. This supports explicitly validated multi-model routes
+without another mutable domain table.
+
 `agents` is a small set of static workload definitions such as
 `clinic-assistant`, `public-docs-assistant`, and `clinical-indexer`. A tenant is
 a request scope, not an agent copy. Disabling and re-enabling an agent preserves
@@ -110,7 +121,7 @@ conflicts instead of silently rotating a key.
 Persisted authority is split across eight operations rather than a broad
 administrator flag: `config.apply`, `secrets.write`, `keys.manage`,
 `limits.sync`, `usage.read`, `audit.read`, `consume`, and `invoke`.
-`config.apply` covers only manifests and `GetState`. Workload operations require
+`config.apply` covers manifests, `GetState`, and provider-route activation. Workload operations require
 explicit agent IDs and scope-assertion permission; control, reporting, and audit
 keys can be separated without also granting provider invocation.
 
@@ -374,17 +385,17 @@ three-digit, unique, monotonic version. The migrator:
 Applied migrations are immutable. Never renumber or edit one; add the next
 version. Functions and triggers use ordinary `CREATE`, not `OR REPLACE` or
 ad-hoc existence guards; migration history is the only idempotency mechanism.
-V1 migration history is neither read nor changed.
-
 Serving and migration roles are deliberately separate. The terminating
-`v2-migrate` command receives `KAVE_V2_MIGRATION_DSN`, the non-login owner, and
+`kave-server migrate` command receives `KAVE_MIGRATION_POSTGRES_DSN`,
+`KAVE_MIGRATION_OWNER_ROLE`, and
 the runtime-role name; the serving process never reads migration authority.
 The migration connection applies migrations, rejects a runtime role that is
 superuser, `BYPASSRLS`, or inherits the migration owner, and grants only
 required DML plus the prefix lookup function. The grant step revokes stale
 direct and `PUBLIC` privileges and installs restrictive owner default
 privileges, making repeated migration runs convergent. Serving then opens a
-separate pool that logs in directly as `v2.runtime_role` and verifies its exact
+separate pool that logs in directly with `KAVE_RUNTIME_POSTGRES_DSN` as
+`KAVE_RUNTIME_POSTGRES_ROLE` and verifies its exact
 effective relation and function grants. Any privilege on a future table, view,
 sequence, or function fails startup until an explicit kernel grant change is
 shipped.
@@ -418,8 +429,8 @@ run in mandatory CI with the race detector; the V2 packages are also vetted.
 
 ## Completion criteria for this foundation
 
-- V1 remains available while V2 registration is explicitly gated.
-- The V2 package and transport-neutral core compile independently.
+- The kernel is the only registered runtime surface.
+- The kernel package and transport-neutral core compile independently.
 - The embedded migration is deterministic and checksum guarded.
 - No callback can run before RLS identity is installed.
 - A query with missing or wrong scope cannot see account-owned rows.

@@ -136,6 +136,38 @@ func (s *Server) QueryInvocations(ctx context.Context, req *connect.Request[kern
 	return connect.NewResponse(response), nil
 }
 
+func (s *Server) ListTenants(ctx context.Context, req *connect.Request[kernelv2.ListTenantsRequest]) (*connect.Response[kernelv2.ListTenantsResponse], error) {
+	caller, err := authenticatedCaller(ctx, req != nil && req.Msg != nil)
+	if err != nil {
+		return nil, err
+	}
+	if s == nil || s.reads == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("tenant reporting unavailable"))
+	}
+	result, err := s.reads.ListTenants(ctx, corev2.ListTenantsRequest{
+		Caller: caller, Range: protoTimeRange(req.Msg.GetFromMs(), req.Msg.GetToMs()),
+		Page: corev2.Page{Size: int(req.Msg.GetPageSize()), Token: req.Msg.GetPageToken()},
+	})
+	if err != nil {
+		return nil, connectError(ctx, err, corev2.Decision{})
+	}
+	response := &kernelv2.ListTenantsResponse{
+		Tenants: make([]*kernelv2.TenantSummary, 0, len(result.Tenants)), NextPageToken: result.NextPageToken,
+	}
+	for _, summary := range result.Tenants {
+		item := &kernelv2.TenantSummary{
+			Tenant: string(summary.Tenant), BillTo: string(summary.BillTo), Status: string(summary.Status),
+			InvocationCount: summary.InvocationCount, RequestCount: summary.RequestCount,
+			CostNanoUsd: summary.CostNanoUSD, ActiveLimits: summary.ActiveLimits,
+		}
+		if summary.LastSeenAt != nil {
+			item.LastSeenAtMs = summary.LastSeenAt.UnixMilli()
+		}
+		response.Tenants = append(response.Tenants, item)
+	}
+	return connect.NewResponse(response), nil
+}
+
 func (s *Server) QueryAuditEvents(ctx context.Context, req *connect.Request[kernelv2.QueryAuditEventsRequest]) (*connect.Response[kernelv2.QueryAuditEventsResponse], error) {
 	caller, err := authenticatedCaller(ctx, req != nil && req.Msg != nil)
 	if err != nil {
@@ -197,8 +229,12 @@ func manifestToProto(manifest corev2.Manifest) *kernelv2.Manifest {
 		}
 		for _, price := range route.Pricing {
 			item.Pricing = append(item.Pricing, &kernelv2.ModelPrice{
-				Model: string(price.Model), InputNanosPerMillionTokens: price.InputNanosPerMillionTokens,
-				OutputNanosPerMillionTokens: price.OutputNanosPerMillionTokens,
+				Model:                           string(price.Model),
+				InputNanosPerMillionTokens:      price.InputNanosPerMillionTokens,
+				OutputNanosPerMillionTokens:     price.OutputNanosPerMillionTokens,
+				CacheReadNanosPerMillionTokens:  price.CacheReadNanosPerMillionTokens,
+				CacheWriteNanosPerMillionTokens: price.CacheWriteNanosPerMillionTokens,
+				ReasoningNanosPerMillionTokens:  price.ReasoningNanosPerMillionTokens,
 			})
 		}
 		result.Routes = append(result.Routes, item)

@@ -3,6 +3,7 @@ package service_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -37,6 +38,34 @@ type keyStoreFake struct {
 type limitSyncStoreFake struct {
 	req corev2.SyncLimitsRequest
 	err error
+}
+
+type routeActivationStoreFake struct {
+	target   corev2.ProviderRouteValidationTarget
+	result   corev2.ProviderRouteActivationResult
+	request  corev2.ActivateProviderRouteRequest
+	evidence corev2.ProviderRouteValidationEvidence
+	success  bool
+	recorded bool
+}
+
+func (f *routeActivationStoreFake) PrepareProviderRouteActivation(_ context.Context, req corev2.ActivateProviderRouteRequest) (corev2.ProviderRouteValidationTarget, error) {
+	f.request = req
+	return f.target, nil
+}
+
+func (f *routeActivationStoreFake) RecordProviderRouteValidation(_ context.Context, req corev2.ActivateProviderRouteRequest, _ corev2.ProviderRouteValidationTarget, evidence corev2.ProviderRouteValidationEvidence, success bool) (corev2.ProviderRouteActivationResult, error) {
+	f.request, f.evidence, f.success, f.recorded = req, evidence, success, true
+	return f.result, nil
+}
+
+type routeActivationValidatorFake struct {
+	evidence corev2.ProviderRouteValidationEvidence
+	err      error
+}
+
+func (f routeActivationValidatorFake) ValidateProviderRoute(context.Context, corev2.ProviderRouteValidationTarget) (corev2.ProviderRouteValidationEvidence, error) {
+	return f.evidence, f.err
 }
 
 func (f *limitSyncStoreFake) SyncLimits(_ context.Context, req corev2.SyncLimitsRequest) (corev2.SyncLimitsResult, error) {
@@ -114,6 +143,72 @@ func TestPutSecretClearsTransportPlaintext(t *testing.T) {
 	}
 	if !bytes.Equal(raw, make([]byte, len(raw))) {
 		t.Fatalf("protobuf plaintext was retained: %q", raw)
+	}
+}
+
+func TestActivateProviderRouteBindsCallerAndPreservesEvidence(t *testing.T) {
+	t.Parallel()
+	validatedAt := time.UnixMilli(1_721_475_000_123).UTC()
+	store := &routeActivationStoreFake{
+		target: corev2.ProviderRouteValidationTarget{
+			AccountID: "account/acme", NamespaceID: "namespace/prod", RouteID: "route/openai", Route: "openai",
+			RouteRevision: 3, Provider: "openai", Protocol: "openai", BaseURL: "https://api.openai.com/v1",
+			Model: "gpt-safe", SecretID: "secret/openai", SecretName: "openai-key", SecretVersion: 2,
+			Credential: []byte("provider-secret"),
+		},
+		result: corev2.ProviderRouteActivationResult{
+			RouteID: "route/openai", Route: "openai", Provider: "openai", Model: "gpt-safe", Status: "active",
+			RouteRevision: 4, SecretVersion: 2, ValidatedAt: validatedAt, ProviderRequestID: "provider-request-123",
+		},
+	}
+	validator := routeActivationValidatorFake{evidence: corev2.ProviderRouteValidationEvidence{
+		HTTPStatus: 200, ProviderRequestID: "provider-request-123",
+	}}
+	server := service.New(nil, service.WithProviderRouteActivation(corev2.NewProviderRouteActivationService(store, validator)))
+	ctx := authctx.WithCaller(context.Background(), controlCaller(corev2.OperationConfigApply))
+
+	response, err := server.ActivateProviderRoute(ctx, connect.NewRequest(&kernelv2.ActivateProviderRouteRequest{
+		NamespaceId: "namespace/prod", Route: "openai", Model: "gpt-safe",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Msg.GetRouteId() != "route/openai" || response.Msg.GetStatus() != "active" ||
+		response.Msg.GetRouteRevision() != 4 || response.Msg.GetSecretVersion() != 2 ||
+		response.Msg.GetValidatedAtMs() != validatedAt.UnixMilli() || response.Msg.GetProviderRequestId() != "provider-request-123" {
+		t.Fatalf("response = %+v", response.Msg)
+	}
+	if !store.recorded || !store.success || store.request.Caller.ServiceKeyID != "key_admin" ||
+		store.request.NamespaceID != "namespace/prod" || store.request.Route != "openai" || store.request.Model != "gpt-safe" ||
+		store.evidence.HTTPStatus != 200 || store.evidence.ProviderRequestID != "provider-request-123" {
+		t.Fatalf("captured activation = request=%+v evidence=%+v success=%v recorded=%v", store.request, store.evidence, store.success, store.recorded)
+	}
+}
+
+func TestActivateProviderRouteMapsValidationFailureWithoutUpstreamDetail(t *testing.T) {
+	t.Parallel()
+	store := &routeActivationStoreFake{
+		target: corev2.ProviderRouteValidationTarget{
+			AccountID: "account/acme", NamespaceID: "namespace/prod", RouteID: "route/openai", Route: "openai",
+			RouteRevision: 3, Provider: "openai", Protocol: "openai", BaseURL: "https://api.openai.com/v1",
+			Model: "gpt-safe", SecretID: "secret/openai", SecretName: "openai-key", SecretVersion: 2,
+			Credential: []byte("provider-secret"),
+		},
+		result: corev2.ProviderRouteActivationResult{Status: "invalid"},
+	}
+	validator := routeActivationValidatorFake{
+		evidence: corev2.ProviderRouteValidationEvidence{HTTPStatus: 401, ProviderRequestID: "provider-request-denied"},
+		err:      errors.New("sensitive provider response"),
+	}
+	server := service.New(nil, service.WithProviderRouteActivation(corev2.NewProviderRouteActivationService(store, validator)))
+	ctx := authctx.WithCaller(context.Background(), controlCaller(corev2.OperationConfigApply))
+
+	_, err := server.ActivateProviderRoute(ctx, connect.NewRequest(&kernelv2.ActivateProviderRouteRequest{
+		NamespaceId: "namespace/prod", Route: "openai", Model: "gpt-safe",
+	}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || bytes.Contains([]byte(err.Error()), []byte("sensitive")) ||
+		!store.recorded || store.success || store.evidence.HTTPStatus != 401 {
+		t.Fatalf("error=%v code=%v evidence=%+v success=%v recorded=%v", err, connect.CodeOf(err), store.evidence, store.success, store.recorded)
 	}
 }
 

@@ -108,7 +108,7 @@ WHERE w.account_id = $1 AND w.namespace_id = $2
 	if err != nil {
 		t.Fatal(err)
 	}
-	if requestUsed != 1 || requestReserved != 1 || inputUsed != 10 || inputReserved != 100 || outputUsed != 3 || outputReserved != 5 || costUsed != 32 || costReserved != 220 {
+	if requestUsed != 1 || requestReserved != 1 || inputUsed != 10 || inputReserved != 100 || outputUsed != 3 || outputReserved != 5 || costUsed != 32 || costReserved != 420 {
 		t.Fatalf("counters request=%d/%d input=%d/%d output=%d/%d cost=%d/%d", requestUsed, requestReserved, inputUsed, inputReserved, outputUsed, outputReserved, costUsed, costReserved)
 	}
 	if err := store.Complete(ctx, provider.CompleteRequest{Grant: third, FinishedAt: time.Now()}); err != nil {
@@ -119,6 +119,211 @@ WHERE w.account_id = $1 AND w.namespace_id = $2
 	unbounded.OutputBounded = false
 	if _, err := store.Begin(ctx, unbounded); !errors.Is(err, provider.ErrReservationUnavailable) {
 		t.Fatalf("unbounded output error = %v", err)
+	}
+}
+
+func TestProviderStorePostgres_ActivationIsVersionBoundAndFailsClosed(t *testing.T) {
+	ctx, pool, cipher := providerPostgresTest(t)
+	fixture := seedProviderFixture(t, ctx, pool, cipher)
+	store, err := v2postgres.NewProviderStore(pool, cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := corev2.ActivateProviderRouteRequest{
+		Caller: corev2.Caller{
+			AccountID: fixture.accountID, NamespaceID: fixture.namespaceID,
+			ServiceKeyID: fixture.serviceKeyID, Operations: []corev2.Operation{corev2.OperationConfigApply},
+		},
+		NamespaceID: fixture.namespaceID, Route: "openai",
+	}
+	target, err := store.PrepareProviderRouteActivation(ctx, request)
+	if err != nil {
+		t.Fatalf("prepare activation: %v", err)
+	}
+	defer clear(target.Credential)
+	if string(target.Credential) != "provider-secret" || target.Model != "gpt-safe" || target.RouteRevision != 1 || target.SecretVersion != 1 {
+		t.Fatalf("activation target = %#v", target)
+	}
+	activated, err := store.RecordProviderRouteValidation(ctx, request, target, corev2.ProviderRouteValidationEvidence{
+		HTTPStatus: 200, ProviderRequestID: "request-ok",
+	}, true)
+	if err != nil {
+		t.Fatalf("record successful validation: %v", err)
+	}
+	if activated.Status != "active" || activated.RouteRevision != 2 || activated.ValidatedAt.IsZero() {
+		t.Fatalf("activation result = %+v", activated)
+	}
+	if _, err := store.RecordProviderRouteValidation(ctx, request, target, corev2.ProviderRouteValidationEvidence{}, true); !errors.Is(err, corev2.ErrProviderActivationStale) {
+		t.Fatalf("stale activation error = %v", err)
+	}
+
+	second, err := store.PrepareProviderRouteActivation(ctx, request)
+	if err != nil {
+		t.Fatalf("prepare revalidation: %v", err)
+	}
+	defer clear(second.Credential)
+	failed, err := store.RecordProviderRouteValidation(ctx, request, second, corev2.ProviderRouteValidationEvidence{
+		HTTPStatus: 401, ProviderRequestID: "request-denied\r\nignored",
+	}, false)
+	if err != nil {
+		t.Fatalf("record failed validation: %v", err)
+	}
+	if failed.Status != "invalid" || failed.RouteRevision != 3 || failed.ProviderRequestID != "" {
+		t.Fatalf("failed activation result = %+v", failed)
+	}
+	if _, err := store.Begin(ctx, fixture.request("invoke/after-failed-validation")); !errors.Is(err, provider.ErrRouteUnavailable) {
+		t.Fatalf("invalid route Begin() error = %v, want route unavailable", err)
+	}
+	var status string
+	var validatedAt *time.Time
+	var audits int
+	var leaked bool
+	if err := fixture.runner.WithScope(ctx, fixture.scope, func(ctx context.Context, db v2postgres.DBTX) error {
+		return db.QueryRow(ctx, `
+SELECT r.status, r.last_validated_at,
+       (SELECT count(*) FROM kave_v2.audit_events a
+        WHERE a.account_id = r.account_id AND a.namespace_id = r.namespace_id
+          AND a.resource_id = r.id AND a.event = 'provider_route.activate'),
+       EXISTS (SELECT 1 FROM kave_v2.audit_events a
+               WHERE a.account_id = r.account_id AND a.namespace_id = r.namespace_id
+                 AND a.resource_id = r.id AND a.details::text LIKE '%provider-secret%')
+FROM kave_v2.provider_routes r
+WHERE r.account_id = $1 AND r.namespace_id = $2 AND r.id = $3
+`, fixture.accountID, fixture.namespaceID, target.RouteID).Scan(&status, &validatedAt, &audits, &leaked)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if status != "invalid" || validatedAt != nil || audits != 2 || leaked {
+		t.Fatalf("persisted activation state = status %q validated_at %v audits %d leaked %v", status, validatedAt, audits, leaked)
+	}
+}
+
+func TestProviderStorePostgres_GatewayRequiresExactActivatedModelAndSecretVersion(t *testing.T) {
+	tests := []struct {
+		name         string
+		requestModel string
+		mutate       func(context.Context, providerFixture, v2postgres.DBTX) error
+	}{
+		{
+			name:         "unvalidated allowed model",
+			requestModel: "gpt-other",
+			mutate: func(ctx context.Context, fixture providerFixture, db v2postgres.DBTX) error {
+				_, err := db.Exec(ctx, `
+UPDATE kave_v2.provider_routes
+SET model_policy = '{"allowed_models":["gpt-safe","gpt-other"],"default_model":"gpt-safe"}',
+    pricing = '{"models":{"gpt-safe":{"input_nanos_per_million_tokens":2000000,"output_nanos_per_million_tokens":4000000},"gpt-other":{"input_nanos_per_million_tokens":3000000,"output_nanos_per_million_tokens":5000000}}}'
+WHERE account_id = $1 AND namespace_id = $2
+`, fixture.accountID, fixture.namespaceID)
+				return err
+			},
+		},
+		{
+			name:         "different secret version",
+			requestModel: "gpt-safe",
+			mutate: func(ctx context.Context, fixture providerFixture, db v2postgres.DBTX) error {
+				_, err := db.Exec(ctx, `
+UPDATE kave_v2.provider_routes
+SET validated_secret_version = 2
+WHERE account_id = $1 AND namespace_id = $2
+`, fixture.accountID, fixture.namespaceID)
+				return err
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, pool, cipher := providerPostgresTest(t)
+			fixture := seedProviderFixture(t, ctx, pool, cipher)
+			store, err := v2postgres.NewProviderStore(pool, cipher)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := fixture.runner.WithScope(ctx, fixture.scope, func(ctx context.Context, db v2postgres.DBTX) error {
+				return test.mutate(ctx, fixture, db)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			request := fixture.request(corev2.Ref("invoke/activation-binding-" + test.requestModel))
+			request.RequestedModel = test.requestModel
+			if _, err := store.Begin(ctx, request); !errors.Is(err, provider.ErrRouteUnavailable) {
+				t.Fatalf("Begin() error = %v, want route unavailable", err)
+			}
+		})
+	}
+}
+
+func TestProviderStorePostgres_ActivatingSecondModelPreservesFirst(t *testing.T) {
+	ctx, pool, cipher := providerPostgresTest(t)
+	fixture := seedProviderFixture(t, ctx, pool, cipher)
+	store, err := v2postgres.NewProviderStore(pool, cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fixture.runner.WithScope(ctx, fixture.scope, func(ctx context.Context, db v2postgres.DBTX) error {
+		_, err := db.Exec(ctx, `
+UPDATE kave_v2.provider_routes
+SET status = 'invalid',
+    model_policy = '{"allowed_models":["gpt-safe","gpt-other"],"default_model":"gpt-safe"}',
+    pricing = '{"models":{"gpt-safe":{"input_nanos_per_million_tokens":2000000,"output_nanos_per_million_tokens":4000000},"gpt-other":{"input_nanos_per_million_tokens":3000000,"output_nanos_per_million_tokens":5000000}}}',
+    last_validated_at = NULL, validated_secret_version = NULL,
+    validated_model = NULL, validation_evidence = '{}', revision = revision + 1
+WHERE account_id = $1 AND namespace_id = $2
+`, fixture.accountID, fixture.namespaceID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	caller := corev2.Caller{
+		AccountID: fixture.accountID, NamespaceID: fixture.namespaceID,
+		ServiceKeyID: fixture.serviceKeyID, Operations: []corev2.Operation{corev2.OperationConfigApply},
+	}
+	for _, model := range []corev2.Ref{"gpt-safe", "gpt-other"} {
+		request := corev2.ActivateProviderRouteRequest{
+			Caller: caller, NamespaceID: fixture.namespaceID, Route: "openai", Model: model,
+		}
+		target, err := store.PrepareProviderRouteActivation(ctx, request)
+		if err != nil {
+			t.Fatalf("prepare %s: %v", model, err)
+		}
+		_, err = store.RecordProviderRouteValidation(ctx, request, target, corev2.ProviderRouteValidationEvidence{
+			HTTPStatus: 200, ProviderRequestID: "validation-" + string(model),
+		}, true)
+		clear(target.Credential)
+		if err != nil {
+			t.Fatalf("activate %s: %v", model, err)
+		}
+	}
+
+	for _, model := range []string{"gpt-safe", "gpt-other"} {
+		request := fixture.request(corev2.Ref("invoke/multi-model-" + model))
+		request.RequestedModel = model
+		grant, err := store.Begin(ctx, request)
+		if err != nil {
+			t.Fatalf("Begin(%s): %v", model, err)
+		}
+		if grant.Model != model {
+			t.Fatalf("grant model = %q, want %q", grant.Model, model)
+		}
+		if err := store.Complete(ctx, provider.CompleteRequest{Grant: grant, FinishedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
+		clear(grant.Credential)
+	}
+
+	var validatedModels int
+	if err := fixture.runner.WithScope(ctx, fixture.scope, func(ctx context.Context, db v2postgres.DBTX) error {
+		return db.QueryRow(ctx, `
+SELECT count(*)
+FROM kave_v2.provider_routes AS route
+CROSS JOIN LATERAL jsonb_object_keys(route.validation_evidence->'models') AS model
+WHERE route.account_id = $1 AND route.namespace_id = $2
+`, fixture.accountID, fixture.namespaceID).Scan(&validatedModels)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if validatedModels != 2 {
+		t.Fatalf("validated models = %d, want 2", validatedModels)
 	}
 }
 
@@ -267,7 +472,7 @@ WHERE account_id = $1 AND namespace_id = $2 AND invocation_id = $3
 			}
 			wantInput, wantOutput, wantCost := int64(0), int64(0), int64(0)
 			if deliveryStarted {
-				wantInput, wantOutput, wantCost = 100, 5, 220
+				wantInput, wantOutput, wantCost = 100, 5, 420
 			}
 			if reportedRequests != wantUsed || reportedInput != wantInput ||
 				reportedOutput != wantOutput || reportedCost != wantCost ||
@@ -548,10 +753,13 @@ VALUES ($1,$2,$3,'openai','encrypted',$4,$5,1)
 		}
 		if _, err := db.Exec(ctx, `
 INSERT INTO kave_v2.provider_routes (
-  id, account_id, namespace_id, name, provider, base_url, secret_id, model_policy, pricing_revision, pricing
+  id, account_id, namespace_id, name, provider, base_url, secret_id, model_policy, pricing_revision, pricing,
+  status, last_validated_at, validated_secret_version, validated_model, validation_evidence
 ) VALUES ($1,$2,$3,'openai','openai','https://api.openai.com/v1',$4,
   '{"allowed_models":["gpt-safe"],"default_model":"gpt-safe"}', 7,
-  '{"models":{"gpt-safe":{"input_nanos_per_million_tokens":2000000,"output_nanos_per_million_tokens":4000000}}}')
+  '{"models":{"gpt-safe":{"input_nanos_per_million_tokens":2000000,"output_nanos_per_million_tokens":4000000}}}',
+  'active', transaction_timestamp(), 1, 'gpt-safe',
+  '{"models":{"gpt-safe":{"secret_version":1,"validated_at_ms":1,"http_status":200}},"last_attempt":{"model":"gpt-safe","secret_version":1,"attempted_at_ms":1,"http_status":200,"validated":true}}')
 `, routeID, accountID, namespaceID, secretID); err != nil {
 			return err
 		}

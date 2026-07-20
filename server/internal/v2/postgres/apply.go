@@ -48,7 +48,7 @@ func (s *ApplyStore) Apply(ctx context.Context, req corev2.ApplyRequest) (corev2
 	if !req.Caller.Bootstrap {
 		// A standing config key is namespace-scoped. Start RLS at its authenticated
 		// namespace and require the manifest tuple to match that exact row; only
-		// the account-scoped offline bootstrap may discover a legacy ID by tuple.
+		// the account-scoped offline bootstrap may discover a preexisting ID by tuple.
 		initialNamespaceID = req.Caller.NamespaceID
 	}
 
@@ -556,13 +556,13 @@ func reconcileRoutes(ctx context.Context, db DBTX, accountID, namespaceID corev2
 			changed = true
 			*changes = append(*changes, corev2.Change{Kind: corev2.ChangeCreate, ResourceKind: "route", Name: spec.Name})
 			id := ids.New("rte")
-			state.routes[string(spec.Name)] = routeRow{id: id, name: string(spec.Name), provider: string(spec.Provider), baseURL: baseURL, secretID: secretID, secretName: string(spec.Secret), allowedModels: spec.AllowedModels, defaultModel: spec.DefaultModel, pricing: spec.Pricing, pricingRevision: pricingRevision, status: "active", revision: 1}
+			state.routes[string(spec.Name)] = routeRow{id: id, name: string(spec.Name), provider: string(spec.Provider), baseURL: baseURL, secretID: secretID, secretName: string(spec.Secret), allowedModels: spec.AllowedModels, defaultModel: spec.DefaultModel, pricing: spec.Pricing, pricingRevision: pricingRevision, status: "invalid", revision: 1}
 			if !dryRun {
 				if _, err := db.Exec(ctx, `
 INSERT INTO kave_v2.provider_routes (
     id, account_id, namespace_id, name, provider, base_url, secret_id,
     model_policy, pricing_revision, pricing, status
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active')
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'invalid')
 `, id, accountID, namespaceID, spec.Name, spec.Provider, baseURL, secretID, policyBytes, pricingRevision, pricingBytes); err != nil {
 					return false, fmt.Errorf("v2 postgres: create route %q: %w", spec.Name, err)
 				}
@@ -579,16 +579,26 @@ INSERT INTO kave_v2.provider_routes (
 		}
 		changed = true
 		*changes = append(*changes, corev2.Change{Kind: corev2.ChangeUpdate, ResourceKind: "route", Name: spec.Name, Fields: fields})
+		resetValidation := routeChangeRequiresValidation(fields) || current.status == "archived" || current.status == "disabled"
+		nextStatus := current.status
+		if resetValidation {
+			nextStatus = "invalid"
+		}
 		current.provider, current.baseURL, current.secretID, current.secretName = string(spec.Provider), baseURL, secretID, string(spec.Secret)
-		current.allowedModels, current.defaultModel, current.pricing, current.pricingRevision, current.status = spec.AllowedModels, spec.DefaultModel, spec.Pricing, pricingRevision, "active"
+		current.allowedModels, current.defaultModel, current.pricing, current.pricingRevision, current.status = spec.AllowedModels, spec.DefaultModel, spec.Pricing, pricingRevision, nextStatus
 		state.routes[string(spec.Name)] = current
 		if !dryRun {
 			if _, err := db.Exec(ctx, `
 UPDATE kave_v2.provider_routes
 SET provider = $4, base_url = $5, secret_id = $6, model_policy = $7,
-    pricing_revision = $8, pricing = $9, status = 'active', revision = revision + 1
+    pricing_revision = $8, pricing = $9, status = $10,
+    last_validated_at = CASE WHEN $11 THEN NULL ELSE last_validated_at END,
+    validated_secret_version = CASE WHEN $11 THEN NULL ELSE validated_secret_version END,
+    validated_model = CASE WHEN $11 THEN NULL ELSE validated_model END,
+    validation_evidence = CASE WHEN $11 THEN '{}'::jsonb ELSE validation_evidence END,
+    revision = revision + 1
 WHERE account_id = $1 AND namespace_id = $2 AND id = $3
-`, accountID, namespaceID, current.id, spec.Provider, baseURL, secretID, policyBytes, pricingRevision, pricingBytes); err != nil {
+`, accountID, namespaceID, current.id, spec.Provider, baseURL, secretID, policyBytes, pricingRevision, pricingBytes, nextStatus, resetValidation); err != nil {
 				return false, fmt.Errorf("v2 postgres: update route %q: %w", spec.Name, err)
 			}
 		}
@@ -629,19 +639,32 @@ func changedRouteFields(current routeRow, spec corev2.RouteSpec, baseURL, secret
 	if !slices.Equal(current.pricing, spec.Pricing) {
 		fields = append(fields, "pricing")
 	}
-	if current.status != "active" {
+	if current.status == "archived" || current.status == "disabled" {
 		fields = append(fields, "status")
 	}
 	slices.Sort(fields)
 	return fields
 }
 
+func routeChangeRequiresValidation(fields []string) bool {
+	for _, field := range fields {
+		switch field {
+		case "provider", "base_url", "secret", "allowed_models", "default_model", "status":
+			return true
+		}
+	}
+	return false
+}
+
 func routePricingDocument(prices []corev2.ModelPrice) routePriceDocument {
 	models := make(map[string]routeModelPrice, len(prices))
 	for _, price := range prices {
 		models[string(price.Model)] = routeModelPrice{
-			InputNanosPerMillionTokens:  price.InputNanosPerMillionTokens,
-			OutputNanosPerMillionTokens: price.OutputNanosPerMillionTokens,
+			InputNanosPerMillionTokens:      price.InputNanosPerMillionTokens,
+			OutputNanosPerMillionTokens:     price.OutputNanosPerMillionTokens,
+			CacheReadNanosPerMillionTokens:  price.CacheReadNanosPerMillionTokens,
+			CacheWriteNanosPerMillionTokens: price.CacheWriteNanosPerMillionTokens,
+			ReasoningNanosPerMillionTokens:  price.ReasoningNanosPerMillionTokens,
 		}
 	}
 	return routePriceDocument{Models: models}
@@ -651,9 +674,12 @@ func modelPricesFromDocument(document routePriceDocument) []corev2.ModelPrice {
 	prices := make([]corev2.ModelPrice, 0, len(document.Models))
 	for model, price := range document.Models {
 		prices = append(prices, corev2.ModelPrice{
-			Model:                       corev2.Ref(model),
-			InputNanosPerMillionTokens:  price.InputNanosPerMillionTokens,
-			OutputNanosPerMillionTokens: price.OutputNanosPerMillionTokens,
+			Model:                           corev2.Ref(model),
+			InputNanosPerMillionTokens:      price.InputNanosPerMillionTokens,
+			OutputNanosPerMillionTokens:     price.OutputNanosPerMillionTokens,
+			CacheReadNanosPerMillionTokens:  price.CacheReadNanosPerMillionTokens,
+			CacheWriteNanosPerMillionTokens: price.CacheWriteNanosPerMillionTokens,
+			ReasoningNanosPerMillionTokens:  price.ReasoningNanosPerMillionTokens,
 		})
 	}
 	slices.SortFunc(prices, func(a, b corev2.ModelPrice) int {

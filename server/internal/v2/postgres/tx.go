@@ -66,7 +66,7 @@ type transaction interface {
 type beginTxFunc func(context.Context, pgx.TxOptions) (transaction, error)
 
 // ScopedRunner owns the V2 transaction boundary. It intentionally does not
-// implement or embed the broad V1 AppStore interface.
+// implement or embed a broad application store interface.
 type ScopedRunner struct {
 	begin beginTxFunc
 }

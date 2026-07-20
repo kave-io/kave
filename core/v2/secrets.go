@@ -13,7 +13,6 @@ const maxSecretBytes = 64 << 10
 var (
 	ErrSecretEncryptionUnavailable  = errors.New("kave v2: encrypted secret storage unavailable")
 	ErrSecretIdempotencyUnavailable = errors.New("kave v2: secret idempotency authentication unavailable")
-	ErrSecretValidationUnavailable  = errors.New("kave v2: secret validation unavailable")
 	ErrSecretNotFound               = errors.New("kave v2: secret not found")
 )
 
@@ -42,7 +41,6 @@ type PutSecretRequest struct {
 	Name           Ref
 	Plaintext      []byte `json:"-"`
 	ExternalURI    string
-	Validate       bool
 	IdempotencyKey Ref
 }
 

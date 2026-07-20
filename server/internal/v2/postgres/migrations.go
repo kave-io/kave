@@ -110,7 +110,7 @@ func validateMigrations(migrations []Migration) error {
 	return nil
 }
 
-// Migrator owns a migration history entirely separate from the V1 migrator.
+// Migrator owns the kernel's complete migration history.
 type Migrator struct {
 	begin beginTxFunc
 }

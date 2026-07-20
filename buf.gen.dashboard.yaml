@@ -1,0 +1,9 @@
+version: v2
+clean: true
+
+plugins:
+  - remote: buf.build/bufbuild/es:v2.10.0
+    out: dashboard/src/gen
+    opt:
+      - target=ts
+      - import_extension=.js

@@ -16,11 +16,13 @@ service KernelService {
   rpc RevokeServiceKey(RevokeServiceKeyRequest) returns (google.protobuf.Empty);
   rpc PutSecret(PutSecretRequest) returns (SecretMetadata);
   rpc RevokeSecret(RevokeSecretRequest) returns (google.protobuf.Empty);
+  rpc ActivateProviderRoute(ActivateProviderRouteRequest) returns (ProviderRouteActivation);
   rpc SyncLimits(SyncLimitsRequest) returns (SyncLimitsResponse);
   rpc Consume(ConsumeRequest) returns (ConsumeResponse);
   rpc GetLimitStatus(GetLimitStatusRequest) returns (GetLimitStatusResponse);
   rpc QueryUsage(QueryUsageRequest) returns (QueryUsageResponse);
   rpc QueryInvocations(QueryInvocationsRequest) returns (QueryInvocationsResponse);
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
   rpc QueryAuditEvents(QueryAuditEventsRequest) returns (QueryAuditEventsResponse);
 }
 
@@ -53,6 +55,13 @@ message ModelPrice {
   string model = 1;
   int64 input_nanos_per_million_tokens = 2;
   int64 output_nanos_per_million_tokens = 3;
+  // Zero preserves the V2 compatibility default: cache reads and writes use
+  // the normal input rate, and reasoning tokens use the normal output rate.
+  // This is deliberately conservative for manifests created before these
+  // dimensions existed.
+  int64 cache_read_nanos_per_million_tokens = 4;
+  int64 cache_write_nanos_per_million_tokens = 5;
+  int64 reasoning_nanos_per_million_tokens = 6;
 }
 
 enum AgentKind {
@@ -184,7 +193,10 @@ message PutSecretRequest {
     bytes plaintext = 3;
     string external_uri = 4;
   }
-  bool validate = 5;
+  // Live checks require route, model, and credential-version context and are
+  // performed only by ActivateProviderRoute.
+  reserved 5;
+  reserved "validate";
   string idempotency_key = 6;
 }
 
@@ -200,6 +212,27 @@ message SecretMetadata {
 message RevokeSecretRequest {
   string id = 1;
   string reason = 2;
+}
+
+// ActivateProviderRoute performs a payload-free live credential and model
+// probe for the exact persisted route. Provider responses are never persisted.
+message ActivateProviderRouteRequest {
+  string namespace_id = 1;
+  string route = 2;
+  // Empty selects the route's declared default model.
+  string model = 3;
+}
+
+message ProviderRouteActivation {
+  string route_id = 1;
+  string route = 2;
+  string provider = 3;
+  string model = 4;
+  string status = 5;
+  int64 route_revision = 6;
+  int64 secret_version = 7;
+  int64 validated_at_ms = 8;
+  string provider_request_id = 9;
 }
 
 message SyncLimitsRequest {
@@ -346,6 +379,31 @@ message Invocation {
 
 message QueryInvocationsResponse {
   repeated Invocation invocations = 1;
+  string next_page_token = 2;
+}
+
+// Tenant summaries contain opaque application-provided scope references and
+// bounded operational aggregates only. They are not human identity records.
+message ListTenantsRequest {
+  int64 from_ms = 1;
+  int64 to_ms = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message TenantSummary {
+  string tenant = 1;
+  string bill_to = 2;
+  string status = 3;
+  int64 last_seen_at_ms = 4;
+  int64 invocation_count = 5;
+  int64 request_count = 6;
+  int64 cost_nano_usd = 7;
+  int32 active_limits = 8;
+}
+
+message ListTenantsResponse {
+  repeated TenantSummary tenants = 1;
   string next_page_token = 2;
 }
 

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -33,17 +34,100 @@ func TestReadCursorBindsQueryAndRange(t *testing.T) {
 	}
 }
 
+func TestTenantCursorIsOpaqueAndBoundToReportingQuery(t *testing.T) {
+	t.Parallel()
+	req := corev2.ListTenantsRequest{
+		Caller: corev2.Caller{AccountID: "account/acme", NamespaceID: "namespace/prod"},
+		Range: corev2.TimeRange{
+			From: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			To:   time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	query := tenantQueryFingerprint(req)
+	token, err := encodeTenantCursor("clinic/one", "billing/one", query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursor, err := decodeTenantCursor(token, query)
+	if err != nil || !cursor.Valid || cursor.Tenant != "clinic/one" || cursor.BillTo != "billing/one" {
+		t.Fatalf("cursor = %+v, err=%v", cursor, err)
+	}
+
+	changedRange := req
+	changedRange.Range.To = changedRange.Range.To.Add(-time.Millisecond)
+	changedNamespace := req
+	changedNamespace.Caller.NamespaceID = "namespace/other"
+	for name, fingerprint := range map[string]string{
+		"range":     tenantQueryFingerprint(changedRange),
+		"namespace": tenantQueryFingerprint(changedNamespace),
+	} {
+		if _, err := decodeTenantCursor(token, fingerprint); !errors.Is(err, corev2.ErrInvalidArgument) {
+			t.Fatalf("%s-bound cursor error = %v", name, err)
+		}
+	}
+
+	unknownField := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"t":"clinic/one","b":"billing/one","q":"` + query + `","extra":true}`))
+	invalidRef := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"t":"clinic/one\nforged","b":"billing/one","q":"` + query + `"}`))
+	trailingDocument := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"t":"clinic/one","b":"billing/one","q":"` + query + `"}{}`))
+	for name, malformed := range map[string]string{
+		"not base64":        "not base64!",
+		"unknown field":     unknownField,
+		"invalid reference": invalidRef,
+		"trailing document": trailingDocument,
+	} {
+		if _, err := decodeTenantCursor(malformed, query); !errors.Is(err, corev2.ErrInvalidArgument) {
+			t.Fatalf("%s cursor error = %v", name, err)
+		}
+	}
+}
+
 func TestSafeAuditMetadataIsScalarAndSecretDenylisted(t *testing.T) {
 	t.Parallel()
-	metadata := safeAuditMetadata([]byte(`{"count":2,"ok":true,"name":"agent","secret":"no","nested":{"x":1},"token_hash":"no"}`))
+	metadata := safeAuditMetadata([]byte(`{"count":2,"ok":true,"name":"agent","note":"Bearer leaked-value","provider_note":"sk-abcdefghijklmnop","secret":"no","nested":{"x":1},"token_hash":"no","Authorization":"no","x-api-key":"no","auth.header":"no","cookie":"no","request_body":"no","prompt":"no"}`))
 	if metadata["count"] != "2" || metadata["ok"] != "true" || metadata["name"] != "agent" {
 		t.Fatalf("metadata = %#v", metadata)
 	}
-	if _, ok := metadata["secret"]; ok {
-		t.Fatalf("secret metadata leaked: %#v", metadata)
+	for _, key := range []string{"secret", "token_hash", "Authorization", "x-api-key", "auth.header", "cookie", "request_body", "prompt"} {
+		if _, ok := metadata[key]; ok {
+			t.Fatalf("sensitive metadata %q leaked: %#v", key, metadata)
+		}
 	}
 	if _, ok := metadata["nested"]; ok {
 		t.Fatalf("nested metadata was flattened: %#v", metadata)
+	}
+	if metadata["note"] != "[redacted]" || metadata["provider_note"] != "[redacted]" {
+		t.Fatalf("credential-shaped metadata value leaked: %#v", metadata)
+	}
+	if got := safeAuditMetadata([]byte(`{"safe":"value"}{}`)); got != nil {
+		t.Fatalf("trailing audit document accepted: %#v", got)
+	}
+	if got := safeAuditMetadata(make([]byte, (64<<10)+1)); got != nil {
+		t.Fatalf("oversized audit document accepted: %#v", got)
+	}
+}
+
+func TestManifestStatePreservesDesiredResourcesWhileRouteAwaitsActivation(t *testing.T) {
+	t.Parallel()
+	state := &applyState{
+		routes: map[string]routeRow{
+			"ready":    {name: "ready", provider: "openai", status: "active"},
+			"awaiting": {name: "awaiting", provider: "openai", status: "invalid"},
+			"retired":  {name: "retired", provider: "openai", status: "archived"},
+		},
+		agents: map[string]agentRow{
+			"enabled":  {name: "enabled", routeName: "ready", status: "active"},
+			"disabled": {name: "disabled", routeName: "awaiting", status: "disabled"},
+			"retired":  {name: "retired", routeName: "retired", status: "archived"},
+		},
+	}
+	routes := manifestRoutes(state)
+	agents := manifestAgents(state)
+	if len(routes) != 2 || routes[0].Name != "awaiting" || routes[1].Name != "ready" {
+		t.Fatalf("routes = %+v", routes)
+	}
+	if len(agents) != 2 || agents[0].Name != "disabled" || agents[0].Enabled ||
+		agents[1].Name != "enabled" || !agents[1].Enabled {
+		t.Fatalf("agents = %+v", agents)
 	}
 }
 
@@ -80,7 +164,7 @@ func TestReadStorePostgres_StateStatusAndScopedPagination(t *testing.T) {
 	if state.NamespaceID != fixture.namespaceID || state.Revision != 4 ||
 		len(state.Manifest.Routes) != 1 || len(state.Manifest.Routes[0].Pricing) != 1 ||
 		state.Manifest.Routes[0].PricingRevision != 7 || len(state.Manifest.Agents) != 1 ||
-		len(state.Manifest.Limits) != 1 {
+		len(state.Manifest.Limits) != 2 {
 		t.Fatalf("state = %+v", state)
 	}
 
@@ -156,6 +240,42 @@ func TestReadStorePostgres_StateStatusAndScopedPagination(t *testing.T) {
 		t.Fatalf("invocations = %+v", invocations)
 	}
 
+	tenantRequest := corev2.ListTenantsRequest{
+		Caller: fixture.admin, Range: rangeFilter, Page: corev2.Page{Size: 1},
+	}
+	var tenantSummaries []corev2.TenantSummary
+	for pageNumber := 0; pageNumber < 4; pageNumber++ {
+		page, err := store.ListTenants(ctx, tenantRequest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Tenants) != 1 {
+			t.Fatalf("tenant page %d = %+v", pageNumber, page)
+		}
+		tenantSummaries = append(tenantSummaries, page.Tenants...)
+		if page.NextPageToken == "" {
+			break
+		}
+		tenantRequest.Page.Token = page.NextPageToken
+	}
+	if len(tenantSummaries) != 3 || tenantSummaries[0].Tenant != "clinic/limit-only" ||
+		tenantSummaries[1].Tenant != "clinic/observed" || tenantSummaries[2].Tenant != "clinic/one" {
+		t.Fatalf("tenant summaries = %+v", tenantSummaries)
+	}
+	limitOnly, observed, active := tenantSummaries[0], tenantSummaries[1], tenantSummaries[2]
+	if limitOnly.Status != corev2.TenantStatusActive || limitOnly.ActiveLimits != 1 || limitOnly.LastSeenAt != nil ||
+		limitOnly.InvocationCount != 0 || limitOnly.RequestCount != 0 || limitOnly.CostNanoUSD != 0 {
+		t.Fatalf("limit-only tenant = %+v", limitOnly)
+	}
+	if observed.Status != corev2.TenantStatusObserved || observed.ActiveLimits != 0 || observed.LastSeenAt == nil ||
+		observed.InvocationCount != 1 || observed.RequestCount != 0 || observed.CostNanoUSD != 0 {
+		t.Fatalf("observed tenant = %+v", observed)
+	}
+	if active.Status != corev2.TenantStatusActive || active.ActiveLimits != 1 || active.LastSeenAt == nil ||
+		active.InvocationCount != 2 || active.RequestCount != 1 || active.CostNanoUSD != 42 {
+		t.Fatalf("active tenant = %+v", active)
+	}
+
 	audit, err := store.QueryAuditEvents(ctx, corev2.QueryAuditEventsRequest{
 		Caller: fixture.admin, Range: rangeFilter, Page: corev2.Page{Size: 10},
 	})
@@ -203,6 +323,9 @@ func seedReadFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) read
 	limitID := ids.New("lim")
 	invocationID := ids.New("ivk")
 	consumeInvocationID := ids.New("ivk")
+	observedInvocationID := ids.New("ivk")
+	limitOnlyID := ids.New("lim")
+	otherNamespaceID := corev2.Ref(ids.New("nsp"))
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	scope := Scope{AccountID: string(accountID), NamespaceID: string(namespaceID)}
@@ -229,8 +352,10 @@ VALUES ($1, $2, $3, 'provider-key', 'external', 'vault://test/provider')
 		}
 		if _, err := db.Exec(ctx, `
 INSERT INTO kave_v2.provider_routes
-  (id, account_id, namespace_id, name, provider, base_url, secret_id, model_policy, pricing_revision, pricing)
-VALUES ($1, $2, $3, 'openai', 'openai', 'https://api.openai.com/v1', $4, $5, 7, $6)
+  (id, account_id, namespace_id, name, provider, base_url, secret_id, model_policy, pricing_revision, pricing,
+   status, last_validated_at, validated_secret_version, validated_model)
+VALUES ($1, $2, $3, 'openai', 'openai', 'https://api.openai.com/v1', $4, $5, 7, $6,
+        'active', transaction_timestamp(), 1, 'gpt-safe')
 `, routeID, accountID, namespaceID, secretID, policy, pricing); err != nil {
 			return err
 		}
@@ -275,6 +400,14 @@ VALUES ($1, $2, $3, 'clinic-actions', 'operator', 'ai_actions', 'clinic/one', 'c
 			return err
 		}
 		if _, err := db.Exec(ctx, `
+INSERT INTO kave_v2.limits
+  (id, account_id, namespace_id, external_key, source, metric, tenant_ref, billing_ref, hard_cap, window_kind)
+VALUES ($1, $2, $3, 'limit-only-actions', 'operator', 'ai_actions',
+        'clinic/limit-only', 'billing/limit-only', 5, 'lifetime')
+`, limitOnlyID, accountID, namespaceID); err != nil {
+			return err
+		}
+		if _, err := db.Exec(ctx, `
 INSERT INTO kave_v2.limit_windows
   (account_id, namespace_id, limit_id, window_start, window_end, used, reserved)
 VALUES ($1, $2, $3, $4, $5, 3, 2)
@@ -299,6 +432,17 @@ VALUES ($1, $2, $3, $4, $5, 'consume', 'consume', $6, $7,
         'clinic/one', 'clinic/one', 'gpt-safe', 'settled', $8, $8, $8)
 `, consumeInvocationID, accountID, namespaceID, workerID, agentID,
 			ids.New("once"), hash[:], now.Add(-45*time.Second)); err != nil {
+			return err
+		}
+		if _, err := db.Exec(ctx, `
+INSERT INTO kave_v2.invocations
+  (id, account_id, namespace_id, service_key_id, agent_id, kind, operation,
+   idempotency_key, request_hash, tenant_ref, billing_ref, status,
+   admitted_at, finished_at, created_at)
+VALUES ($1, $2, $3, $4, $5, 'consume', 'consume', $6, $7,
+        'clinic/observed', 'billing/observed', 'settled', $8, $8, $8)
+`, observedInvocationID, accountID, namespaceID, workerID, agentID,
+			ids.New("once"), hash[:], now.Add(-15*time.Second)); err != nil {
 			return err
 		}
 		// Internal per-limit evidence deliberately duplicates the logical unit.
@@ -340,6 +484,24 @@ INSERT INTO kave_v2.audit_events
   (id, account_id, namespace_id, service_key_id, event, resource_type, resource_id, outcome, details, created_at)
 VALUES ($1, $2, $3, $4, 'gateway.settle', 'invocation', $5, 'succeeded', $6, $7)
 `, ids.New("aud"), accountID, namespaceID, workerID, invocationID, details, now)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	otherScope := Scope{AccountID: string(accountID), NamespaceID: string(otherNamespaceID)}
+	if err := runner.WithScope(ctx, otherScope, func(ctx context.Context, db DBTX) error {
+		if _, err := db.Exec(ctx, `
+INSERT INTO kave_v2.namespaces (id, account_id, application, environment, revision)
+VALUES ($1, $2, 'simorq', 'other-test-namespace', 1)
+`, otherNamespaceID, accountID); err != nil {
+			return err
+		}
+		_, err := db.Exec(ctx, `
+INSERT INTO kave_v2.limits
+  (id, account_id, namespace_id, external_key, source, metric, tenant_ref, billing_ref, hard_cap, window_kind)
+VALUES ($1, $2, $3, 'cross-namespace-actions', 'operator', 'ai_actions',
+        'clinic/must-not-leak', 'billing/must-not-leak', 5, 'lifetime')
+`, ids.New("lim"), accountID, otherNamespaceID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

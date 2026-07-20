@@ -1,17 +1,13 @@
-# Kave Core
+# Kave core
 
-Pure Go contracts and mapping code shared by the server and CLI.
+This module contains the pure-Go kernel domain contract: tenant scopes,
+manifests, capabilities, admission, limits, provider activation, accounting,
+reporting, service-key material, and validation.
 
-## Layout
+It has no network server or persistence implementation. Those boundaries live
+in `server/internal/v2`; canonical wire types live in
+`proto/kave/kernel/v2`.
 
-- `runtime/` live execution types.
-- `model/` persisted records.
-- `pipeline/` interceptor chain.
-- `connectors/` framework, model, tool, and protocol connector contracts.
-- `mappers/` conversion boundaries between runtime and storage shapes.
-- `pkg/` small shared primitives.
-
-```bash
-go test ./...
-go build ./...
+```sh
+go test -race ./v2/...
 ```

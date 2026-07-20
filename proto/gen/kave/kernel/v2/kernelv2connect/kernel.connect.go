@@ -49,6 +49,9 @@ const (
 	// KernelServiceRevokeSecretProcedure is the fully-qualified name of the KernelService's
 	// RevokeSecret RPC.
 	KernelServiceRevokeSecretProcedure = "/kave.kernel.v2.KernelService/RevokeSecret"
+	// KernelServiceActivateProviderRouteProcedure is the fully-qualified name of the KernelService's
+	// ActivateProviderRoute RPC.
+	KernelServiceActivateProviderRouteProcedure = "/kave.kernel.v2.KernelService/ActivateProviderRoute"
 	// KernelServiceSyncLimitsProcedure is the fully-qualified name of the KernelService's SyncLimits
 	// RPC.
 	KernelServiceSyncLimitsProcedure = "/kave.kernel.v2.KernelService/SyncLimits"
@@ -63,6 +66,9 @@ const (
 	// KernelServiceQueryInvocationsProcedure is the fully-qualified name of the KernelService's
 	// QueryInvocations RPC.
 	KernelServiceQueryInvocationsProcedure = "/kave.kernel.v2.KernelService/QueryInvocations"
+	// KernelServiceListTenantsProcedure is the fully-qualified name of the KernelService's ListTenants
+	// RPC.
+	KernelServiceListTenantsProcedure = "/kave.kernel.v2.KernelService/ListTenants"
 	// KernelServiceQueryAuditEventsProcedure is the fully-qualified name of the KernelService's
 	// QueryAuditEvents RPC.
 	KernelServiceQueryAuditEventsProcedure = "/kave.kernel.v2.KernelService/QueryAuditEvents"
@@ -76,11 +82,13 @@ type KernelServiceClient interface {
 	RevokeServiceKey(context.Context, *connect.Request[v2.RevokeServiceKeyRequest]) (*connect.Response[emptypb.Empty], error)
 	PutSecret(context.Context, *connect.Request[v2.PutSecretRequest]) (*connect.Response[v2.SecretMetadata], error)
 	RevokeSecret(context.Context, *connect.Request[v2.RevokeSecretRequest]) (*connect.Response[emptypb.Empty], error)
+	ActivateProviderRoute(context.Context, *connect.Request[v2.ActivateProviderRouteRequest]) (*connect.Response[v2.ProviderRouteActivation], error)
 	SyncLimits(context.Context, *connect.Request[v2.SyncLimitsRequest]) (*connect.Response[v2.SyncLimitsResponse], error)
 	Consume(context.Context, *connect.Request[v2.ConsumeRequest]) (*connect.Response[v2.ConsumeResponse], error)
 	GetLimitStatus(context.Context, *connect.Request[v2.GetLimitStatusRequest]) (*connect.Response[v2.GetLimitStatusResponse], error)
 	QueryUsage(context.Context, *connect.Request[v2.QueryUsageRequest]) (*connect.Response[v2.QueryUsageResponse], error)
 	QueryInvocations(context.Context, *connect.Request[v2.QueryInvocationsRequest]) (*connect.Response[v2.QueryInvocationsResponse], error)
+	ListTenants(context.Context, *connect.Request[v2.ListTenantsRequest]) (*connect.Response[v2.ListTenantsResponse], error)
 	QueryAuditEvents(context.Context, *connect.Request[v2.QueryAuditEventsRequest]) (*connect.Response[v2.QueryAuditEventsResponse], error)
 }
 
@@ -131,6 +139,12 @@ func NewKernelServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(kernelServiceMethods.ByName("RevokeSecret")),
 			connect.WithClientOptions(opts...),
 		),
+		activateProviderRoute: connect.NewClient[v2.ActivateProviderRouteRequest, v2.ProviderRouteActivation](
+			httpClient,
+			baseURL+KernelServiceActivateProviderRouteProcedure,
+			connect.WithSchema(kernelServiceMethods.ByName("ActivateProviderRoute")),
+			connect.WithClientOptions(opts...),
+		),
 		syncLimits: connect.NewClient[v2.SyncLimitsRequest, v2.SyncLimitsResponse](
 			httpClient,
 			baseURL+KernelServiceSyncLimitsProcedure,
@@ -161,6 +175,12 @@ func NewKernelServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(kernelServiceMethods.ByName("QueryInvocations")),
 			connect.WithClientOptions(opts...),
 		),
+		listTenants: connect.NewClient[v2.ListTenantsRequest, v2.ListTenantsResponse](
+			httpClient,
+			baseURL+KernelServiceListTenantsProcedure,
+			connect.WithSchema(kernelServiceMethods.ByName("ListTenants")),
+			connect.WithClientOptions(opts...),
+		),
 		queryAuditEvents: connect.NewClient[v2.QueryAuditEventsRequest, v2.QueryAuditEventsResponse](
 			httpClient,
 			baseURL+KernelServiceQueryAuditEventsProcedure,
@@ -172,18 +192,20 @@ func NewKernelServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // kernelServiceClient implements KernelServiceClient.
 type kernelServiceClient struct {
-	apply            *connect.Client[v2.ApplyRequest, v2.ApplyResponse]
-	getState         *connect.Client[v2.GetStateRequest, v2.State]
-	issueServiceKey  *connect.Client[v2.IssueServiceKeyRequest, v2.IssuedServiceKey]
-	revokeServiceKey *connect.Client[v2.RevokeServiceKeyRequest, emptypb.Empty]
-	putSecret        *connect.Client[v2.PutSecretRequest, v2.SecretMetadata]
-	revokeSecret     *connect.Client[v2.RevokeSecretRequest, emptypb.Empty]
-	syncLimits       *connect.Client[v2.SyncLimitsRequest, v2.SyncLimitsResponse]
-	consume          *connect.Client[v2.ConsumeRequest, v2.ConsumeResponse]
-	getLimitStatus   *connect.Client[v2.GetLimitStatusRequest, v2.GetLimitStatusResponse]
-	queryUsage       *connect.Client[v2.QueryUsageRequest, v2.QueryUsageResponse]
-	queryInvocations *connect.Client[v2.QueryInvocationsRequest, v2.QueryInvocationsResponse]
-	queryAuditEvents *connect.Client[v2.QueryAuditEventsRequest, v2.QueryAuditEventsResponse]
+	apply                 *connect.Client[v2.ApplyRequest, v2.ApplyResponse]
+	getState              *connect.Client[v2.GetStateRequest, v2.State]
+	issueServiceKey       *connect.Client[v2.IssueServiceKeyRequest, v2.IssuedServiceKey]
+	revokeServiceKey      *connect.Client[v2.RevokeServiceKeyRequest, emptypb.Empty]
+	putSecret             *connect.Client[v2.PutSecretRequest, v2.SecretMetadata]
+	revokeSecret          *connect.Client[v2.RevokeSecretRequest, emptypb.Empty]
+	activateProviderRoute *connect.Client[v2.ActivateProviderRouteRequest, v2.ProviderRouteActivation]
+	syncLimits            *connect.Client[v2.SyncLimitsRequest, v2.SyncLimitsResponse]
+	consume               *connect.Client[v2.ConsumeRequest, v2.ConsumeResponse]
+	getLimitStatus        *connect.Client[v2.GetLimitStatusRequest, v2.GetLimitStatusResponse]
+	queryUsage            *connect.Client[v2.QueryUsageRequest, v2.QueryUsageResponse]
+	queryInvocations      *connect.Client[v2.QueryInvocationsRequest, v2.QueryInvocationsResponse]
+	listTenants           *connect.Client[v2.ListTenantsRequest, v2.ListTenantsResponse]
+	queryAuditEvents      *connect.Client[v2.QueryAuditEventsRequest, v2.QueryAuditEventsResponse]
 }
 
 // Apply calls kave.kernel.v2.KernelService.Apply.
@@ -216,6 +238,11 @@ func (c *kernelServiceClient) RevokeSecret(ctx context.Context, req *connect.Req
 	return c.revokeSecret.CallUnary(ctx, req)
 }
 
+// ActivateProviderRoute calls kave.kernel.v2.KernelService.ActivateProviderRoute.
+func (c *kernelServiceClient) ActivateProviderRoute(ctx context.Context, req *connect.Request[v2.ActivateProviderRouteRequest]) (*connect.Response[v2.ProviderRouteActivation], error) {
+	return c.activateProviderRoute.CallUnary(ctx, req)
+}
+
 // SyncLimits calls kave.kernel.v2.KernelService.SyncLimits.
 func (c *kernelServiceClient) SyncLimits(ctx context.Context, req *connect.Request[v2.SyncLimitsRequest]) (*connect.Response[v2.SyncLimitsResponse], error) {
 	return c.syncLimits.CallUnary(ctx, req)
@@ -241,6 +268,11 @@ func (c *kernelServiceClient) QueryInvocations(ctx context.Context, req *connect
 	return c.queryInvocations.CallUnary(ctx, req)
 }
 
+// ListTenants calls kave.kernel.v2.KernelService.ListTenants.
+func (c *kernelServiceClient) ListTenants(ctx context.Context, req *connect.Request[v2.ListTenantsRequest]) (*connect.Response[v2.ListTenantsResponse], error) {
+	return c.listTenants.CallUnary(ctx, req)
+}
+
 // QueryAuditEvents calls kave.kernel.v2.KernelService.QueryAuditEvents.
 func (c *kernelServiceClient) QueryAuditEvents(ctx context.Context, req *connect.Request[v2.QueryAuditEventsRequest]) (*connect.Response[v2.QueryAuditEventsResponse], error) {
 	return c.queryAuditEvents.CallUnary(ctx, req)
@@ -254,11 +286,13 @@ type KernelServiceHandler interface {
 	RevokeServiceKey(context.Context, *connect.Request[v2.RevokeServiceKeyRequest]) (*connect.Response[emptypb.Empty], error)
 	PutSecret(context.Context, *connect.Request[v2.PutSecretRequest]) (*connect.Response[v2.SecretMetadata], error)
 	RevokeSecret(context.Context, *connect.Request[v2.RevokeSecretRequest]) (*connect.Response[emptypb.Empty], error)
+	ActivateProviderRoute(context.Context, *connect.Request[v2.ActivateProviderRouteRequest]) (*connect.Response[v2.ProviderRouteActivation], error)
 	SyncLimits(context.Context, *connect.Request[v2.SyncLimitsRequest]) (*connect.Response[v2.SyncLimitsResponse], error)
 	Consume(context.Context, *connect.Request[v2.ConsumeRequest]) (*connect.Response[v2.ConsumeResponse], error)
 	GetLimitStatus(context.Context, *connect.Request[v2.GetLimitStatusRequest]) (*connect.Response[v2.GetLimitStatusResponse], error)
 	QueryUsage(context.Context, *connect.Request[v2.QueryUsageRequest]) (*connect.Response[v2.QueryUsageResponse], error)
 	QueryInvocations(context.Context, *connect.Request[v2.QueryInvocationsRequest]) (*connect.Response[v2.QueryInvocationsResponse], error)
+	ListTenants(context.Context, *connect.Request[v2.ListTenantsRequest]) (*connect.Response[v2.ListTenantsResponse], error)
 	QueryAuditEvents(context.Context, *connect.Request[v2.QueryAuditEventsRequest]) (*connect.Response[v2.QueryAuditEventsResponse], error)
 }
 
@@ -305,6 +339,12 @@ func NewKernelServiceHandler(svc KernelServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(kernelServiceMethods.ByName("RevokeSecret")),
 		connect.WithHandlerOptions(opts...),
 	)
+	kernelServiceActivateProviderRouteHandler := connect.NewUnaryHandler(
+		KernelServiceActivateProviderRouteProcedure,
+		svc.ActivateProviderRoute,
+		connect.WithSchema(kernelServiceMethods.ByName("ActivateProviderRoute")),
+		connect.WithHandlerOptions(opts...),
+	)
 	kernelServiceSyncLimitsHandler := connect.NewUnaryHandler(
 		KernelServiceSyncLimitsProcedure,
 		svc.SyncLimits,
@@ -335,6 +375,12 @@ func NewKernelServiceHandler(svc KernelServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(kernelServiceMethods.ByName("QueryInvocations")),
 		connect.WithHandlerOptions(opts...),
 	)
+	kernelServiceListTenantsHandler := connect.NewUnaryHandler(
+		KernelServiceListTenantsProcedure,
+		svc.ListTenants,
+		connect.WithSchema(kernelServiceMethods.ByName("ListTenants")),
+		connect.WithHandlerOptions(opts...),
+	)
 	kernelServiceQueryAuditEventsHandler := connect.NewUnaryHandler(
 		KernelServiceQueryAuditEventsProcedure,
 		svc.QueryAuditEvents,
@@ -355,6 +401,8 @@ func NewKernelServiceHandler(svc KernelServiceHandler, opts ...connect.HandlerOp
 			kernelServicePutSecretHandler.ServeHTTP(w, r)
 		case KernelServiceRevokeSecretProcedure:
 			kernelServiceRevokeSecretHandler.ServeHTTP(w, r)
+		case KernelServiceActivateProviderRouteProcedure:
+			kernelServiceActivateProviderRouteHandler.ServeHTTP(w, r)
 		case KernelServiceSyncLimitsProcedure:
 			kernelServiceSyncLimitsHandler.ServeHTTP(w, r)
 		case KernelServiceConsumeProcedure:
@@ -365,6 +413,8 @@ func NewKernelServiceHandler(svc KernelServiceHandler, opts ...connect.HandlerOp
 			kernelServiceQueryUsageHandler.ServeHTTP(w, r)
 		case KernelServiceQueryInvocationsProcedure:
 			kernelServiceQueryInvocationsHandler.ServeHTTP(w, r)
+		case KernelServiceListTenantsProcedure:
+			kernelServiceListTenantsHandler.ServeHTTP(w, r)
 		case KernelServiceQueryAuditEventsProcedure:
 			kernelServiceQueryAuditEventsHandler.ServeHTTP(w, r)
 		default:
@@ -400,6 +450,10 @@ func (UnimplementedKernelServiceHandler) RevokeSecret(context.Context, *connect.
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kave.kernel.v2.KernelService.RevokeSecret is not implemented"))
 }
 
+func (UnimplementedKernelServiceHandler) ActivateProviderRoute(context.Context, *connect.Request[v2.ActivateProviderRouteRequest]) (*connect.Response[v2.ProviderRouteActivation], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kave.kernel.v2.KernelService.ActivateProviderRoute is not implemented"))
+}
+
 func (UnimplementedKernelServiceHandler) SyncLimits(context.Context, *connect.Request[v2.SyncLimitsRequest]) (*connect.Response[v2.SyncLimitsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kave.kernel.v2.KernelService.SyncLimits is not implemented"))
 }
@@ -418,6 +472,10 @@ func (UnimplementedKernelServiceHandler) QueryUsage(context.Context, *connect.Re
 
 func (UnimplementedKernelServiceHandler) QueryInvocations(context.Context, *connect.Request[v2.QueryInvocationsRequest]) (*connect.Response[v2.QueryInvocationsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kave.kernel.v2.KernelService.QueryInvocations is not implemented"))
+}
+
+func (UnimplementedKernelServiceHandler) ListTenants(context.Context, *connect.Request[v2.ListTenantsRequest]) (*connect.Response[v2.ListTenantsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("kave.kernel.v2.KernelService.ListTenants is not implemented"))
 }
 
 func (UnimplementedKernelServiceHandler) QueryAuditEvents(context.Context, *connect.Request[v2.QueryAuditEventsRequest]) (*connect.Response[v2.QueryAuditEventsResponse], error) {

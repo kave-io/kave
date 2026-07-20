@@ -134,6 +134,9 @@ SELECT
 			"kave_v2.agents, kave_v2.service_keys, kave_v2.limits, " +
 			"kave_v2.limit_windows, kave_v2.invocations TO " + role,
 		"GRANT SELECT, INSERT ON kave_v2.usage_entries, kave_v2.audit_events TO " + role,
+		// Readiness compares the immutable embedded migration manifest with this
+		// non-tenant registry. It grants no domain-row access or mutation.
+		"GRANT SELECT ON kave_v2.schema_migrations TO " + role,
 		"GRANT EXECUTE ON FUNCTION kave_v2.lookup_service_key(TEXT) TO " + role,
 	}
 	for _, statement := range statements {
@@ -164,6 +167,7 @@ func VerifyRuntimeRole(ctx context.Context, pool *pgxpool.Pool, expectedRole str
 	err := pool.QueryRow(ctx, `
 WITH expected_relation_privileges (object_name, object_kind, privilege_type) AS (
 	VALUES
+		('schema_migrations', 'r'::"char", 'SELECT'),
 		('namespaces', 'r'::"char", 'SELECT'),
 		('namespaces', 'r'::"char", 'INSERT'),
 		('namespaces', 'r'::"char", 'UPDATE'),

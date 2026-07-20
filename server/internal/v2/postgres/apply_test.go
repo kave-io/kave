@@ -56,7 +56,8 @@ func TestSortChangesIsStable(t *testing.T) {
 func TestRoutePricingDocumentRoundTripAndDiff(t *testing.T) {
 	t.Parallel()
 	prices := []corev2.ModelPrice{
-		{Model: "gpt-4.1", InputNanosPerMillionTokens: 2, OutputNanosPerMillionTokens: 8},
+		{Model: "gpt-4.1", InputNanosPerMillionTokens: 2, OutputNanosPerMillionTokens: 8,
+			CacheReadNanosPerMillionTokens: 1, CacheWriteNanosPerMillionTokens: 3, ReasoningNanosPerMillionTokens: 12},
 		{Model: "text-embedding-3-small", InputNanosPerMillionTokens: 1},
 	}
 	roundTrip := modelPricesFromDocument(routePricingDocument(prices))
@@ -85,6 +86,19 @@ func TestRoutePricingDocumentRoundTripAndDiff(t *testing.T) {
 	}
 	if fields := changedRouteFields(current, spec, current.baseURL, current.secretID, 5); !reflect.DeepEqual(fields, []string{"pricing", "pricing_revision"}) {
 		t.Fatalf("changed pricing fields = %v", fields)
+	} else if routeChangeRequiresValidation(fields) {
+		t.Fatalf("pricing-only fields unexpectedly require live revalidation: %v", fields)
+	}
+	spec.BaseURL = "https://example.com/v1"
+	fields := changedRouteFields(current, spec, spec.BaseURL, current.secretID, 5)
+	if !routeChangeRequiresValidation(fields) {
+		t.Fatalf("route target change did not require live revalidation: %v", fields)
+	}
+	current.status = "invalid"
+	spec.BaseURL = ""
+	spec.Pricing = prices
+	if fields := changedRouteFields(current, spec, current.baseURL, current.secretID, 4); len(fields) != 0 {
+		t.Fatalf("unchanged pending-validation route fields = %v", fields)
 	}
 }
 
@@ -228,7 +242,7 @@ INSERT INTO kave_v2.secrets (
 	if kept.Revision != 2 || countChanges(kept.Changes, corev2.ChangeDelete) != 0 {
 		t.Fatalf("non-pruning result = %+v", kept)
 	}
-	assertApplyStatuses(t, ctx, runner, scope, true, false, "active", "active")
+	assertApplyStatuses(t, ctx, runner, scope, true, false, "active", "invalid")
 
 	// Explicitly disabled resources are still current desired state. Prune must
 	// archive them when they are later omitted, rather than retaining their
@@ -248,7 +262,7 @@ INSERT INTO kave_v2.secrets (
 	if disabled.Revision != 3 {
 		t.Fatalf("disable result = %+v", disabled)
 	}
-	assertApplyStatuses(t, ctx, runner, scope, false, false, "disabled", "active")
+	assertApplyStatuses(t, ctx, runner, scope, false, false, "disabled", "invalid")
 
 	prune := corev2.ApplyRequest{
 		Caller: caller, Manifest: corev2.Manifest{Namespace: ns}, DryRun: true,
@@ -261,7 +275,7 @@ INSERT INTO kave_v2.secrets (
 	if preview.Applied || preview.Revision != 4 || countChanges(preview.Changes, corev2.ChangeDelete) != 3 {
 		t.Fatalf("prune preview = %+v", preview)
 	}
-	assertApplyStatuses(t, ctx, runner, scope, false, false, "disabled", "active")
+	assertApplyStatuses(t, ctx, runner, scope, false, false, "disabled", "invalid")
 
 	prune.DryRun = false
 	pruned, err := store.Apply(ctx, prune)
@@ -323,7 +337,7 @@ INSERT INTO kave_v2.secrets (
 		Limits: []corev2.LimitSpec{{Key: "actions", Metric: "ai_actions", Selector: corev2.LimitSelector{Agent: "assistant"}, Window: corev2.WindowMonth, HardCap: 5, Enabled: true}},
 	}
 	configured, err := store.Apply(ctx, corev2.ApplyRequest{
-		Caller: caller, Manifest: manifest, ExpectedRevision: 1, IdempotencyKey: "generation/v1",
+		Caller: caller, Manifest: manifest, ExpectedRevision: 1, IdempotencyKey: "generation/one",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -495,22 +509,22 @@ func TestApplyStorePostgres_ResolvesExistingNonDeterministicNamespace(t *testing
 	for _, status := range []string{"active", "disabled"} {
 		t.Run(status, func(t *testing.T) {
 			account := corev2.Ref(ids.New("acc"))
-			legacyID := corev2.Ref(ids.New("nsp"))
+			existingID := corev2.Ref(ids.New("nsp"))
 			ns := corev2.Namespace{
-				Account: account, Application: corev2.Ref("legacy-" + status + "-" + ids.New("app")), Environment: "test",
+				Account: account, Application: corev2.Ref("existing-" + status + "-" + ids.New("app")), Environment: "test",
 			}
-			if legacyID == deterministicNamespaceID(ns) {
+			if existingID == deterministicNamespaceID(ns) {
 				t.Fatal("test namespace ID unexpectedly matched deterministic ID")
 			}
-			scope := Scope{AccountID: string(account), NamespaceID: string(legacyID)}
+			scope := Scope{AccountID: string(account), NamespaceID: string(existingID)}
 			if err := runner.WithScope(ctx, scope, func(ctx context.Context, db DBTX) error {
 				_, err := db.Exec(ctx, `
 INSERT INTO kave_v2.namespaces (id, account_id, application, environment, status)
 VALUES ($1, $2, $3, $4, $5)
-`, legacyID, account, ns.Application, ns.Environment, status)
+`, existingID, account, ns.Application, ns.Environment, status)
 				return err
 			}); err != nil {
-				t.Fatalf("seed legacy namespace: %v", err)
+				t.Fatalf("seed preexisting namespace: %v", err)
 			}
 
 			result, applyErr := store.Apply(ctx, corev2.ApplyRequest{
@@ -518,19 +532,19 @@ VALUES ($1, $2, $3, $4, $5)
 					AccountID: account, ServiceKeyID: "offline-bootstrap",
 					Operations: []corev2.Operation{corev2.OperationApply}, Bootstrap: true,
 				},
-				Manifest: corev2.Manifest{Namespace: ns}, IdempotencyKey: corev2.Ref("legacy/" + status),
+				Manifest: corev2.Manifest{Namespace: ns}, IdempotencyKey: corev2.Ref("existing/" + status),
 			})
 			if status == "disabled" {
 				if !errors.Is(applyErr, corev2.ErrUnauthorized) {
-					t.Fatalf("Apply disabled legacy namespace error = %v, want unauthorized", applyErr)
+					t.Fatalf("Apply disabled preexisting namespace error = %v, want unauthorized", applyErr)
 				}
 				return
 			}
 			if applyErr != nil {
-				t.Fatalf("Apply active legacy namespace: %v", applyErr)
+				t.Fatalf("Apply active preexisting namespace: %v", applyErr)
 			}
-			if result.NamespaceID != legacyID || result.Revision != 1 {
-				t.Fatalf("legacy Apply result = %+v, want namespace %q revision 1", result, legacyID)
+			if result.NamespaceID != existingID || result.Revision != 1 {
+				t.Fatalf("preexisting Apply result = %+v, want namespace %q revision 1", result, existingID)
 			}
 			serviceKeyID := corev2.Ref(ids.New("key"))
 			if err := runner.WithScope(ctx, scope, func(ctx context.Context, db DBTX) error {
@@ -538,30 +552,30 @@ VALUES ($1, $2, $3, $4, $5)
 INSERT INTO kave_v2.service_keys (
     id, account_id, namespace_id, name, lookup_prefix, secret_hash, capabilities
 ) VALUES ($1, $2, $3, 'config-admin', $4, $5, ARRAY['config.apply'])
-`, serviceKeyID, account, legacyID, "lookup_"+ids.New("pfx"), make([]byte, 32))
+`, serviceKeyID, account, existingID, "lookup_"+ids.New("pfx"), make([]byte, 32))
 				return err
 			}); err != nil {
 				t.Fatalf("seed namespace config key: %v", err)
 			}
 			standingCaller := corev2.Caller{
-				AccountID: account, NamespaceID: legacyID, ServiceKeyID: serviceKeyID,
+				AccountID: account, NamespaceID: existingID, ServiceKeyID: serviceKeyID,
 				Operations: []corev2.Operation{corev2.OperationApply},
 			}
 			standingResult, err := store.Apply(ctx, corev2.ApplyRequest{
 				Caller: standingCaller, Manifest: corev2.Manifest{Namespace: ns},
-				IdempotencyKey: "legacy/standing-key",
+				IdempotencyKey: "existing/standing-key",
 			})
 			if err != nil {
 				t.Fatalf("namespace-scoped Apply: %v", err)
 			}
-			if standingResult.NamespaceID != legacyID {
-				t.Fatalf("namespace-scoped Apply resolved %q, want %q", standingResult.NamespaceID, legacyID)
+			if standingResult.NamespaceID != existingID {
+				t.Fatalf("namespace-scoped Apply resolved %q, want %q", standingResult.NamespaceID, existingID)
 			}
 			other := ns
 			other.Application = corev2.Ref("other-" + ids.New("app"))
 			if _, err := store.Apply(ctx, corev2.ApplyRequest{
 				Caller: standingCaller, Manifest: corev2.Manifest{Namespace: other},
-				IdempotencyKey: "legacy/cross-namespace",
+				IdempotencyKey: "existing/cross-namespace",
 			}); !errors.Is(err, corev2.ErrUnauthorized) {
 				t.Fatalf("cross-namespace standing Apply error = %v, want unauthorized", err)
 			}
@@ -578,7 +592,7 @@ WHERE account_id = $1 AND application = $2 AND environment = $3
 				}
 				return nil
 			}); err != nil {
-				t.Fatalf("verify legacy namespace uniqueness: %v", err)
+				t.Fatalf("verify preexisting namespace uniqueness: %v", err)
 			}
 		})
 	}

@@ -3,8 +3,7 @@
   "include": ["src/**/__tests__/*", "env.d.ts"],
   "exclude": [],
   "compilerOptions": {
-    "lib": [],
-    "types": ["node", "jsdom"],
+    "types": ["node"],
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo"
   }
 }

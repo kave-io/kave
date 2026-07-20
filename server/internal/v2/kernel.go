@@ -1,4 +1,4 @@
-// Package v2 assembles the compact V2 kernel on Kave's existing HTTP listener.
+// Package v2 assembles Kave's compact tenant-scoped production kernel.
 package v2
 
 import (
@@ -11,7 +11,9 @@ import (
 	"github.com/kave-io/kave/proto/gen/kave/kernel/v2/kernelv2connect"
 	v2gateway "github.com/kave-io/kave/server/internal/v2/gateway"
 	"github.com/kave-io/kave/server/internal/v2/httpapi"
+	"github.com/kave-io/kave/server/internal/v2/observability"
 	v2postgres "github.com/kave-io/kave/server/internal/v2/postgres"
+	"github.com/kave-io/kave/server/internal/v2/provider"
 	v2service "github.com/kave-io/kave/server/internal/v2/service"
 )
 
@@ -21,6 +23,7 @@ type Config struct {
 	SecretIdempotencyKey            string
 	RuntimeRole                     string
 	ProviderEgressAllowedPrivateIPs []string
+	Metrics                         *observability.Metrics
 }
 
 // Prepare applies migrations through a privileged, transient connection and
@@ -52,11 +55,18 @@ func Register(ctx context.Context, mux *http.ServeMux, pool *pgxpool.Pool, cfg C
 	if err != nil {
 		return fmt.Errorf("v2 kernel: create admission store: %w", err)
 	}
-	serviceKeyAuth, err := v2postgres.NewServiceKeyAuthenticator(pool)
+	var observeUsageUpdate func(error)
+	if cfg.Metrics != nil {
+		observeUsageUpdate = cfg.Metrics.ObserveServiceKeyUsageUpdate
+	}
+	serviceKeyAuth, err := v2postgres.NewServiceKeyAuthenticatorWithUsageTracking(ctx, pool, v2postgres.ServiceKeyUsageTrackingOptions{OnUpdate: observeUsageUpdate})
 	if err != nil {
 		return fmt.Errorf("v2 kernel: create service-key authenticator: %w", err)
 	}
-	auth := httpapi.NewDatabaseAuthenticator(serviceKeyAuth)
+	var auth httpapi.Authenticator = httpapi.NewDatabaseAuthenticator(serviceKeyAuth)
+	if cfg.Metrics != nil {
+		auth = cfg.Metrics.WrapAuthenticator(auth)
+	}
 	applyStore, err := v2postgres.NewApplyStore(pool)
 	if err != nil {
 		return fmt.Errorf("v2 kernel: create apply store: %w", err)
@@ -91,20 +101,36 @@ func Register(ctx context.Context, mux *http.ServeMux, pool *pgxpool.Pool, cfg C
 	if err != nil {
 		return fmt.Errorf("v2 kernel: create provider store: %w", err)
 	}
-	providerGateway, err := v2gateway.New(auth, providerStore, v2gateway.ProviderEgressPolicy{
+	var admission corev2.AdmissionStore = admissionStore
+	var providerDataPlane provider.Store = providerStore
+	if cfg.Metrics != nil {
+		admission = cfg.Metrics.WrapAdmissionStore(admission)
+		providerDataPlane = cfg.Metrics.WrapProviderStore(providerDataPlane)
+	}
+	egressPolicy := v2gateway.ProviderEgressPolicy{
 		AllowedPrivateIPs: cfg.ProviderEgressAllowedPrivateIPs,
-	}, nil)
+	}
+	providerGateway, err := v2gateway.New(auth, providerDataPlane, egressPolicy, nil)
 	if err != nil {
 		return fmt.Errorf("v2 kernel: create provider gateway: %w", err)
 	}
+	routeValidator, err := v2gateway.NewRouteValidator(egressPolicy)
+	if err != nil {
+		return fmt.Errorf("v2 kernel: create provider route validator: %w", err)
+	}
+	var activationValidator corev2.ProviderRouteValidator = routeValidator
+	if cfg.Metrics != nil {
+		activationValidator = cfg.Metrics.WrapProviderRouteValidator(activationValidator)
+	}
 
 	handler := v2service.New(
-		corev2.NewAdmissionService(admissionStore),
+		corev2.NewAdmissionService(admission),
 		v2service.WithApply(corev2.NewApplyService(applyStore)),
 		v2service.WithReads(corev2.NewReadService(readStore)),
 		v2service.WithLimitSync(corev2.NewLimitSyncService(limitSyncStore)),
 		v2service.WithServiceKeys(corev2.NewServiceKeyService(serviceKeyStoreAdapter{admin: serviceKeyAdmin})),
 		v2service.WithSecrets(corev2.NewSecretService(secretStore)),
+		v2service.WithProviderRouteActivation(corev2.NewProviderRouteActivationService(providerStore, activationValidator)),
 	)
 	path, connectHandler := kernelv2connect.NewKernelServiceHandler(handler)
 	mux.Handle(path, httpapi.NewAuthMiddleware(auth).WrapConnect(connectHandler))

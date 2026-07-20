@@ -154,13 +154,26 @@ CREATE TABLE kave_v2.provider_routes (
     pricing_revision    BIGINT NOT NULL DEFAULT 1 CHECK (pricing_revision > 0),
     pricing             JSONB NOT NULL DEFAULT '{}'::jsonb
                         CHECK (jsonb_typeof(pricing) = 'object'),
-    status              TEXT NOT NULL DEFAULT 'active'
+    status              TEXT NOT NULL DEFAULT 'invalid'
                         CHECK (status IN ('active', 'disabled', 'invalid', 'archived')),
     revision            BIGINT NOT NULL DEFAULT 1 CHECK (revision > 0),
+    last_validated_at   TIMESTAMPTZ,
+    validated_secret_version BIGINT CHECK (validated_secret_version > 0),
+    validated_model     TEXT,
+    validation_evidence JSONB NOT NULL DEFAULT '{}'::jsonb
+                        CHECK (jsonb_typeof(validation_evidence) = 'object')
+                        CHECK (octet_length(validation_evidence::TEXT) <= 262144),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
     CHECK (id <> '' AND account_id <> '' AND namespace_id <> ''),
     CHECK (name <> '' AND provider <> '' AND base_url <> ''),
+    CHECK (
+        (status = 'active'
+            AND last_validated_at IS NOT NULL
+            AND validated_secret_version IS NOT NULL
+            AND validated_model IS NOT NULL AND validated_model <> '')
+        OR status <> 'active'
+    ),
     UNIQUE (account_id, namespace_id, id),
     UNIQUE (account_id, namespace_id, name),
     FOREIGN KEY (account_id, namespace_id)
@@ -546,7 +559,8 @@ CREATE TABLE kave_v2.audit_events (
     outcome             TEXT NOT NULL CHECK (outcome IN ('allowed', 'denied', 'succeeded', 'failed')),
     request_id          TEXT,
     details             JSONB NOT NULL DEFAULT '{}'::jsonb
-                        CHECK (jsonb_typeof(details) = 'object'),
+                        CHECK (jsonb_typeof(details) = 'object')
+                        CHECK (octet_length(details::TEXT) <= 65536),
     created_at          TIMESTAMPTZ NOT NULL DEFAULT transaction_timestamp(),
     CHECK (id <> '' AND account_id <> '' AND namespace_id <> ''),
     CHECK (event <> '' AND resource_type <> '' AND resource_id <> ''),

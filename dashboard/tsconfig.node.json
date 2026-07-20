@@ -1,18 +1,9 @@
 {
   "extends": "@tsconfig/node24/tsconfig.json",
-  "include": [
-    "vite.config.*",
-    "vitest.config.*",
-    "cypress.config.*",
-    "playwright.config.*",
-    "eslint.config.*",
-    "auto-imports.d.ts",
-    "components.d.ts"
-  ],
+  "include": ["vite.config.*", "vitest.config.*", "playwright.config.*", "eslint.config.*"],
   "compilerOptions": {
     "paths": {
-      "@/*": ["./src/*"],
-      "#build/ui": ["./node_modules/.nuxt-ui/ui"]
+      "@/*": ["./src/*"]
     },
     "module": "preserve",
     "moduleResolution": "bundler",

@@ -93,7 +93,7 @@ func ValidateTransportSecurity(mode, bindAddress string) error {
 		return fmt.Errorf("invalid HTTP bind address %q: %w", bindAddress, err)
 	}
 	if host == "" {
-		return errors.New("unspecified HTTP bind requires v2.transport_security=tls_terminated")
+		return errors.New("unspecified HTTP bind requires KAVE_RUNTIME_TRANSPORT_SECURITY=tls_terminated")
 	}
 	loopback := isLoopbackHost(host)
 	switch mode {
