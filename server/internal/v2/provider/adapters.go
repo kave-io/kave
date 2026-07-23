@@ -119,7 +119,7 @@ func (adapter OpenAIAdapter) Validate(ctx context.Context, client HTTPDoer, targ
 	if client == nil || target.Model == "" || len(target.Credential) == 0 {
 		return ValidationEvidence{}, ErrValidationRejected
 	}
-	endpoint, err := openAIModelURL(target.BaseURL, target.Model)
+	endpoint, err := openAIModelsURL(target.BaseURL)
 	if err != nil {
 		return ValidationEvidence{}, ErrValidationRejected
 	}
@@ -148,13 +148,24 @@ func (adapter OpenAIAdapter) Validate(ctx context.Context, client HTTPDoer, targ
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return evidence, ErrValidationRejected
 	}
+	// Validate the model exists via the list endpoint rather than the
+	// retrieve-single-model endpoint: many OpenAI-compatible providers (e.g.
+	// GapGPT) do not implement GET /models/{id} and answer 404 or a 200 error
+	// body. This stays payload-free and rides the same pinned egress boundary.
 	var document struct {
-		ID string `json:"id"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &document); err != nil || document.ID != target.Model {
+	if err := json.Unmarshal(body, &document); err != nil {
 		return evidence, ErrValidationRejected
 	}
-	return evidence, nil
+	for _, m := range document.Data {
+		if m.ID == target.Model {
+			return evidence, nil
+		}
+	}
+	return evidence, ErrValidationRejected
 }
 
 func (OpenAIAdapter) ParseUsage(body []byte, contentType, fallbackModel string) (Usage, error) {
@@ -313,7 +324,7 @@ func firstUsageInteger(document map[string]any, keys ...string) (int64, error) {
 	return 0, nil
 }
 
-func openAIModelURL(baseURL, model string) (string, error) {
+func openAIModelsURL(baseURL string) (string, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || parsed.RawPath != "" {
 		return "", ErrValidationRejected
@@ -321,16 +332,12 @@ func openAIModelURL(baseURL, model string) (string, error) {
 	if parsed.Scheme != "https" && !(parsed.Scheme == "http" && providerLoopbackHost(parsed.Hostname())) {
 		return "", ErrValidationRejected
 	}
-	if strings.ContainsAny(model, "\r\n") || len(model) > 255 {
-		return "", ErrValidationRejected
-	}
 	basePath := strings.TrimRight(parsed.Path, "/")
 	baseEscapedPath := strings.TrimRight(parsed.EscapedPath(), "/")
-	parsed.Path = basePath + "/models/" + model
-	// EscapedPath will encode model slashes as path data while retaining the
-	// ordinary base path. No user-controlled query, fragment, or authority is
-	// introduced.
-	parsed.RawPath = baseEscapedPath + "/models/" + url.PathEscape(model)
+	// Payload-free model-list endpoint. No user-controlled query, fragment, or
+	// authority is introduced.
+	parsed.Path = basePath + "/models"
+	parsed.RawPath = baseEscapedPath + "/models"
 	if parsed.RawPath == parsed.Path {
 		parsed.RawPath = ""
 	}

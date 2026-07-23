@@ -35,7 +35,7 @@ func TestOpenAIAdapterValidatesCredentialAndExactModelWithoutPayload(t *testing.
 	t.Parallel()
 	var sawBody bool
 	client := httpDoerFunc(func(r *http.Request) (*http.Response, error) {
-		if r.Method != http.MethodGet || r.URL.Path != "/v1/models/gpt-safe" || r.Header.Get("Authorization") != "Bearer provider-secret" {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer provider-secret" {
 			t.Errorf("validation request = %s %s auth=%q", r.Method, r.URL.Path, r.Header.Get("Authorization"))
 		}
 		if r.Body != nil && r.ContentLength != 0 {
@@ -44,7 +44,7 @@ func TestOpenAIAdapterValidatesCredentialAndExactModelWithoutPayload(t *testing.
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     http.Header{"X-Request-Id": []string{"probe-123"}, "Content-Type": []string{"application/json"}},
-			Body:       io.NopCloser(strings.NewReader(`{"id":"gpt-safe","object":"model"}`)),
+			Body:       io.NopCloser(strings.NewReader(`{"object":"list","data":[{"id":"other-model"},{"id":"gpt-safe","object":"model"}]}`)),
 		}, nil
 	})
 
@@ -64,7 +64,7 @@ func TestOpenAIAdapterValidationRejectsProviderErrorsAndWrongModel(t *testing.T)
 		body   string
 	}{
 		{status: http.StatusUnauthorized, body: `{"error":{"message":"contains-sensitive-provider-detail"}}`},
-		{status: http.StatusOK, body: `{"id":"different-model"}`},
+		{status: http.StatusOK, body: `{"object":"list","data":[{"id":"different-model"}]}`},
 		{status: http.StatusOK, body: `not-json`},
 		{status: http.StatusOK, body: strings.Repeat("x", maxValidationResponseBytes+1)},
 	} {
@@ -177,10 +177,10 @@ func TestOpenAIAdapterRejectsCredentialHeaderInjection(t *testing.T) {
 	}
 }
 
-func TestOpenAIModelURLEscapesModelAsOnePathSegment(t *testing.T) {
+func TestOpenAIModelsURLTargetsTheListEndpoint(t *testing.T) {
 	t.Parallel()
-	got, err := openAIModelURL("https://api.example.com/v1", "org/model")
-	if err != nil || got != "https://api.example.com/v1/models/org%2Fmodel" {
-		t.Fatalf("openAIModelURL() = %q, %v", got, err)
+	got, err := openAIModelsURL("https://api.example.com/v1")
+	if err != nil || got != "https://api.example.com/v1/models" {
+		t.Fatalf("openAIModelsURL() = %q, %v", got, err)
 	}
 }
